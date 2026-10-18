@@ -19,7 +19,7 @@ A change to behaviour ships with unit tests **in the same change**. Which tests 
 
 - **Jest 29** with the `@react-native/jest-preset` preset; tests live in `__tests__/` at the repo root as `*.test.ts` / `*.test.tsx`
 - **react-test-renderer** for component tests
-- **JUnit** local JVM tests for Kotlin (see [kotlin/testing.md](../kotlin/testing.md) — not set up yet)
+- **JUnit 4** local JVM tests for Kotlin under `android/app/src/test/java/`, run by `npm run android:test` and in CI (see [kotlin/testing.md](../kotlin/testing.md))
 - No end-to-end framework is set up. Verify UI and native behaviour by running the app.
 
 ```bash
@@ -69,8 +69,20 @@ npm run test:ci             # with coverage, as CI runs it
 ```typescript
 it('returns sessions newest first', async () => {
   // Arrange
-  await saveSession({ id: 'a', name: 'First' });
-  await saveSession({ id: 'b', name: 'Second' });
+  const run: SessionInput = {
+    drillId: 'drill-1',
+    totalTime: 0.4,
+    completed: true,
+    splits: [{ stepId: 'step-1', label: 'Shot 1', par: 0.5, actual: 0.4 }],
+  };
+  await saveSession(run, {
+    generateId: () => 'a',
+    getTimestamp: () => '2026-10-01T08:00:00.000Z',
+  });
+  await saveSession(run, {
+    generateId: () => 'b',
+    getTimestamp: () => '2026-10-02T08:00:00.000Z',
+  });
 
   // Act
   const sessions = await loadSessions();
@@ -86,6 +98,6 @@ Name the behaviour, not the function:
 
 ```typescript
 it('resolves to null when the stored value is corrupt', () => {});
-it('preserves createdAt when saving an existing session', () => {});
-it('throws StorageError when the id is empty', () => {});
+it('keeps createdAt when a drill is updated', () => {});
+it('rejects a session with no splits as INVALID_INPUT', () => {});
 ```

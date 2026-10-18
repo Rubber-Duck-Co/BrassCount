@@ -26,7 +26,7 @@ if (!API_BASE_URL) {
 }
 ```
 
-Using `@env` for the first time requires the two files its aliases point at: a type declaration at `src/types/env.d.ts` and a Jest mock at `__mocks__/@env.js`. Add every new variable to `.env.example` as well.
+A new variable goes in three places: `.env.example`, its type in `src/types/env.d.ts` (`string | undefined`, as `allowUndefined` leaves a missing one undefined) and a test value in `__mocks__/@env.js`. `__tests__/env.test.ts` fails when they drift. Jest always reads the mock: `babel.config.js` leaves the dotenv plugin out under test.
 
 ## Dynamic Code and Parsing
 

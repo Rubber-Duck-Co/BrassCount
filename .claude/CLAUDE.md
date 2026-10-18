@@ -76,4 +76,6 @@ See [git-workflow.md](rules/common/git-workflow.md). Never hand-edit version num
 
 ### Environment
 
-`react-native-dotenv` is configured (`import { X } from '@env'`) but unused. Its Jest mock (`__mocks__/@env.js`) and types (`src/types/env.d.ts`) don't exist yet; create both when first using it.
+`react-native-dotenv` inlines `.env` into the bundle (`import { X } from '@env'`; nothing imports it yet). A new variable goes in `.env.example`, `src/types/env.d.ts` and `__mocks__/@env.js`; `__tests__/env.test.ts` fails when they drift. Babel skips the plugin under Jest, so tests get the mock, never a local `.env`.
+
+Line endings are LF everywhere (`.gitattributes`); a clone made before that needs a one-off re-checkout (see `docs/CONTRIBUTING.md`).

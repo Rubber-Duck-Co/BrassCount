@@ -18,7 +18,7 @@ Persistence goes through `createStorageNamespace<T>({ name, version })` in `src/
 - One domain service per namespace (`sessionStorage.ts` for sessions) exposes the CRUD-style API: save, load all, load by id, delete by id, clear.
 - Keys are `@BrassCount:<name>:<version>:<id>`, one key per item.
 - The domain service owns timestamps and sorting; screens never build keys or parse JSON.
-- A breaking change to a stored shape means bumping `version` and writing a migration that reads the previous version's keys.
+- Each value is a `{ schemaVersion, … }` envelope. A change to a stored shape bumps the service's schema version (`SESSION_SCHEMA_VERSION`, `DRILL_SCHEMA_VERSION`, …) and upgrades older envelopes on read, so existing data is migrated in place. The namespace `version` in the key is only for a change that cannot be read that way.
 
 ## Themed Styles
 

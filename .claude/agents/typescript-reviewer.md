@@ -28,7 +28,7 @@ You DO NOT refactor or rewrite code — you report findings only. Report only is
 
 ### CRITICAL -- Data Integrity and Security
 
-- **Stored-shape change without migration**: a field added, renamed or re-typed on a persisted type with no namespace `version` bump and migration — existing users' data breaks on update.
+- **Stored-shape change without migration**: a field added, renamed or re-typed on a persisted type with no schema version bump and upgrade of older envelopes on read — existing users' data breaks on update.
 - **Destructive storage call on the wrong scope**: `AsyncStorage.clear()` or key removal outside a namespace's own prefix.
 - **Hardcoded secret**: API key, token or password in source, `app.json` or a committed `.env` file. Everything from `@env` ships in the bundle.
 - **`eval` / `new Function`** on any input.

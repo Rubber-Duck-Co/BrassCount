@@ -38,15 +38,19 @@ export const formatSeconds = (seconds: number): string =>
 ```typescript
 export interface Session {
   id: string;
-  name: string;
+  drillId: string;
   createdAt: string;
-  updatedAt: string;
+  totalTime: number;
+  completed: boolean;
+  splits: SessionSplit[];
 }
 
-export type SessionInput = Omit<Session, 'createdAt' | 'updatedAt'> &
-  Partial<Pick<Session, 'createdAt' | 'updatedAt'>>;
+/** A split as a caller supplies it; the service works out `delta`. */
+export type SessionSplitInput = Omit<SessionSplit, 'delta'>;
 
-type Phase = 'idle' | 'waiting' | 'running';
+export const APPEARANCE_PREFERENCES = ['system', 'light', 'dark'] as const;
+
+export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 ```
 
 ### Avoid `any`
@@ -99,14 +103,14 @@ Return new objects and arrays; never mutate arguments, state or stored records.
 
 ```typescript
 // WRONG: mutation
-const rename = (session: Session, name: string): Session => {
-  session.name = name;
-  return session;
+const rename = (drill: Drill, name: string): Drill => {
+  drill.name = name;
+  return drill;
 };
 
 // CORRECT
-const rename = (session: Readonly<Session>, name: string): Session => ({
-  ...session,
+const rename = (drill: Readonly<Drill>, name: string): Drill => ({
+  ...drill,
   name,
 });
 ```

@@ -28,6 +28,8 @@ Thank you for taking the time to contribute! This guide explains the workflow, c
 
    > Husky hooks are installed automatically via the `prepare` script.
 
+   > **Line endings.** `.gitattributes` checks every text file out with LF, which Prettier requires, even when Git for Windows sets `core.autocrlf=true`. A clone made before `.gitattributes` existed keeps its CRLF files until they are checked out again. With no uncommitted changes, run `git rm -r --cached -q . && git reset -q --hard` once to rewrite them.
+
 4. Create a feature branch (see [Branch Naming](#branch-naming) below).
 5. Make your changes, commit them, and push to your fork.
 6. Open a Pull Request against `main`.
@@ -36,15 +38,16 @@ Thank you for taking the time to contribute! This guide explains the workflow, c
 
 ## Branch Naming
 
-Use the same conventional-commit keyword as a prefix, followed by a short kebab-case description:
+Use the same conventional-commit keyword as a prefix, then a slash and a short kebab-case description:
 
 ```text
-<type>: <short-description>
+<type>/<short-description>
 ```
 
 | Type       | When to use                                 |
 | ---------- | ------------------------------------------- |
 | `feat`     | New feature                                 |
+| `add`      | New functionality                           |
 | `fix`      | Bug fix                                     |
 | `chore`    | Maintenance, dependency bumps, tooling      |
 | `docs`     | Documentation only                          |
@@ -59,11 +62,13 @@ Use the same conventional-commit keyword as a prefix, followed by a short kebab-
 **Examples:**
 
 ```text
-feat: brass-counter-animation
-fix: crash-on-empty-state
-docs: update-contributing-guide
-chore: bump-react-native
+feat/start-sequence-service
+fix/timer-reset
+docs/update-contributing-guide
+chore/bump-react-native
 ```
+
+The Tests and Android build workflows run on pushes to `main` and to branches matching `feat*/*`, `fix*/*`, `chore*/*`, `refactor*/*`, `build*/*`, `test*/*` and `ci*/*`. A branch named any other way (including `docs/…`) gets no CI on push; its pull request is still checked.
 
 ---
 
@@ -76,17 +81,17 @@ Commit messages are validated by the [Husky `commit-msg` hook](#husky-git-hooks)
 ```
 
 - **type** – one of the keywords in the table above.
-- **scope** – optional, lowercase kebab-case identifier in parentheses (e.g. `(auth)`, `(counter)`).
+- **scope** – optional, lowercase kebab-case identifier in parentheses (e.g. `(timer)`, `(history)`).
 - **description** – short, imperative sentence; no trailing period.
 
 **Valid examples:**
 
 ```text
-feat: add brass counter animation
-fix(counter): resolve crash on empty state
+feat: add start sequence service
+fix(timer): keep the run time after stop
 chore: bump react-native to 0.86
 docs(readme): update setup instructions
-refactor(store): simplify zustand slice
+refactor(storage): queue drill updates one at a time
 ```
 
 **Invalid examples:**
@@ -155,6 +160,8 @@ Import ordering is enforced via `eslint-plugin-import` with this group order:
 3. `internal` (`@/…` aliases)
 4. `parent` / `sibling` / `index`
 
+Each group is separated by a blank line and alphabetised; `npm run lint:fix` sorts them for you.
+
 ---
 
 ## Pull Request Conventions
@@ -169,11 +176,13 @@ PR titles must follow the same **Conventional Commits** format as commit message
 
 The `pr-title` CI job uses [`action-semantic-pull-request`](https://github.com/amannn/action-semantic-pull-request) to check this. It runs as a soft check (`continue-on-error: true`), so a non-conforming title won't block the merge, but please follow the convention to keep the changelog clean.
 
+The title also sets the version bump on merge: a patch unless it contains `#minor` or `#major`. Never edit the version in `package.json`, `package-lock.json` or `VERSION.txt` by hand; the bot does it.
+
 **Examples:**
 
 ```text
-feat: add brass counter animation
-fix(counter): resolve crash on empty state
+feat(timer): add randomised start beep #minor
+fix(history): keep the PB badge on the run that set it
 chore: upgrade dependencies
 docs: update contributing guide
 ```
@@ -190,7 +199,7 @@ When you open a PR you'll see a template — please fill it in:
 
 ### Drafts
 
-Mark a PR as **Draft** if it isn't ready for review. The lint, format, type-check, tests, and PR title validation jobs are all skipped for draft PRs, so you can push works-in-progress without burning most CI minutes. Note that the **Android build** job still runs on draft PRs — convert to draft _before_ pushing large WIP branches if you want to avoid the Gradle build.
+Mark a PR as **Draft** if it isn't ready for review. The lint, format, type-check, tests, and PR title validation jobs are all skipped for draft PRs, so you can push works-in-progress without burning most CI minutes. Note that the **Android build** job still runs on draft PRs, so a draft does not skip the Gradle build.
 
 ---
 
@@ -198,20 +207,21 @@ Mark a PR as **Draft** if it isn't ready for review. The lint, format, type-chec
 
 All of the following jobs run automatically on every non-draft PR targeting `main`:
 
-| Job                       | Command                           | Description                             |
-| ------------------------- | --------------------------------- | --------------------------------------- |
-| **Lint**                  | `npm run lint`                    | ESLint with zero warnings               |
-| **Format check**          | `npm run format:check`            | Prettier formatting                     |
-| **Type check**            | `npm run typecheck`               | TypeScript (`tsc --noEmit`)             |
-| **Tests**                 | `npm run test:ci`                 | Jest with coverage                      |
-| **Conventional PR title** | —                                 | Validates the PR title format           |
-| **Android build**         | `./gradlew assembleDebug` (arm64) | Builds a debug APK (runs on drafts too) |
+| Job                       | Command                                             | Description                                              |
+| ------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
+| **Lint**                  | `npm run lint`                                      | ESLint with zero warnings                                |
+| **Format check**          | `npm run format:check`                              | Prettier formatting                                      |
+| **Type check**            | `npm run typecheck`                                 | TypeScript (`tsc --noEmit`)                              |
+| **Tests**                 | `npm run test:ci`                                   | Jest with coverage                                       |
+| **Memory file budget**    | `npm run check:memory`                              | Size caps on `.claude/CLAUDE.md` and `.claude/rules/`    |
+| **Conventional PR title** | —                                                   | Validates the PR title format (soft check)               |
+| **Android build**         | `./gradlew testDebugUnitTest assembleDebug` (arm64) | Kotlin unit tests, then a debug APK (runs on drafts too) |
 
-All checks must pass before a PR can be merged. If a check fails, click the **Details** link on GitHub to see the full output.
+Every check except the soft PR-title check must pass before a PR can be merged. If a check fails, click the **Details** link on GitHub to see the full output.
 
 In addition to the per-PR checks, the repository runs a few other automated workflows you may notice:
 
 - **Autolabeler** — labels every PR based on the "Type of Change" checkboxes in the PR template.
 - **Security audit** — `npm audit` runs weekly and whenever `package.json` / `package-lock.json` change on `main`.
-- **Version bump** — after merge to `main`, an automated version bump and tag are created based on the conventional commit types.
+- **Version bump** — after merge to `main`, a bot bumps the version (patch, or `#minor` / `#major` from the PR title) and creates a `v*` tag.
 - **Stale bot** — issues without activity for 30 days and PRs without activity for 21 days are marked stale; keep the conversation active or apply the `pinned` / `WIP` / `in-progress` label to exempt.

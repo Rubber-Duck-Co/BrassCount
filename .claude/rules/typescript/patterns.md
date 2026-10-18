@@ -15,13 +15,13 @@ paths:
 Functions, a named error, and an object-form handle:
 
 ```typescript
-export class DrillStorageError extends Error {
-  cause?: unknown;
+export class DrillStorageError extends StorageError {
+  readonly code: DrillStorageErrorCode;
 
-  constructor(message: string, cause?: unknown) {
-    super(message);
+  constructor(message: string, code: DrillStorageErrorCode, cause?: unknown) {
+    super(message, cause);
     this.name = 'DrillStorageError';
-    this.cause = cause;
+    this.code = code;
   }
 }
 
@@ -45,13 +45,20 @@ export type DrillStorageServiceType = typeof DrillStorageService;
 ## Typed Storage Namespace
 
 ```typescript
-const drills = createStorageNamespace<Drill>({ name: 'drills', version: 'v1' });
+// Typed `unknown`: the storage layer only promises valid JSON.
+const drills = createStorageNamespace<unknown>({
+  name: DRILL_NAMESPACE,
+  version: DRILL_STORAGE_VERSION,
+});
 
-await drills.setItem(drill.id, drill);
-const stored = await drills.getItem(drill.id); // Drill | null
+const stored: StoredDrill = { schemaVersion: DRILL_SCHEMA_VERSION, drill };
+await drills.setItem(drill.id, stored);
+
+const raw = await drills.getItem(id); // unknown, null when missing or corrupt
+const loaded = raw === null ? null : parseStoredDrill(raw, id); // Drill | null
 ```
 
-`getItem` resolves to `null` for a missing or corrupt entry; `getAll` skips corrupt entries. Callers handle `null` — they never parse JSON themselves.
+`getItem` resolves to `null` for a missing or unparseable entry; `getAll` skips them. The domain service stores a `{ schemaVersion, … }` envelope, validates every read field by field, and upgrades older envelopes; callers never parse JSON themselves.
 
 ## Injectable Dependencies
 
@@ -102,4 +109,4 @@ const styles = useThemedStyles(createStyles);
 
 ## Ids and Timestamps
 
-Use `generateId()` and `getTimestamp()` from `@utils` rather than calling `uuid` or `new Date().toISOString()` inline, so ids and timestamps stay consistent and easy to fake.
+Use `generateId()` from `@utils/id` and `getTimestamp()` from `@utils/timestamp` rather than calling `uuid` or `new Date().toISOString()` inline, so ids and timestamps stay consistent and easy to fake.

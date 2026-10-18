@@ -28,7 +28,7 @@ paths:
 
 ## Data Durability
 
-- Stored sessions must survive app updates. A change to a stored shape needs a namespace `version` bump and a migration, tested against data written by the previous version.
+- Stored sessions must survive app updates. A change to a stored shape bumps the service's schema version and upgrades older envelopes on read, tested against data written by the previous version.
 - A corrupt stored entry must never crash the app or block loading the rest.
 
 ## Observability

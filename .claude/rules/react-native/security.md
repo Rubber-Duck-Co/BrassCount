@@ -30,7 +30,7 @@ Treat everything shipped in the app as readable by an attacker: an APK can be un
 
 ## Permissions & Privacy
 
-- Request the minimum Android permissions, at the moment they are needed, with a clear reason in the UI. The manifest currently declares only `INTERNET`.
+- Request the minimum Android permissions, at the moment they are needed, with a clear reason in the UI. The manifest declares `INTERNET` (Metro in debug builds) and `RECORD_AUDIO` (shot detection and calibration).
 - Microphone access (for shot detection / calibration) needs `RECORD_AUDIO` in the manifest **and** a runtime request; handle denial with an actionable message rather than a dead screen.
 - Process audio on-device; do not store or transmit recordings without the user explicitly choosing to.
 - Declare data collection accurately in the Play Store listing.
