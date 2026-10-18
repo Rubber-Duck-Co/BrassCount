@@ -246,6 +246,59 @@ async function ensureMicrophonePermission(audio: DrillRunAudio): Promise<void> {
   }
 }
 
+/** Throws unless the drill has a step to hear and every one is calibrated. */
+function checkRunnable(
+  plan: readonly RunStep[],
+  calibration: CalibrationState,
+): void {
+  if (plan.length === 0) {
+    throw new DrillRunError(
+      'The drill has no step the microphone can hear',
+      undefined,
+      'NO_DETECTABLE_STEPS',
+    );
+  }
+  const missing = missingCalibration(plan, calibration);
+  if (missing.length > 0) {
+    throw new DrillRunError(
+      `Not calibrated: ${missing.join(', ')}`,
+      undefined,
+      'NOT_CALIBRATED',
+      missing,
+    );
+  }
+}
+
+/** The listener table behind `DrillRun.on`, and the way to call it. */
+function createEmitter(): {
+  on: DrillRun['on'];
+  emit: <Name extends keyof DrillRunEvents>(
+    event: Name,
+    payload: DrillRunEvents[Name],
+  ) => void;
+} {
+  const listeners: {
+    [Name in keyof DrillRunEvents]: Set<DrillRunListener<Name>>;
+  } = {
+    zero: new Set(),
+    stepDetected: new Set(),
+    runComplete: new Set(),
+    error: new Set(),
+  };
+  return {
+    on: (event, listener) => {
+      listeners[event].add(listener);
+      return () => {
+        listeners[event].delete(listener);
+      };
+    },
+    emit: (event, payload) => {
+      // Copied, so a listener may stop listening while it is being called.
+      [...listeners[event]].forEach(listener => listener(payload));
+    },
+  };
+}
+
 /**
  * Set up one run of a drill. Nothing is opened until `arm` is called.
  */
@@ -272,22 +325,7 @@ export function createDrillRun(options: DrillRunOptions): DrillRun {
   /** Whether this run has got as far as opening the microphone. */
   let askedForMicrophone = false;
 
-  const listeners: {
-    [Name in keyof DrillRunEvents]: Set<DrillRunListener<Name>>;
-  } = {
-    zero: new Set(),
-    stepDetected: new Set(),
-    runComplete: new Set(),
-    error: new Set(),
-  };
-
-  const emit = <Name extends keyof DrillRunEvents>(
-    event: Name,
-    payload: DrillRunEvents[Name],
-  ): void => {
-    // Copied, so a listener may stop listening while it is being called.
-    [...listeners[event]].forEach(listener => listener(payload));
-  };
+  const { on, emit } = createEmitter();
 
   // Read through functions: the stage changes underneath an `await`, which
   // a plain comparison after one would not be allowed to see.
@@ -303,6 +341,13 @@ export function createDrillRun(options: DrillRunOptions): DrillRun {
     // here is nothing the shooter can act on, and the native side closes
     // the microphone itself when the app is left.
     audio.stop().catch(() => {});
+  };
+
+  /** Ends a run that is over on its own: it finished or its stream failed. */
+  const endRun = (): void => {
+    stage = 'ended';
+    stopListening();
+    closeQuietly();
   };
 
   const dispatch = (event: DetectorEvent): void => {
@@ -331,9 +376,7 @@ export function createDrillRun(options: DrillRunOptions): DrillRun {
     // The run is ended before anyone is told, so a listener that throws
     // cannot leave the microphone open on a run that is over.
     if (step.events.some(event => event.type === 'complete')) {
-      stage = 'ended';
-      stopListening();
-      closeQuietly();
+      endRun();
     }
     step.events.forEach(dispatch);
   };
@@ -351,9 +394,7 @@ export function createDrillRun(options: DrillRunOptions): DrillRun {
     if (!isStage('armed')) {
       return;
     }
-    stage = 'ended';
-    stopListening();
-    closeQuietly();
+    endRun();
     emit('error', failure);
   };
 
@@ -389,22 +430,7 @@ export function createDrillRun(options: DrillRunOptions): DrillRun {
         'INVALID_STATE',
       );
     }
-    if (plan.length === 0) {
-      throw new DrillRunError(
-        'The drill has no step the microphone can hear',
-        undefined,
-        'NO_DETECTABLE_STEPS',
-      );
-    }
-    const missing = missingCalibration(plan, calibration);
-    if (missing.length > 0) {
-      throw new DrillRunError(
-        `Not calibrated: ${missing.join(', ')}`,
-        undefined,
-        'NOT_CALIBRATED',
-        missing,
-      );
-    }
+    checkRunnable(plan, calibration);
     throwIfCancelled(signal);
 
     stage = 'arming';
@@ -465,12 +491,7 @@ export function createDrillRun(options: DrillRunOptions): DrillRun {
 
   return {
     steps: plan,
-    on: (event, listener) => {
-      listeners[event].add(listener);
-      return () => {
-        listeners[event].delete(listener);
-      };
-    },
+    on,
     arm,
     begin,
     stop,

@@ -184,13 +184,13 @@ class AudioLevelsTest {
   }
 
   @Test
-  fun `a silent buffer times its peak at the first frame`() {
+  fun `a silent buffer times its peak at the buffer end`() {
     val buffer = ShortArray(4)
 
     val reading = computeReading(buffer, buffer.size, END_NANOS)
 
-    // No sample exceeds zero, so the peak index stays at frame 0: 3 frames back.
-    assertEquals(END_MS - 0.068027, reading.peakTimestampMs, TIME_DELTA_MS)
+    // There is no peak, so none is claimed before sound that could follow.
+    assertEquals(END_MS, reading.peakTimestampMs, TIME_DELTA_MS)
   }
 
   // --- onset ---
@@ -307,12 +307,12 @@ class AudioLevelsTest {
   }
 
   @Test
-  fun `a silent buffer times its onset at the first frame`() {
+  fun `a silent buffer times its onset at the buffer end`() {
     val buffer = ShortArray(4)
 
     val reading = computeReading(buffer, buffer.size, END_NANOS)
 
-    assertEquals(END_MS - 0.068027, reading.onsetTimestampMs, TIME_DELTA_MS)
+    assertEquals(END_MS, reading.onsetTimestampMs, TIME_DELTA_MS)
   }
 
   @Test

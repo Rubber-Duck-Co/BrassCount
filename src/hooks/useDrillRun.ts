@@ -145,6 +145,65 @@ const endRun = async (
   }
 };
 
+type StartSequenceOptions = {
+  run: DrillRun;
+  signal: AbortSignal;
+  /** Settles when the previous run has let go of the microphone. */
+  before: Promise<void>;
+  isCurrent: () => boolean;
+  goTo: (phase: DrillRunPhase) => void;
+  /**
+   * The sequence failed or was cancelled while still the current run.
+   * `shown` is what to tell the shooter, or `null` for a cancellation.
+   */
+  onFailed: (shown: DrillRunFailure | null) => void;
+};
+
+/** Open the microphone, then sound the beep and let the run begin on it. */
+const runStartSequence = async ({
+  run,
+  signal,
+  before,
+  isCurrent,
+  goTo,
+  onFailed,
+}: StartSequenceOptions): Promise<void> => {
+  // A run cancelled while its microphone was opening closes it again once
+  // the opening finishes. Wait for that, or its close would land on this
+  // run's microphone.
+  await before;
+  if (!isCurrent()) {
+    return;
+  }
+  try {
+    await run.arm({ signal });
+    if (!isCurrent()) {
+      return;
+    }
+    goTo('waiting');
+    await StartSequenceService.start({
+      signal,
+      onTrigger: () => {
+        run.begin();
+        if (isCurrent()) {
+          goTo('running');
+        }
+      },
+    });
+  } catch (err) {
+    await endRun(run);
+    if (!isCurrent()) {
+      return;
+    }
+    // A cancel bumps the run id, so an abort never reaches here as the
+    // current run; the check keeps a stray one from being shown.
+    const cancelled =
+      err instanceof DrillRunAbortError ||
+      err instanceof StartSequenceAbortError;
+    onFailed(cancelled ? null : failureFor(err));
+  }
+};
+
 /**
  * Runs one drill at a time on the Timer screen: opens the microphone,
  * sounds the start beep after a random delay, and follows the drill run
@@ -289,49 +348,23 @@ export const useDrillRun = (): UseDrillRunResult => {
       });
 
       const before = settledRef.current;
-      const sequence = async (): Promise<void> => {
-        // A run cancelled while its microphone was opening closes it again
-        // once the opening finishes. Wait for that, or its close would land
-        // on this run's microphone.
-        await before;
-        if (!isCurrent()) {
-          return;
-        }
-        try {
-          await run.arm({ signal: controller.signal });
-          if (!isCurrent()) {
-            return;
-          }
-          goTo('waiting');
-          await StartSequenceService.start({
-            signal: controller.signal,
-            onTrigger: () => {
-              run.begin();
-              if (isCurrent()) {
-                goTo('running');
-              }
-            },
-          });
-        } catch (err) {
-          await endRun(run);
-          if (!isCurrent()) {
-            return;
-          }
-          // A cancel bumps the run id, so an abort never reaches here as
-          // the current run; the check keeps a stray one from being shown.
-          if (
-            !(err instanceof DrillRunAbortError) &&
-            !(err instanceof StartSequenceAbortError)
-          ) {
-            setFailure(failureFor(err));
+      // `runStartSequence` settles every failure into state, so it never
+      // rejects.
+      settledRef.current = runStartSequence({
+        run,
+        signal: controller.signal,
+        before,
+        isCurrent,
+        goTo,
+        onFailed: shown => {
+          if (shown !== null) {
+            setFailure(shown);
           }
           abortRef.current = null;
           runRef.current = null;
           goTo('idle');
-        }
-      };
-      // `sequence` settles every failure into state, so it never rejects.
-      settledRef.current = sequence().catch(() => {});
+        },
+      }).catch(() => {});
     },
     [abandon, calibration, finish, goTo],
   );
