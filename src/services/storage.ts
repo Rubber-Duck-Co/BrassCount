@@ -45,6 +45,12 @@ export function buildKey(...segments: Array<string | number>): string {
   return [STORAGE_ROOT, ...segments.map(String)].join(STORAGE_KEY_DELIMITER);
 }
 
+/** One stored item together with the id of the key it was read from. */
+export interface StorageEntry<T> {
+  id: string;
+  value: T;
+}
+
 /**
  * Options controlling how a namespace is stored.
  *
@@ -90,6 +96,13 @@ export interface StorageNamespace<T> {
 
   /** Read every item currently stored in this namespace. */
   getAll(): Promise<T[]>;
+
+  /**
+   * Read every item together with the id of the key it is stored under, so
+   * a caller can check that what a record says about itself matches where
+   * it was found. Corrupt entries are skipped.
+   */
+  getAllEntries(): Promise<Array<StorageEntry<T>>>;
 
   /** Remove every item currently stored in this namespace. */
   clear(): Promise<void>;
@@ -183,7 +196,7 @@ export function createStorageNamespace<T>(
     return keys.map(key => key.slice(idPrefix.length));
   };
 
-  const getAll = async (): Promise<T[]> => {
+  const getAllEntries = async (): Promise<Array<StorageEntry<T>>> => {
     const keys = await getAllKeys();
     if (keys.length === 0) {
       return [];
@@ -199,19 +212,25 @@ export function createStorageNamespace<T>(
       );
     }
 
-    const items: T[] = [];
-    for (const value of Object.values(entries)) {
-      if (value == null) {
+    const items: Array<StorageEntry<T>> = [];
+    for (const [key, raw] of Object.entries(entries)) {
+      if (raw == null) {
         continue;
       }
       try {
-        items.push(JSON.parse(value) as T);
+        items.push({
+          id: key.slice(idPrefix.length),
+          value: JSON.parse(raw) as T,
+        });
       } catch {
         // Skip corrupt entries rather than failing the whole read.
       }
     }
     return items;
   };
+
+  const getAll = async (): Promise<T[]> =>
+    (await getAllEntries()).map(entry => entry.value);
 
   const clear = async (): Promise<void> => {
     const keys = await getAllKeys();
@@ -233,6 +252,7 @@ export function createStorageNamespace<T>(
     removeItem,
     getAllIds,
     getAll,
+    getAllEntries,
     clear,
   };
 }

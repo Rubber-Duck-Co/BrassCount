@@ -227,9 +227,10 @@ const buildSession = (
 /**
  * Turn a value read from storage back into a `Session`, or `null` when it
  * cannot be trusted: not an envelope, a schema version this build does not
- * know, or a session that fails the same checks a save applies.
+ * know, a session whose own id is not the key it was stored under, or a
+ * session that fails the same checks a save applies.
  */
-const parseStoredSession = (stored: unknown): Session | null => {
+const parseStoredSession = (stored: unknown, keyId: string): Session | null => {
   if (!isRecord(stored) || !isRecord(stored.session)) {
     return null;
   }
@@ -244,7 +245,7 @@ const parseStoredSession = (stored: unknown): Session | null => {
   }
 
   const { id, drillId, createdAt, totalTime, splits } = session;
-  if (!isNonEmptyString(id) || !isTimestamp(createdAt)) {
+  if (!isNonEmptyString(id) || id !== keyId || !isTimestamp(createdAt)) {
     return null;
   }
   // Schema 1 had no `completed`: only a finished run could be saved then.
@@ -302,7 +303,8 @@ const byNewest = (a: Session, b: Session): number =>
  * `completed` is not a boolean, there are no splits or more than
  * `MAX_DRILL_STEPS`, two splits share a `stepId`, a label is blank or
  * longer than `MAX_SPLIT_LABEL_LENGTH`, or a par is outside 0 (exclusive)
- * to `MAX_SPLIT_PAR_SECONDS`.
+ * to `MAX_SPLIT_PAR_SECONDS`, or the injected `generateId` / `getTimestamp`
+ * returns an empty id or a value that is not a date.
  */
 export async function saveSession(
   input: SessionInput,
@@ -315,7 +317,18 @@ export async function saveSession(
     throw invalid('saveSession requires a session payload');
   }
 
-  const session = buildSession(generateId(), getTimestamp(), input);
+  // An injected generator is checked before anything is written, so a
+  // faulty one cannot store a session that cannot be read back.
+  const id = generateId();
+  const createdAt = getTimestamp();
+  if (!isNonEmptyString(id)) {
+    throw invalid('The generated session id is not a non-empty string');
+  }
+  if (!isTimestamp(createdAt)) {
+    throw invalid('The generated timestamp is not a valid ISO-8601 date');
+  }
+
+  const session = buildSession(id, createdAt, input);
 
   const stored: StoredSession = {
     schemaVersion: SESSION_SCHEMA_VERSION,
@@ -330,11 +343,24 @@ export async function saveSession(
  * corrupt or fail validation are left out.
  */
 export async function loadSessions(): Promise<Session[]> {
-  const stored = await withStorage('load sessions', () => sessions.getAll());
+  const stored = await withStorage('load sessions', () =>
+    sessions.getAllEntries(),
+  );
   return stored
-    .map(entry => parseStoredSession(entry))
+    .map(entry => parseStoredSession(entry.value, entry.id))
     .filter((session): session is Session => session !== null)
     .sort(byNewest);
+}
+
+/**
+ * Count the sessions stored on the device without reading them: one per
+ * stored key. A key whose value is unreadable (corrupt, or written by a
+ * newer build) is counted though `loadSessions` leaves it out, which is
+ * the price of not reading and validating every run just to count them.
+ */
+export async function countSessions(): Promise<number> {
+  const ids = await withStorage('count sessions', () => sessions.getAllIds());
+  return ids.length;
 }
 
 /**
@@ -342,8 +368,11 @@ export async function loadSessions(): Promise<Session[]> {
  * empty list when the drill has no runs.
  *
  * Sessions are stored one per key with no index by drill, so this reads
- * them all and keeps the matches. Call it once per screen visit, not per
- * render.
+ * every value but only validates the ones that name this drill. An index
+ * was decided against: a session is never updated, but a drill index would
+ * need upkeep on every save and delete and a migration for existing
+ * history, to save work that only grows with the history's size. Call it
+ * once per screen visit, not per render.
  */
 export async function loadSessionsByDrillId(
   drillId: string,
@@ -351,8 +380,19 @@ export async function loadSessionsByDrillId(
   if (!isNonEmptyString(drillId)) {
     throw invalid('Cannot load sessions without a valid drill id');
   }
-  const all = await loadSessions();
-  return all.filter(session => session.drillId === drillId);
+  const stored = await withStorage('load sessions', () =>
+    sessions.getAllEntries(),
+  );
+  return stored
+    .filter(
+      ({ value }) =>
+        isRecord(value) &&
+        isRecord(value.session) &&
+        value.session.drillId === drillId,
+    )
+    .map(entry => parseStoredSession(entry.value, entry.id))
+    .filter((session): session is Session => session !== null)
+    .sort(byNewest);
 }
 
 /**
@@ -362,7 +402,7 @@ export async function loadSessionsByDrillId(
 export async function loadSessionById(id: string): Promise<Session | null> {
   assertId(id, 'load');
   const stored = await withStorage('load session', () => sessions.getItem(id));
-  return parseStoredSession(stored);
+  return parseStoredSession(stored, id);
 }
 
 /**
@@ -388,6 +428,7 @@ export const SessionStorageService = {
   schemaVersion: SESSION_SCHEMA_VERSION,
   save: saveSession,
   loadAll: loadSessions,
+  count: countSessions,
   loadByDrillId: loadSessionsByDrillId,
   loadById: loadSessionById,
   deleteById: deleteSessionById,

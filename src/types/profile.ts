@@ -38,6 +38,13 @@ export const HANDLE_BODY_PATTERN = /^[A-Za-z0-9._-]+$/;
  * collapsed, in characters.
  */
 export const MAX_PROFILE_NAME_LENGTH = 40;
+/**
+ * Most characters the name field accepts while typing. Well above
+ * `MAX_PROFILE_NAME_LENGTH` so spaces that will collapse on save (a padded
+ * paste) do not cut the name short; the editor shows an error for a name
+ * that is too long once they are collapsed.
+ */
+export const MAX_PROFILE_NAME_INPUT_LENGTH = 200;
 /** Longest a handle may be, in characters, not counting the `@`. */
 export const MAX_PROFILE_HANDLE_LENGTH = 30;
 

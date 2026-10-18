@@ -35,7 +35,10 @@ import { createStorageNamespace, StorageError } from './storage';
  *   - Anything read back from storage is untrusted: it is checked field by
  *     field, the totals are recomputed from the steps, and an entry that
  *     does not pass is skipped like corrupt JSON instead of failing the
- *     whole read.
+ *     whole read. A drill whose own id is not the key it sits under is
+ *     treated the same way.
+ *   - The ids and timestamps an injected generator returns are checked
+ *     before anything is written.
  *   - A drill is bounded (`MAX_DRILL_NAME_LENGTH`, `MAX_DRILL_STEPS`,
  *     `MAX_STEP_PAR_SECONDS`) on save and on read alike.
  *   - Saves, updates, deletes and clears run one at a time, in the order
@@ -101,6 +104,24 @@ const assertId = (id: string, action: string): void => {
   if (!isNonEmptyString(id)) {
     throw invalid(`Cannot ${action} drill without a valid id`);
   }
+};
+
+/**
+ * Check an id or timestamp produced by an injected generator before it is
+ * used, so a faulty one cannot write a record that cannot be read back.
+ */
+const generatedId = (id: unknown): string => {
+  if (!isNonEmptyString(id)) {
+    throw invalid('The generated drill id is not a non-empty string');
+  }
+  return id;
+};
+
+const generatedTimestamp = (timestamp: unknown): string => {
+  if (!isTimestamp(timestamp)) {
+    throw invalid('The generated timestamp is not a valid ISO-8601 date');
+  }
+  return timestamp;
 };
 
 const normalizeName = (name: unknown): string => {
@@ -185,9 +206,10 @@ const buildDrill = (
 /**
  * Turn a value read from storage back into a `Drill`, or `null` when it
  * cannot be trusted: not an envelope, a schema version this build does not
- * know, or a drill that fails the same checks a save applies.
+ * know, a drill whose own id is not the key it was stored under, or a
+ * drill that fails the same checks a save applies.
  */
-const parseStoredDrill = (stored: unknown): Drill | null => {
+const parseStoredDrill = (stored: unknown, keyId: string): Drill | null => {
   if (!isRecord(stored) || !isRecord(stored.drill)) {
     return null;
   }
@@ -201,6 +223,7 @@ const parseStoredDrill = (stored: unknown): Drill | null => {
   const { id, name, steps, createdAt, updatedAt } = stored.drill;
   if (
     !isNonEmptyString(id) ||
+    id !== keyId ||
     !isTimestamp(createdAt) ||
     !isTimestamp(updatedAt)
   ) {
@@ -266,7 +289,8 @@ const byNewestUpdate = (a: Drill, b: Drill): number =>
  * follow-up read. Rejects with `INVALID_INPUT` when the name is blank or
  * longer than `MAX_DRILL_NAME_LENGTH`, there are no steps or more than
  * `MAX_DRILL_STEPS`, or a step has an unknown type or a par outside
- * 0 (exclusive) to `MAX_STEP_PAR_SECONDS`.
+ * 0 (exclusive) to `MAX_STEP_PAR_SECONDS`, or the injected `generateId` /
+ * `getTimestamp` returns an empty id or a value that is not a date.
  */
 export async function saveDrill(
   input: DrillInput,
@@ -279,9 +303,9 @@ export async function saveDrill(
     throw invalid('saveDrill requires a drill payload');
   }
 
-  const timestamp = getTimestamp();
+  const timestamp = generatedTimestamp(getTimestamp());
   const drill = buildDrill({
-    id: generateId(),
+    id: generatedId(generateId()),
     name: normalizeName(input.name),
     steps: normalizeSteps(input.steps, generateId),
     createdAt: timestamp,
@@ -297,9 +321,9 @@ export async function saveDrill(
  * Entries that are corrupt or fail validation are left out.
  */
 export async function loadDrills(): Promise<Drill[]> {
-  const stored = await withStorage('load drills', () => drills.getAll());
+  const stored = await withStorage('load drills', () => drills.getAllEntries());
   return stored
-    .map(entry => parseStoredDrill(entry))
+    .map(entry => parseStoredDrill(entry.value, entry.id))
     .filter((drill): drill is Drill => drill !== null)
     .sort(byNewestUpdate);
 }
@@ -311,7 +335,18 @@ export async function loadDrills(): Promise<Drill[]> {
 export async function loadDrillById(id: string): Promise<Drill | null> {
   assertId(id, 'load');
   const stored = await withStorage('load drill', () => drills.getItem(id));
-  return parseStoredDrill(stored);
+  return parseStoredDrill(stored, id);
+}
+
+/**
+ * Count the drills stored on the device without reading them: one per
+ * stored key. A key whose value is unreadable (corrupt, or written by a
+ * newer build) is counted though `loadDrills` leaves it out, which is the
+ * price of not reading every drill just to count them.
+ */
+export async function countDrills(): Promise<number> {
+  const ids = await withStorage('count drills', () => drills.getAllIds());
+  return ids.length;
 }
 
 /**
@@ -363,7 +398,7 @@ export async function updateDrill(
       name: name ?? existing.name,
       steps: steps ?? existing.steps,
       createdAt: existing.createdAt,
-      updatedAt: getTimestamp(),
+      updatedAt: generatedTimestamp(getTimestamp()),
     });
 
     await writeDrill(drill, 'update drill');
@@ -394,6 +429,7 @@ export const DrillStorageService = {
   schemaVersion: DRILL_SCHEMA_VERSION,
   save: saveDrill,
   loadAll: loadDrills,
+  count: countDrills,
   loadById: loadDrillById,
   update: updateDrill,
   deleteById: deleteDrillById,

@@ -3,6 +3,8 @@
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
+        <!-- Painted before the first frame; follows the night mode MainActivity applies. -->
+        <item name="android:windowBackground">@color/window_background</item>
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
     </style>
 
