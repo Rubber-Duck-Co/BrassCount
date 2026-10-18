@@ -18,6 +18,8 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.common.LifecycleState
 import com.facebook.react.module.annotations.ReactModule
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -34,6 +36,11 @@ import kotlin.concurrent.thread
  * Capture is foreground-only: it is stopped when the host activity pauses
  * (JS is told through an `INTERRUPTED` error event) so the microphone is
  * never left open behind the user's back. JS restarts it on resume.
+ *
+ * Stopping joins the read thread and releases the recorder on a teardown
+ * thread, not the caller's; [start] waits for a teardown in progress, so a
+ * restart never has two recorders open (see CaptureTeardown). Threading is
+ * checked on a device, not by unit test.
  */
 @ReactModule(name = AudioCaptureModule.NAME)
 class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
@@ -46,6 +53,15 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
   @Volatile private var audioRecord: AudioRecord? = null
   private var captureThread: Thread? = null
 
+  // Joining the read thread and releasing the recorder can take a buffer's
+  // worth of time, so a pause does it here rather than on the main thread;
+  // start() waits on it so a quick restart never opens a second recorder.
+  private val teardownExecutor =
+    Executors.newSingleThreadExecutor { task ->
+      Thread(task, "BrassCount-AudioTeardown").apply { isDaemon = true }
+    }
+  private val teardown = CaptureTeardown(teardownExecutor)
+
   init {
     reactContext.addLifecycleEventListener(this)
   }
@@ -53,6 +69,11 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
   override fun getName() = NAME
 
   override fun start(promise: Promise) {
+    // Outside stateLock: the old read thread needs that lock to exit.
+    if (!teardown.awaitIdle(TEARDOWN_WAIT_TIMEOUT_MS)) {
+      promise.reject("INIT_FAILED", "The previous audio capture is still shutting down")
+      return
+    }
     synchronized(stateLock) {
       if (isRunning.get()) {
         promise.resolve(null)
@@ -90,27 +111,29 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
       // A source can fail at either step — refusing to open, or opening and
       // then refusing to record — so each one is taken all the way to
       // recording before falling back to the next.
-      var anySourceOpened = false
-      val recorder =
+      val outcome =
         try {
-          audioSourceIdsByPreference().firstNotNullOfOrNull { source ->
-            openRecorder(source, bufferSizeBytes)?.let { opened ->
-              anySourceOpened = true
-              startRecorder(opened)
-            }
-          }
+          openFirstSource(
+            audioSourceIdsByPreference(),
+            { source -> openRecorder(source, bufferSizeBytes) },
+            { opened -> startRecorder(opened) },
+          )
         } catch (e: SecurityException) {
           promise.reject("PERMISSION_DENIED", "RECORD_AUDIO permission has not been granted", e)
           return
         }
-      if (recorder == null) {
-        if (anySourceOpened) {
-          promise.reject("START_FAILED", "AudioRecord failed to start recording")
-        } else {
-          promise.reject("INIT_FAILED", "AudioRecord failed to initialize")
+      val recorder =
+        when (outcome) {
+          is OpenOutcome.Opened -> outcome.recorder
+          OpenOutcome.StartFailed -> {
+            promise.reject("START_FAILED", "AudioRecord failed to start recording")
+            return
+          }
+          OpenOutcome.InitFailed -> {
+            promise.reject("INIT_FAILED", "AudioRecord failed to initialize")
+            return
+          }
         }
-        return
-      }
 
       audioRecord = recorder
       isRunning.set(true)
@@ -135,7 +158,10 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
 
   override fun invalidate() {
     reactContext.removeLifecycleEventListener(this)
-    stopInternal()
+    stopInternal(blocking = true)
+    // Also covers a pause that queued its teardown just before this.
+    teardown.awaitIdle(TEARDOWN_WAIT_TIMEOUT_MS)
+    teardownExecutor.shutdown()
     super.invalidate()
   }
 
@@ -148,7 +174,7 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
   }
 
   override fun onHostDestroy() {
-    stopInternal()
+    stopInternal(blocking = true)
   }
 
   // Android's global RCTDeviceEventEmitter needs no native-side listener
@@ -213,26 +239,48 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
     return recorder
   }
 
-  /** Stops capture if it is running. Returns whether it was. */
-  private fun stopInternal(): Boolean {
-    val recorder: AudioRecord?
-    val thread: Thread?
+  /**
+   * Stops capture if it is running. Returns whether it was. The join and
+   * release run on the teardown thread unless [blocking] (the module is going
+   * away, so they must finish before it does); either way [start] waits.
+   */
+  private fun stopInternal(blocking: Boolean = false): Boolean {
     synchronized(stateLock) {
       if (!isRunning.getAndSet(false)) {
         return false
       }
-      recorder = audioRecord
-      thread = captureThread
+      val recorder = audioRecord
+      val thread = captureThread
       audioRecord = null
       captureThread = null
+      // Registered before stateLock is let go, so a start() that follows
+      // always sees this teardown pending.
+      scheduleTeardown {
+        try {
+          thread?.join(THREAD_JOIN_TIMEOUT_MS)
+        } catch (e: InterruptedException) {
+          Thread.currentThread().interrupt()
+        }
+        releaseRecorder(recorder)
+      }
     }
-    try {
-      thread?.join(THREAD_JOIN_TIMEOUT_MS)
-    } catch (e: InterruptedException) {
-      Thread.currentThread().interrupt()
+    if (blocking) {
+      teardown.awaitIdle(TEARDOWN_WAIT_TIMEOUT_MS)
     }
-    releaseRecorder(recorder)
     return true
+  }
+
+  /**
+   * Hands [task] to the teardown thread. Called under stateLock, since it
+   * only queues. When the executor is already shut down (the module was
+   * invalidated) the task runs here instead, so a recorder is never leaked.
+   */
+  private fun scheduleTeardown(task: () -> Unit) {
+    try {
+      teardown.begin(task)
+    } catch (e: RejectedExecutionException) {
+      task()
+    }
   }
 
   private fun releaseRecorder(recorder: AudioRecord?) {
@@ -292,19 +340,15 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
     // while this recorder is still the current one: if stop() already took
     // it (and a later start() may have installed another), that state is no
     // longer ours to clear.
-    val stillCurrent =
-      synchronized(stateLock) {
-        if (audioRecord === recorder) {
-          isRunning.set(false)
-          audioRecord = null
-          captureThread = null
-          true
-        } else {
-          false
-        }
+    synchronized(stateLock) {
+      if (audioRecord === recorder) {
+        isRunning.set(false)
+        audioRecord = null
+        captureThread = null
+        // Tracked like a stop, so a start() right after a read failure waits
+        // for this recorder to be released.
+        scheduleTeardown { releaseRecorder(recorder) }
       }
-    if (stillCurrent) {
-      releaseRecorder(recorder)
     }
   }
 
@@ -373,5 +417,7 @@ class AudioCaptureModule(private val reactContext: ReactApplicationContext) :
     private const val CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO
     private const val AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT
     private const val THREAD_JOIN_TIMEOUT_MS = 500L
+    // A little over the join timeout, so a teardown that hits it is waited out.
+    private const val TEARDOWN_WAIT_TIMEOUT_MS = 1_000L
   }
 }

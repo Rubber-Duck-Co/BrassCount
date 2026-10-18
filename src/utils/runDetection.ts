@@ -27,6 +27,19 @@ import { splitDelta } from './session';
  * from the readings themselves. Nothing is timed by when a reading reaches
  * JavaScript, so a busy JS thread delays what the screen shows and never
  * what a run records.
+ *
+ * Known limits, accepted until a range test says otherwise (#119):
+ * - Detection is level-only, so a quiet shot that misses its threshold is
+ *   not counted and every later step shifts onto the wrong sound.
+ * - A microphone that stays saturated between shots never drops under the
+ *   re-arm margin, so the next step is not armed. Tuning
+ *   `rearmHysteresisDb` needs real indoor-range recordings.
+ * - A shot while the beep sounds counts only if it is `beepMarginDb` over
+ *   the beep.
+ * - A beep that begins later than `beepSearchMs` after the trigger (a slow
+ *   wireless speaker) is not recognised and is counted as a step.
+ * - A silent step's par is added to the next heard step, whether or not
+ *   that step has a par of its own (see `planRun`).
  */
 
 /** The margins the rules below work to. All can be overridden per run. */

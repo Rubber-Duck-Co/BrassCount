@@ -69,7 +69,9 @@ internal fun captureBufferSizeBytes(minBufferSizeBytes: Int): Int =
 internal fun computeReading(buffer: ShortArray, framesRead: Int, bufferEndNanos: Long): Reading {
   var sumOfSquares = 0.0
   var peakSample = 0
-  var peakIndex = 0
+  // A silent buffer has no peak: it is timed at the buffer end rather than
+  // claiming an event at its first frame, up to a buffer earlier.
+  var peakIndex = framesRead - 1
   for (i in 0 until framesRead) {
     val sample = buffer[i].toInt()
     sumOfSquares += sample.toDouble() * sample
@@ -100,6 +102,7 @@ internal fun computeReading(buffer: ShortArray, framesRead: Int, bufferEndNanos:
  * the buffer, long after the tone began, and this finds where it began.
  */
 private fun onsetIndex(buffer: ShortArray, peakIndex: Int, peakSample: Int): Int {
+  if (peakSample == 0) return peakIndex
   for (i in 0 until peakIndex) {
     if (abs(buffer[i].toInt()) * ONSET_PEAK_DIVISOR >= peakSample) {
       return i
