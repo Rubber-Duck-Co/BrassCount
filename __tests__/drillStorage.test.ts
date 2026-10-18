@@ -7,6 +7,7 @@ import {
   DrillStorageError,
   DrillStorageService,
   clearDrills,
+  countDrills,
   deleteDrillById,
   loadDrillById,
   loadDrills,
@@ -103,6 +104,7 @@ describe('drillStorage service', () => {
       schemaVersion: 1,
       save: saveDrill,
       loadAll: loadDrills,
+      count: countDrills,
       loadById: loadDrillById,
       update: updateDrill,
       deleteById: deleteDrillById,
@@ -263,6 +265,15 @@ describe('drillStorage service', () => {
   });
 
   describe('loading a drill by id', () => {
+    it('resolves to null when the stored drill names a different id', async () => {
+      await writeStored('moved', {
+        schemaVersion: DRILL_SCHEMA_VERSION,
+        drill: storedDrill({ id: 'someone-else' }),
+      });
+
+      expect(await loadDrillById('moved')).toBeNull();
+    });
+
     it('returns the saved drill', async () => {
       const saved = await saveDrill(billDrill, fakes());
 
@@ -373,7 +384,80 @@ describe('drillStorage service', () => {
     });
   });
 
+  describe('injected generators', () => {
+    it.each<[string, DrillStorageOptions]>([
+      ['an empty drill id', { generateId: () => '' }],
+      ['a timestamp that is not a date', { getTimestamp: () => 'yesterday' }],
+      ['an empty timestamp', { getTimestamp: () => '' }],
+    ])('rejects a save with %s without writing anything', async (_l, bad) => {
+      await expectRejection(
+        saveDrill(billDrill, { ...fakes(), ...bad }),
+        'INVALID_INPUT',
+      );
+
+      expect(await AsyncStorage.getAllKeys()).toEqual([]);
+    });
+
+    it('rejects an update with a bad timestamp and keeps the stored drill', async () => {
+      const saved = await saveDrill(billDrill, fakes());
+
+      await expectRejection(
+        updateDrill(saved.id, { name: 'Renamed' }, { getTimestamp: () => 'x' }),
+        'INVALID_INPUT',
+      );
+
+      expect(await loadDrillById(saved.id)).toEqual(saved);
+    });
+  });
+
+  describe('counting drills', () => {
+    it('resolves to 0 when nothing is stored', async () => {
+      expect(await countDrills()).toBe(0);
+    });
+
+    it('counts every stored drill without reading any of them', async () => {
+      await saveDrill(billDrill, fakes());
+      let next = 0;
+      await saveDrill(billDrill, {
+        ...fakes(),
+        generateId: () => `other-${(next += 1)}`,
+      });
+      const getMany = jest.spyOn(AsyncStorage, 'getMany');
+      const getItem = jest.spyOn(AsyncStorage, 'getItem');
+
+      expect(await countDrills()).toBe(2);
+      expect(getMany).not.toHaveBeenCalled();
+      expect(getItem).not.toHaveBeenCalled();
+    });
+
+    it('counts a key whose value is unreadable, which loadDrills skips', async () => {
+      await saveDrill(billDrill, fakes());
+      await AsyncStorage.setItem(keyFor('corrupt'), '{not-json');
+
+      expect(await countDrills()).toBe(2);
+      expect(await loadDrills()).toHaveLength(1);
+    });
+
+    it('wraps a storage failure', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getAllKeys')
+        .mockRejectedValueOnce(new Error('unavailable'));
+
+      await expectRejection(countDrills(), 'STORAGE_FAILURE');
+    });
+  });
+
   describe('loading every drill', () => {
+    it('skips a drill whose own id is not the key it is stored under', async () => {
+      const saved = await saveDrill(billDrill, fakes());
+      await writeStored('moved', {
+        schemaVersion: DRILL_SCHEMA_VERSION,
+        drill: storedDrill({ id: 'someone-else' }),
+      });
+
+      expect(await loadDrills()).toEqual([saved]);
+    });
+
     it('resolves to an empty list when nothing is stored', async () => {
       expect(await loadDrills()).toEqual([]);
     });

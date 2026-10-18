@@ -26,7 +26,11 @@ import {
   AppearanceProvider,
   type AppearanceProviderProps,
 } from '../src/store/AppearanceContext';
-import { DEFAULT_PROFILE, type Profile } from '../src/types/profile';
+import {
+  DEFAULT_PROFILE,
+  MAX_PROFILE_NAME_LENGTH,
+  type Profile,
+} from '../src/types/profile';
 
 type TestTabParamList = {
   Profile: undefined;
@@ -189,10 +193,10 @@ describe('ProfileScreen', () => {
   describe('showing the profile', () => {
     it('says it is loading until storage answers', async () => {
       let releaseRead: () => void = () => {};
-      jest.spyOn(SessionStorageService, 'loadAll').mockImplementationOnce(
+      jest.spyOn(SessionStorageService, 'count').mockImplementationOnce(
         () =>
           new Promise(resolve => {
-            releaseRead = () => resolve([]);
+            releaseRead = () => resolve(0);
           }),
       );
       const { tree } = await renderScreen();
@@ -471,6 +475,24 @@ describe('ProfileScreen', () => {
         name: 'Doc Brown',
         handle: '@doc.brown',
       });
+    });
+
+    it('lets a padded name be typed in full and saves it collapsed', async () => {
+      const { tree } = await renderScreen();
+      const padded = `  ${'a'.repeat(20)}      ${'b'.repeat(19)}  `;
+
+      await press(tree, 'btn-edit-profile');
+      // More than the stored limit, typed with spaces that will collapse.
+      expect(padded.length).toBeGreaterThan(MAX_PROFILE_NAME_LENGTH);
+      expect(
+        byTestId(tree, 'input-profile-name')[0].props.maxLength,
+      ).toBeGreaterThanOrEqual(padded.length);
+      type(tree, 'input-profile-name', padded);
+      await press(tree, 'btn-save-profile');
+
+      expect(textOf(tree, 'text-profile-name')).toBe(
+        `${'a'.repeat(20)} ${'b'.repeat(19)}`,
+      );
     });
 
     it('clears the name and handle when the fields are emptied', async () => {

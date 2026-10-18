@@ -41,9 +41,10 @@ export type UseProfileOverviewResult = {
  * so returning to the tab does not flash a loading state — and keeps them
  * if it fails. Only a first load (or a `reload`) that fails shows an error.
  *
- * The counts come from loading every session and drill, so they match
- * what the History and Drills lists will show: entries that fail
- * validation are skipped there and are not counted here.
+ * The counts are the number of stored keys, read without loading any
+ * session or drill, so the cost does not grow with the history. An entry
+ * the History and Drills lists skip because it is unreadable is still
+ * counted here.
  */
 export const useProfileOverview = (): UseProfileOverviewResult => {
   const [state, setState] = useState<ProfileOverviewState>({
@@ -61,10 +62,10 @@ export const useProfileOverview = (): UseProfileOverviewResult => {
     const savesAtStart = saveCountRef.current;
 
     try {
-      const [profile, sessions, drills] = await Promise.all([
+      const [profile, runCount, drillCount] = await Promise.all([
         ProfileStorageService.load(),
-        SessionStorageService.loadAll(),
-        DrillStorageService.loadAll(),
+        SessionStorageService.count(),
+        DrillStorageService.count(),
       ]);
       if (loadIdRef.current !== loadId) {
         return;
@@ -76,8 +77,8 @@ export const useProfileOverview = (): UseProfileOverviewResult => {
             previous.status === 'ready' && saveCountRef.current !== savesAtStart
               ? previous.overview.profile
               : profile,
-          runCount: sessions.length,
-          drillCount: drills.length,
+          runCount,
+          drillCount,
         },
       }));
     } catch {

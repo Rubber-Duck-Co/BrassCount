@@ -1,6 +1,7 @@
 package com.brasscount.app
 
 import android.app.Application
+import com.brasscount.app.appearance.AppearancePackage
 import com.brasscount.app.audio.AudioCapturePackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -19,6 +20,7 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           // Packages that cannot be autolinked yet can be added manually here, for example:
           add(AudioCapturePackage())
+          add(AppearancePackage())
         },
     )
   }

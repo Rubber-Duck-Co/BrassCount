@@ -7,6 +7,7 @@ import {
   SessionStorageError,
   SessionStorageService,
   clearSessions,
+  countSessions,
   deleteSessionById,
   loadSessionById,
   loadSessions,
@@ -119,6 +120,7 @@ describe('sessionStorage service', () => {
       schemaVersion: 2,
       save: saveSession,
       loadAll: loadSessions,
+      count: countSessions,
       loadByDrillId: loadSessionsByDrillId,
       loadById: loadSessionById,
       deleteById: deleteSessionById,
@@ -372,7 +374,32 @@ describe('sessionStorage service', () => {
     });
   });
 
+  describe('injected generators', () => {
+    it.each<[string, SessionStorageOptions]>([
+      ['an empty id', { generateId: () => '' }],
+      ['a non-string id', { generateId: () => 7 as unknown as string }],
+      ['a timestamp that is not a date', { getTimestamp: () => 'yesterday' }],
+      ['an empty timestamp', { getTimestamp: () => '' }],
+    ])('rejects %s without writing anything', async (_label, bad) => {
+      await expectRejection(
+        saveSession(mozambiqueRun, { ...fakes(), ...bad }),
+        'INVALID_INPUT',
+      );
+
+      expect(await AsyncStorage.getAllKeys()).toEqual([]);
+    });
+  });
+
   describe('loading a session by id', () => {
+    it('resolves to null when the stored session names a different id', async () => {
+      await writeStored(
+        'moved',
+        envelope(storedSession({ id: 'someone-else' })),
+      );
+
+      expect(await loadSessionById('moved')).toBeNull();
+    });
+
     it('returns the saved session', async () => {
       const saved = await saveSession(mozambiqueRun, fakes());
 
@@ -578,12 +605,61 @@ describe('sessionStorage service', () => {
       expect(await loadSessions()).toEqual([saved]);
     });
 
+    it('skips a session whose own id is not the key it is stored under', async () => {
+      const saved = await saveSession(mozambiqueRun, fakes());
+      await writeStored(
+        'moved',
+        envelope(storedSession({ id: 'someone-else' })),
+      );
+
+      expect(await loadSessions()).toEqual([saved]);
+    });
+
     it('wraps a storage failure', async () => {
       jest
         .spyOn(AsyncStorage, 'getAllKeys')
         .mockRejectedValueOnce(new Error('unavailable'));
 
       await expectRejection(loadSessions(), 'STORAGE_FAILURE');
+    });
+  });
+
+  describe('counting sessions', () => {
+    it('resolves to 0 when nothing is stored', async () => {
+      expect(await countSessions()).toBe(0);
+    });
+
+    it('counts every stored session without reading any of them', async () => {
+      await saveSession(mozambiqueRun, fakes());
+      await saveSession(mozambiqueRun, { ...fakes(), generateId: () => 'b' });
+      const getMany = jest.spyOn(AsyncStorage, 'getMany');
+      const getItem = jest.spyOn(AsyncStorage, 'getItem');
+
+      expect(await countSessions()).toBe(2);
+      expect(getMany).not.toHaveBeenCalled();
+      expect(getItem).not.toHaveBeenCalled();
+    });
+
+    it('counts a key whose value is unreadable, which loadSessions skips', async () => {
+      await saveSession(mozambiqueRun, fakes());
+      await AsyncStorage.setItem(keyFor('corrupt'), '{not-json');
+
+      expect(await countSessions()).toBe(2);
+      expect(await loadSessions()).toHaveLength(1);
+    });
+
+    it('does not count keys of other namespaces', async () => {
+      await AsyncStorage.setItem('@BrassCount:drills:v1:x', 'other');
+
+      expect(await countSessions()).toBe(0);
+    });
+
+    it('wraps a storage failure', async () => {
+      jest
+        .spyOn(AsyncStorage, 'getAllKeys')
+        .mockRejectedValueOnce(new Error('unavailable'));
+
+      await expectRejection(countSessions(), 'STORAGE_FAILURE');
     });
   });
 
@@ -635,6 +711,30 @@ describe('sessionStorage service', () => {
       await writeStored(
         'broken',
         envelope({ ...storedSession({ id: 'broken' }), splits: [] }),
+      );
+
+      expect(await loadSessionsByDrillId('drill-1')).toEqual([saved]);
+    });
+
+    it('leaves out a run stored under another key than its own id', async () => {
+      await writeStored(
+        'moved',
+        envelope(storedSession({ id: 'someone-else' })),
+      );
+
+      expect(await loadSessionsByDrillId('drill-1')).toEqual([]);
+    });
+
+    it('does not validate runs of other drills', async () => {
+      const saved = await saveSession(mozambiqueRun, fakes());
+      // Unreadable, but for another drill: it must not matter here.
+      await writeStored(
+        'other',
+        envelope({
+          ...storedSession({ id: 'other' }),
+          drillId: 'drill-2',
+          splits: [],
+        }),
       );
 
       expect(await loadSessionsByDrillId('drill-1')).toEqual([saved]);

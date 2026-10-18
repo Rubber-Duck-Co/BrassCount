@@ -5,7 +5,13 @@ import {
   MAX_PROFILE_HANDLE_LENGTH,
   MAX_PROFILE_NAME_LENGTH,
 } from '../src/types/profile';
-import { profileHandleError, profileNameError } from '../src/utils/profile';
+import {
+  normalizeProfileName,
+  profileHandleBody,
+  profileHandleError,
+  profileNameError,
+  profileNameLength,
+} from '../src/utils/profile';
 
 /** Whether the storage service takes the value, as the editor's Save would. */
 const serviceAccepts = (
@@ -41,11 +47,40 @@ describe('profile field checks', () => {
       expect(error).toContain(String(MAX_PROFILE_NAME_LENGTH));
     });
 
+    it('counts an emoji as one character, as the service does', async () => {
+      const atLimit = '🎯'.repeat(MAX_PROFILE_NAME_LENGTH);
+      const overLimit = '🎯'.repeat(MAX_PROFILE_NAME_LENGTH + 1);
+
+      expect(atLimit.length).toBeGreaterThan(MAX_PROFILE_NAME_LENGTH);
+      expect(profileNameError(atLimit)).toBeNull();
+      expect(await serviceAccepts({ name: atLimit })).toBe(true);
+      expect(profileNameError(overLimit)).not.toBeNull();
+      expect(await serviceAccepts({ name: overLimit })).toBe(false);
+    });
+
     it('measures the name as it will be stored, not as it was typed', () => {
       const padded = `  ${'a'.repeat(20)}    ${'b'.repeat(19)}  `;
 
       expect(padded.length).toBeGreaterThan(MAX_PROFILE_NAME_LENGTH);
       expect(profileNameError(padded)).toBeNull();
+    });
+  });
+
+  describe('shared rules', () => {
+    it('normalizes a name to one trimmed line, or null when blank', () => {
+      expect(normalizeProfileName('  Doc \t\n  Brown ')).toBe('Doc Brown');
+      expect(normalizeProfileName(' \n ')).toBeNull();
+    });
+
+    it('measures a name by code point', () => {
+      expect(profileNameLength('ab')).toBe(2);
+      expect(profileNameLength('🎯a')).toBe(2);
+    });
+
+    it('takes the handle body after an optional @', () => {
+      expect(profileHandleBody(' @marty ')).toBe('marty');
+      expect(profileHandleBody('marty')).toBe('marty');
+      expect(profileHandleBody('@')).toBe('');
     });
   });
 

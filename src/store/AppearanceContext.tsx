@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { DEFAULT_PROFILE, type AppearancePreference } from '@/types/profile';
+import { mirrorAppearance } from '@services/appearanceMirror';
 import {
   ProfileStorageService,
   type ProfileStorageServiceType,
@@ -42,9 +43,11 @@ export type AppearanceProviderProps = {
  * `useTheme()` resolves into the light or dark theme.
  *
  * Nothing below it renders until the stored preference has been read, so
- * a shooter who pinned dark never sees a light first frame. The read is a
- * single small key; if it fails the app follows the device setting rather
- * than refusing to start.
+ * a shooter who pinned dark never sees a light first frame from React.
+ * The preference is also mirrored natively (`mirrorAppearance`) so the
+ * window behind that first frame is already in the pinned theme at the
+ * next cold start. The read is a single small key; if it fails the app
+ * follows the device setting rather than refusing to start.
  */
 export const AppearanceProvider = ({
   children,
@@ -67,6 +70,7 @@ export const AppearanceProvider = ({
         if (active) {
           savedRef.current = profile.appearance;
           setPreferenceState(profile.appearance);
+          mirrorAppearance(profile.appearance);
         }
       })
       // A failed read keeps the default, `system`; the shooter can still
@@ -89,6 +93,7 @@ export const AppearanceProvider = ({
       try {
         const profile = await storage.update({ appearance: next });
         savedRef.current = profile.appearance;
+        mirrorAppearance(profile.appearance);
       } catch (err) {
         // A newer choice has been made since: what is on screen is that
         // one, and its own save reports how it went, so this failure is

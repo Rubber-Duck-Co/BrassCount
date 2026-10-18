@@ -10,6 +10,11 @@ import {
   type ProfileChanges,
 } from '@/types/profile';
 import { isRecord, isTimestamp } from '@utils/guards';
+import {
+  normalizeProfileName,
+  profileHandleBody,
+  profileNameLength,
+} from '@utils/profile';
 import { createSerialQueue } from '@utils/serialQueue';
 import { getTimestamp as defaultGetTimestamp } from '@utils/timestamp';
 
@@ -80,7 +85,10 @@ export interface ProfileStorageOptions {
 /** What is actually written under the profile's key. */
 interface StoredProfile {
   schemaVersion: number;
-  profile: Profile;
+  // Unknown values, not a `Profile`: an update keeps a stored field it was
+  // not asked to change exactly as found, even one that no longer passes
+  // validation.
+  profile: Record<keyof Profile, unknown>;
 }
 
 // Typed `unknown` on purpose: the storage layer only promises valid JSON,
@@ -99,9 +107,9 @@ const isAppearancePreference = (
   APPEARANCE_PREFERENCES.some(preference => preference === value);
 
 /**
- * Bring a name to its stored form: trimmed, with every run of whitespace
- * (a pasted tab or line break included) reduced to one space, so it always
- * sits on a single line. `null` and a blank name both mean "no name".
+ * Bring a name to its stored form (see `normalizeProfileName`). `null` and
+ * a blank name both mean "no name". The length limit counts characters by
+ * code point, so an emoji uses one of the allowance rather than two.
  */
 const normalizeName = (name: unknown): string | null => {
   if (name === null) {
@@ -110,11 +118,11 @@ const normalizeName = (name: unknown): string | null => {
   if (typeof name !== 'string') {
     throw invalid('A profile name must be text');
   }
-  const trimmed = name.trim().replace(/\s+/g, ' ');
-  if (trimmed.length === 0) {
+  const trimmed = normalizeProfileName(name);
+  if (trimmed === null) {
     return null;
   }
-  if (trimmed.length > MAX_PROFILE_NAME_LENGTH) {
+  if (profileNameLength(trimmed) > MAX_PROFILE_NAME_LENGTH) {
     throw invalid(
       `A profile name can be at most ${MAX_PROFILE_NAME_LENGTH} characters`,
     );
@@ -134,10 +142,7 @@ const normalizeHandle = (handle: unknown): string | null => {
   if (typeof handle !== 'string') {
     throw invalid('A profile handle must be text');
   }
-  const trimmed = handle.trim();
-  const body = trimmed.startsWith(HANDLE_PREFIX)
-    ? trimmed.slice(HANDLE_PREFIX.length)
-    : trimmed;
+  const body = profileHandleBody(handle);
   if (body.length === 0) {
     return null;
   }
@@ -214,6 +219,26 @@ const withStorage = async <T>(
   }
 };
 
+/**
+ * The stored profile's fields as found, for an update to build on. Where
+ * nothing readable is stored (no profile yet, corrupt, or a newer schema)
+ * it is the defaults.
+ */
+const readStoredFields = async (): Promise<StoredProfile['profile']> => {
+  const stored = await withStorage('load profile', () =>
+    profiles.getItem(PROFILE_ID),
+  );
+  if (parseStoredProfile(stored) === null || !isRecord(stored)) {
+    return { ...DEFAULT_PROFILE };
+  }
+  // Only the known fields are carried over, never the whole stored object.
+  const { name, handle, appearance } = stored.profile as Record<
+    string,
+    unknown
+  >;
+  return { name, handle, appearance, updatedAt: null };
+};
+
 // Queue of changes to the stored profile. `updateProfile` reads the
 // profile and then writes it back, so two overlapping updates (a name
 // being saved while Appearance is switched) could otherwise each write
@@ -243,9 +268,10 @@ export async function loadProfile(): Promise<Profile> {
  * handle is trimmed and stored with a leading `@` whether or not one was
  * passed. `null` or a blank string clears the name or the handle.
  *
- * "Their stored value" is the value `loadProfile` reads: a stored field
- * that no longer passes validation has already fallen back to its default
- * there, and any update writes that default back for good.
+ * A field the update leaves alone is kept exactly as stored. One that no
+ * longer passes validation reads as its default from `loadProfile`, but
+ * the update does not write that default over it: only a field the caller
+ * sets is replaced.
  *
  * The first update creates the stored profile. One made over a value this
  * build cannot read (corrupt, or written by a newer schema) replaces it:
@@ -283,25 +309,28 @@ export async function updateProfile(
   }
 
   return inOrder(async () => {
-    const existing = await loadProfile();
+    const updatedAt = getTimestamp();
+    if (!isTimestamp(updatedAt)) {
+      throw invalid('The generated timestamp is not a valid ISO-8601 date');
+    }
+    const existing = await readStoredFields();
 
     // `null` is a real value here (it clears the field), so only
     // `undefined` means "keep what is stored".
-    const profile: Profile = {
-      name: name === undefined ? existing.name : name,
-      handle: handle === undefined ? existing.handle : handle,
-      appearance: appearance ?? existing.appearance,
-      updatedAt: getTimestamp(),
-    };
-
     const stored: StoredProfile = {
       schemaVersion: PROFILE_SCHEMA_VERSION,
-      profile,
+      profile: {
+        name: name === undefined ? existing.name : name,
+        handle: handle === undefined ? existing.handle : handle,
+        appearance: appearance ?? existing.appearance,
+        updatedAt,
+      },
     };
     await withStorage('update profile', () =>
       profiles.setItem(PROFILE_ID, stored),
     );
-    return profile;
+    // What `loadProfile` will now read back, not what was written.
+    return parseStoredProfile(stored) ?? { ...DEFAULT_PROFILE };
   });
 }
 

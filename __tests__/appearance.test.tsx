@@ -4,6 +4,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useAppearance } from '../src/hooks/useAppearance';
 import { useTheme } from '../src/hooks/useTheme';
+import { mirrorAppearance } from '../src/services/appearanceMirror';
 import {
   AppearanceProvider,
   type AppearanceContextValue,
@@ -17,7 +18,12 @@ jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
   default: jest.fn(() => 'light'),
 }));
 
+jest.mock('../src/services/appearanceMirror', () => ({
+  mirrorAppearance: jest.fn(),
+}));
+
 const mockedColorScheme = jest.mocked(useColorScheme);
+const mockedMirror = jest.mocked(mirrorAppearance);
 
 type Storage = NonNullable<AppearanceProviderProps['storage']>;
 
@@ -135,6 +141,59 @@ describe('AppearanceProvider', () => {
     });
     appearance = undefined;
     mockedColorScheme.mockReturnValue('light');
+    mockedMirror.mockClear();
+  });
+
+  describe('mirroring the preference for the next launch', () => {
+    it('mirrors the stored preference once it is read', async () => {
+      render({ load: async () => profileWith('dark'), update: jest.fn() });
+      await flush();
+
+      expect(mockedMirror).toHaveBeenCalledTimes(1);
+      expect(mockedMirror).toHaveBeenCalledWith('dark');
+    });
+
+    it('mirrors nothing when the stored preference cannot be read', async () => {
+      render({
+        load: () => Promise.reject(new Error('unreadable')),
+        update: jest.fn(),
+      });
+      await flush();
+
+      expect(mockedMirror).not.toHaveBeenCalled();
+    });
+
+    it('mirrors a choice once it has been saved, not before', async () => {
+      const save = deferred<Profile>();
+      render({
+        load: async () => profileWith('light'),
+        update: () => save.promise,
+      });
+      await flush();
+      mockedMirror.mockClear();
+
+      await choose('dark');
+      expect(mockedMirror).not.toHaveBeenCalled();
+
+      await act(async () => {
+        save.resolve(profileWith('dark'));
+      });
+      expect(mockedMirror).toHaveBeenCalledWith('dark');
+    });
+
+    it('does not mirror a choice that failed to save', async () => {
+      render({
+        load: async () => profileWith('light'),
+        update: () => Promise.reject(new Error('disk full')),
+      });
+      await flush();
+      mockedMirror.mockClear();
+
+      const { saved } = await choose('dark');
+      await saved.catch(() => {});
+
+      expect(mockedMirror).not.toHaveBeenCalled();
+    });
   });
 
   it('renders nothing until the stored preference is read', async () => {

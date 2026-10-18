@@ -457,26 +457,94 @@ describe('profileStorage service', () => {
       });
     });
 
-    it('writes the default of a bad stored field back when another field is updated', async () => {
-      await writeStored(
-        storedProfile({ name: 'n'.repeat(MAX_PROFILE_NAME_LENGTH + 1) }),
-      );
+    it('does not overwrite a bad stored field when another field is updated', async () => {
+      const tooLong = 'n'.repeat(MAX_PROFILE_NAME_LENGTH + 1);
+      await writeStored(storedProfile({ name: tooLong }));
 
       const updated = await updateProfile(
         { appearance: 'light' },
         at(UPDATED_AT),
       );
 
+      // Read back, the bad name is still unset ...
       expect(updated).toEqual({
         name: null,
         handle: '@stored',
         appearance: 'light',
         updatedAt: UPDATED_AT,
       });
+      // ... but it was not replaced on disk by that default.
       expect(await readStored()).toEqual({
         schemaVersion: 1,
-        profile: updated,
+        profile: {
+          name: tooLong,
+          handle: '@stored',
+          appearance: 'light',
+          updatedAt: UPDATED_AT,
+        },
       });
+    });
+
+    it('replaces a bad stored field when the caller sets it', async () => {
+      await writeStored(
+        storedProfile({ name: 'n'.repeat(MAX_PROFILE_NAME_LENGTH + 1) }),
+      );
+
+      await updateProfile({ name: 'Marty' }, at(UPDATED_AT));
+
+      expect(await readStored()).toEqual({
+        schemaVersion: 1,
+        profile: {
+          name: 'Marty',
+          handle: '@stored',
+          appearance: 'dark',
+          updatedAt: UPDATED_AT,
+        },
+      });
+    });
+
+    it('does not carry unknown stored fields into the rewritten profile', async () => {
+      await writeStored(storedProfile({ extra: 'x' }));
+
+      await updateProfile({ appearance: 'light' }, at(UPDATED_AT));
+
+      expect(await readStored()).toEqual({
+        schemaVersion: 1,
+        profile: {
+          name: 'Stored Name',
+          handle: '@stored',
+          appearance: 'light',
+          updatedAt: UPDATED_AT,
+        },
+      });
+    });
+
+    it.each(['', 'yesterday'])(
+      'rejects a generated timestamp of %p without writing',
+      async timestamp => {
+        await expectRejection(
+          updateProfile({ name: 'Marty' }, { getTimestamp: () => timestamp }),
+          'INVALID_INPUT',
+        );
+
+        expect(await readStored()).toBeNull();
+      },
+    );
+
+    it('counts the name in characters, so an emoji name fits the limit', async () => {
+      const name = '🎯'.repeat(MAX_PROFILE_NAME_LENGTH);
+
+      const updated = await updateProfile({ name }, at());
+
+      expect(updated.name).toBe(name);
+      expect((await loadProfile()).name).toBe(name);
+    });
+
+    it('rejects an emoji name one character over the limit', async () => {
+      await expectRejection(
+        updateProfile({ name: '🎯'.repeat(MAX_PROFILE_NAME_LENGTH + 1) }, at()),
+        'INVALID_INPUT',
+      );
     });
 
     it.each<[string, unknown]>([

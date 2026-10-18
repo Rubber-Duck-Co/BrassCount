@@ -1,0 +1,4 @@
+<resources>
+    <!-- Behind the first frame. Matches `background` in src/theme/theme.ts. -->
+    <color name="window_background">#FFFFFF</color>
+</resources>

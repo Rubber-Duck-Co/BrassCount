@@ -11,6 +11,13 @@ jest.mock('react-native-audio-api', () =>
 // The AudioCapture TurboModule is app-local Kotlin, so there is no library
 // mock to reuse. Without this, importing anything that reaches the spec
 // throws in `TurboModuleRegistry.getEnforcing`.
+jest.mock('./src/specs/NativeAppearancePreference', () => ({
+  __esModule: true,
+  default: {
+    setPreference: jest.fn(),
+  },
+}));
+
 jest.mock('./src/specs/NativeAudioCapture', () => ({
   __esModule: true,
   default: {

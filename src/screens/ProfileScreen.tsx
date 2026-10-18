@@ -6,7 +6,7 @@ import type { Theme } from '@/theme/theme';
 import {
   HANDLE_PREFIX,
   MAX_PROFILE_HANDLE_LENGTH,
-  MAX_PROFILE_NAME_LENGTH,
+  MAX_PROFILE_NAME_INPUT_LENGTH,
   type AppearancePreference,
   type Profile,
   type ProfileChanges,
@@ -164,7 +164,7 @@ const ProfileEditor = ({ profile, onSave, onCancel }: ProfileEditorProps) => {
         value={name}
         onChangeText={setName}
         placeholder="e.g. Marty McFly"
-        maxLength={MAX_PROFILE_NAME_LENGTH}
+        maxLength={MAX_PROFILE_NAME_INPUT_LENGTH}
         autoCapitalize="words"
         editable={!saving}
         error={nameError}
