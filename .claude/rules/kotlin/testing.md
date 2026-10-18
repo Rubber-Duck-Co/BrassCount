@@ -23,9 +23,10 @@ The audio native module lives in `android/app/src/main/java/com/brasscount/app/a
 | `AudioLevels.kt`           | Pure: capture-format constants, `Reading`, `computeReading` (RMS, dBFS floor/ceiling, peak and onset and their timestamps, nanos → ms), `normalize`, `toDbfs`, `captureBufferSizeBytes`      | `AudioLevelsTest`                                      |
 | `CaptureClock.kt`          | Pure: `FrameAnchor`, `BufferTime` and `CaptureClock`, which times each buffer from the hardware frame counter (plausibility of an anchor, the adoption window, falling back to read returns) | `CaptureClockTest`                                     |
 | `AudioSourcePreference.kt` | Pure: `AudioSourceKind` and `audioSourcesByPreference(supportsUnprocessed)`                                                                                                                  | `AudioSourcePreferenceTest`                            |
+| `CaptureLifecycle.kt`      | Pure: `CaptureTeardown` (stop work off the caller's thread, `awaitIdle` so a restart waits) and `openFirstSource` (the source fallback loop and its init/start failure outcomes)             | `CaptureLifecycleTest`                                 |
 | `AudioCaptureModule.kt`    | Android glue: `AudioRecord`, the capture thread, start/stop/pause state and locking, permission and foreground checks, mapping `AudioSourceKind` to `MediaRecorder.AudioSource.*`            | **None** — needs a device; see "How to Write Them" (4) |
 
-- Still untested in Kotlin: threading and lifecycle (start/stop races, `onHostPause`, the read loop's exit paths), promise rejection codes, and real audio.
+- Still untested in Kotlin: the module's own wiring (`onHostPause`, the read loop's exit paths), promise rejection codes, and real audio. The ordering rules behind the stop/start race are in `CaptureLifecycleTest`.
 - The JS side of the module's contract is tested in Jest (`__tests__/audioCapture.test.ts`).
 
 ## How It Is Set Up

@@ -85,6 +85,41 @@ class CaptureLifecycleTest {
   }
 
   @Test
+  fun `awaitIdle waits for every teardown begun, not just the first`() {
+    val releaseFirst = CountDownLatch(1)
+    val releaseSecond = CountDownLatch(1)
+    val pool = Executors.newSingleThreadExecutor()
+    try {
+      val teardown = CaptureTeardown(pool)
+      teardown.begin { releaseFirst.await(5, TimeUnit.SECONDS) }
+      teardown.begin { releaseSecond.await(5, TimeUnit.SECONDS) }
+
+      releaseFirst.countDown()
+      assertFalse(teardown.awaitIdle(50))
+      releaseSecond.countDown()
+      assertTrue(teardown.awaitIdle(5_000))
+    } finally {
+      pool.shutdownNow()
+    }
+  }
+
+  @Test
+  fun `a teardown begun while another waits for idle is waited for too`() {
+    val release = CountDownLatch(1)
+    val pool = Executors.newSingleThreadExecutor()
+    try {
+      val teardown = CaptureTeardown(pool)
+      // Begun before the wait starts, as stopInternal does under its lock.
+      teardown.begin { release.await(5, TimeUnit.SECONDS) }
+
+      assertFalse(teardown.awaitIdle(20))
+    } finally {
+      release.countDown()
+      pool.shutdownNow()
+    }
+  }
+
+  @Test
   fun `a teardown that throws still lets a waiting start continue`() {
     val teardown = CaptureTeardown(Executor { runCatching { it.run() } })
 
