@@ -13,20 +13,27 @@ paths:
 ## Typing Tests
 
 - Test files are type-checked by `npm run typecheck` (`tsconfig.json` includes `**/*.ts(x)` with Jest types), so a type error in a test fails CI.
-- Type fakes against the real interface so they break when the contract changes:
+- Type fakes against the real interface so they break when the contract changes, and hand them to the service through its options:
 
 ```typescript
-const createFakeNamespace = (): jest.Mocked<StorageNamespace<Session>> => ({
-  prefix: '@BrassCount:sessions:v1',
-  keyFor: jest.fn(id => `@BrassCount:sessions:v1:${id}`),
-  setItem: jest.fn(async () => {}),
-  getItem: jest.fn(async () => null),
-  removeItem: jest.fn(async () => {}),
-  getAllIds: jest.fn(async () => []),
-  getAll: jest.fn(async () => []),
-  clear: jest.fn(async () => {}),
-});
+const listeners = new Set<(reading: AmplitudeReading) => void>();
+
+const audio: jest.Mocked<CalibrationCaptureAudio> = {
+  hasPermission: jest.fn(async () => true),
+  requestPermission: jest.fn(async () => 'granted' as const),
+  start: jest.fn(async () => {}),
+  stop: jest.fn(async () => {}),
+  subscribeToAmplitude: jest.fn(listener => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  }),
+  subscribeToErrors: jest.fn(_listener => () => {}),
+};
+
+const sample = captureSample({ audio, durationMs: 250 });
 ```
+
+- Storage services run against the global in-memory AsyncStorage mock rather than a fake namespace. Pin their ids and timestamps through the options (`saveSession(input, { generateId, getTimestamp })`).
 
 - Cast a mocked function with `as jest.Mock` (or `jest.mocked(fn)`) rather than `as any`.
 

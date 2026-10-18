@@ -1,0 +1,19 @@
+# Check text files out with LF line endings on every platform, whatever
+# core.autocrlf says. Prettier enforces LF (`npm run format:check`), so a
+# CRLF checkout on Windows would fail it on every file.
+* text=auto eol=lf
+
+# cmd.exe needs CRLF to run batch files reliably.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never convert line endings or show text diffs.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ttf binary
+*.otf binary
+*.jar binary
+*.keystore binary

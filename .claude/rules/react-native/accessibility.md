@@ -41,7 +41,7 @@ paths:
 
 ## Color & Contrast
 
-- Do not convey meaning by color alone; pair with text, icon or shape (an over-par time turns `danger` **and** the caption changes to "OVER PAR").
+- Do not convey meaning by color alone; pair with text, icon or shape (an over-par split turns `danger` **and** reads `0.10s over`, an under-par one `0.35s under`).
 - Meet WCAG AA contrast: 4.5:1 for body text, 3:1 for large text and meaningful UI elements.
 - Verify both the light and the dark theme whenever a semantic color changes in `src/theme/theme.ts`.
 
