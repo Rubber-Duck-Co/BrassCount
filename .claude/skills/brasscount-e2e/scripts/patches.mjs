@@ -84,7 +84,10 @@ function fail(message) {
 function repoRoot() {
   const root = process.cwd();
   const pkgPath = join(root, 'package.json');
-  if (!existsSync(pkgPath) || JSON.parse(readFileSync(pkgPath, 'utf8')).name !== 'BrassCount') {
+  if (
+    !existsSync(pkgPath) ||
+    JSON.parse(readFileSync(pkgPath, 'utf8')).name !== 'BrassCount'
+  ) {
     fail('run this from the BrassCount repo root');
   }
   return root;
@@ -100,7 +103,8 @@ function saveState(state) {
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
-const sha256 = path => createHash('sha256').update(readFileSync(path)).digest('hex');
+const sha256 = path =>
+  createHash('sha256').update(readFileSync(path)).digest('hex');
 
 /** Backs a repo file up once (or notes that it did not exist), before its first change. */
 function backUp(state, root, rel) {
@@ -127,7 +131,8 @@ function restore(state, root, rel) {
   }
   copyFileSync(entry.backupPath, abs);
   const now = sha256(abs);
-  if (now !== entry.sha256) fail(`${rel}: restored file does not match its backup hash`);
+  if (now !== entry.sha256)
+    fail(`${rel}: restored file does not match its backup hash`);
   delete state.backups[rel];
   return `${rel}: restored byte for byte`;
 }
@@ -161,14 +166,21 @@ function synth(action) {
     backUp(state, root, SYNTH_FILE);
     saveState(state);
     applyEdits(root, MODULE_FILE, SYNTH_EDITS);
-    copyFileSync(join(SKILL_DIR, 'assets', 'SyntheticInput.kt'), join(root, SYNTH_FILE));
-    console.log('synth on: patched AudioCaptureModule.kt, added SyntheticInput.kt');
+    copyFileSync(
+      join(SKILL_DIR, 'assets', 'SyntheticInput.kt'),
+      join(root, SYNTH_FILE),
+    );
+    console.log(
+      'synth on: patched AudioCaptureModule.kt, added SyntheticInput.kt',
+    );
     console.log('Rebuild and reinstall the debug app for it to take effect.');
   } else if (action === 'off') {
     console.log(restore(state, root, MODULE_FILE));
     console.log(restore(state, root, SYNTH_FILE));
     saveState(state);
-    console.log('Rebuild and reinstall the debug app to drop the patched native code.');
+    console.log(
+      'Rebuild and reinstall the debug app to drop the patched native code.',
+    );
   } else fail('usage: synth on|off');
 }
 
@@ -177,20 +189,32 @@ function cleanup(action) {
   const state = loadState();
   if (action === 'on') {
     if (state.backups[APP_FILE]) fail('cleanup is already on');
-    if (!state.startedAt) fail('no run start recorded: run `patches.mjs begin` at the start of the e2e run');
+    if (!state.startedAt)
+      fail(
+        'no run start recorded: run `patches.mjs begin` at the start of the e2e run',
+      );
     // A minute's margin for the device clock; orphaned sessions older than that are the user's.
     const sinceMs = state.startedAt - 60_000;
     backUp(state, root, APP_FILE);
     backUp(state, root, CLEANUP_FILE);
     saveState(state);
-    const template = readFileSync(join(SKILL_DIR, 'assets', 'e2eCleanup.ts.template'), 'utf8');
+    const template = readFileSync(
+      join(SKILL_DIR, 'assets', 'e2eCleanup.ts.template'),
+      'utf8',
+    );
     writeFileSync(
       join(root, CLEANUP_FILE),
-      template.replace('__PREFIX__', TEST_DRILL_PREFIX).replace('__SINCE_MS__', String(sinceMs)),
+      template
+        .replace('__PREFIX__', TEST_DRILL_PREFIX)
+        .replace('__SINCE_MS__', String(sinceMs)),
     );
     applyEdits(root, APP_FILE, [CLEANUP_EDIT]);
-    console.log(`cleanup on: removes drills named "${TEST_DRILL_PREFIX}…", their sessions, and orphaned sessions since ${new Date(sinceMs).toISOString()}`);
-    console.log('Force-stop and relaunch the app, then read logcat for BRASSCOUNT-E2E.');
+    console.log(
+      `cleanup on: removes drills named "${TEST_DRILL_PREFIX}…", their sessions, and orphaned sessions since ${new Date(sinceMs).toISOString()}`,
+    );
+    console.log(
+      'Force-stop and relaunch the app, then read logcat for BRASSCOUNT-E2E.',
+    );
   } else if (action === 'off') {
     console.log(restore(state, root, APP_FILE));
     console.log(restore(state, root, CLEANUP_FILE));
@@ -202,24 +226,32 @@ function status() {
   const root = repoRoot();
   const state = loadState();
   const patched = Object.keys(state.backups);
-  console.log(`run started: ${state.startedAt ? new Date(state.startedAt).toISOString() : 'not recorded'}`);
+  console.log(
+    `run started: ${state.startedAt ? new Date(state.startedAt).toISOString() : 'not recorded'}`,
+  );
   console.log(`patched files: ${patched.length ? patched.join(', ') : 'none'}`);
   const strays = [];
   if (existsSync(join(root, SYNTH_FILE))) strays.push(SYNTH_FILE);
   if (existsSync(join(root, CLEANUP_FILE))) strays.push(CLEANUP_FILE);
   for (const rel of [MODULE_FILE, APP_FILE]) {
-    if (/E2E-(SYNTH|CLEANUP)/.test(readFileSync(join(root, rel), 'utf8'))) strays.push(rel);
+    if (/E2E-(SYNTH|CLEANUP)/.test(readFileSync(join(root, rel), 'utf8')))
+      strays.push(rel);
   }
-  console.log(`e2e markers in the tree: ${strays.length ? strays.join(', ') : 'none'}`);
+  console.log(
+    `e2e markers in the tree: ${strays.length ? strays.join(', ') : 'none'}`,
+  );
   if (strays.length && !patched.length) {
-    console.log('WARNING: markers present but no backups recorded; inspect with git diff and remove by hand.');
+    console.log(
+      'WARNING: markers present but no backups recorded; inspect with git diff and remove by hand.',
+    );
   }
 }
 
 function restoreAll() {
   const root = repoRoot();
   const state = loadState();
-  for (const rel of Object.keys(state.backups)) console.log(restore(state, root, rel));
+  for (const rel of Object.keys(state.backups))
+    console.log(restore(state, root, rel));
   saveState(state);
   status();
 }
@@ -228,7 +260,9 @@ function begin() {
   repoRoot();
   const state = loadState();
   if (Object.keys(state.backups).length) {
-    fail('patches from an earlier run are still applied: run `restore-all` first');
+    fail(
+      'patches from an earlier run are still applied: run `restore-all` first',
+    );
   }
   saveState({ backups: {}, startedAt: Date.now() });
   console.log(`e2e run started at ${new Date().toISOString()}`);

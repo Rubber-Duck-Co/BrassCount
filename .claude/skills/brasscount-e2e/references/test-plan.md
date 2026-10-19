@@ -32,11 +32,13 @@ What the app is supposed to do is in `.claude/CLAUDE.md`. When a check below and
 
 2.1 Drills → `btn-create-drill` opens `screen-drill-editor` with an empty name, `state-steps-empty`, and the save button disabled; `text-save-hint` names what is missing (name, steps).
 2.2 Type a name only (`ZZE2EAlpha`): save is still disabled and the hint now names only the missing steps.
+Step testIDs are 0-based (`btn-par-step-0` is the first step), though the screen numbers steps from 1.
+
 2.3 `btn-add-step` twice: step 1 is a Draw, step 2 a Shot, both untimed; `text-preview` shows the sequence.
-2.4 Par picker: `btn-par-step-1` opens the sheet (`text-par-heading`). A preset (`opt-par-*`) sets the par. A custom value (`input-par-custom` → `btn-par-custom-set`) of `1.5` shows as 1.50 s. An invalid one (`abc`, `0`, `61`) is refused with `text-par-custom-hint` and does not change the par. Escape (`d key 111`) closes the sheet without a change.
-2.5 Step type: `select-step-2` offers draw, shot, reload, rack, holster (not transition); choosing Reload changes the row and the preview.
-2.6 Remove: `btn-remove-step-N` removes that row only; the others keep their type and par.
-2.7 Reorder: with two or more steps the Steps header shows Reorder. In reorder mode each row has Move up / Move down (`btn-move-up-step-N`, `btn-move-down-step-N`), disabled at the ends, and par / remove are hidden. A move keeps the step's type and par. Done leaves the mode. With one step there is no Reorder.
+2.4 Par picker: `btn-par-step-0` opens the sheet (`text-par-heading`). A preset (`opt-par-*`) sets the par: use one the sheet shows without scrolling, such as `opt-par-0.5`; lower presets such as `opt-par-1` lie below the sheet's visible edge at font scale 1.0 and a tap misses them unless you scroll first. A custom value (`input-par-custom` → `btn-par-custom-set`) of `1.5` shows as 1.50 s. An invalid one (`abc`, `0`, `61`) is refused with `text-par-custom-hint` and does not change the par. Back (`d key 4`) while the sheet is open closes it without a change. Do not use Escape here: it freezes the editor (#125).
+2.5 Step type: `select-step-1` (the second step) offers draw, shot, reload, rack, holster (not transition); choosing Reload changes the row and the preview.
+2.6 Remove: `btn-remove-step-N` (0-based) removes that row only; the others keep their type and par.
+2.7 Reorder: with two or more steps the Steps header shows Reorder. In reorder mode each row has Move up / Move down (`btn-move-up-step-N`, `btn-move-down-step-N`, 0-based), disabled at the ends, and par / remove are hidden. A move keeps the step's type and par. Done leaves the mode. With one step there is no Reorder.
 2.8 Save (`btn-save-drill`): back on the list, the drill's row shows its name and steps, and `text-drill-count` went up by one.
 2.9 Edit: tap the row → the editor loads the same name, steps and pars. Rename (`clear-field`, type `ZZE2EBravo`), change a par, Save changes: the list shows the new name. Reopen: the change stuck.
 2.10 Leaving the editor with the back control (`btn-back`) after an edit drops the edit without asking; the stored drill is unchanged.
@@ -72,8 +74,10 @@ Leave all three sounds calibrated with `clicks -3 500` for the Timer areas, then
 5.1 Picker: `select-drill` lists the stored drills; the timer shows the most recently changed drill until one is picked.
 5.2 Uncalibrated refusal: force-stop and relaunch (calibration resets), pick a drill with shot and reload steps, Start: refused before the microphone opens, the header names the uncalibrated sounds, and `btn-go-calibration` is offered and opens the Calibration tab.
 5.3 Calibrate one of the named sounds and come back: the refusal now names only the sounds still missing; calibrate the rest and it goes away. (This is the behaviour on the `feat/timer-run-shortcuts` branch; check CLAUDE.md for whether it is in this build.)
-5.4 Permission denied: `d mic revoke`, relaunch, calibrate, Start. The system dialog appears; deny it. The run fails with a message, not a crash.
-5.5 Permission blocked: deny again (Android blocks after two denials). The header offers `btn-open-settings`; it opens the app's settings page (`d foreground` shows the settings package). Come back with the Back key, then `d mic grant`.
+5.4 and 5.5 cannot be set up on the Timer: Start needs calibrated sounds, calibrating needs the microphone, and `d mic revoke` (`pm revoke`) kills the app, which clears calibration. Test denial and blocking on the Calibration screen instead, where Recalibrate asks for the microphone, and note in the report that the Timer's own permission path was not exercised.
+
+5.4 Permission denied: `d mic revoke`, relaunch, Calibration → Recalibrate shot. The system dialog appears; deny it. The capture fails with a message, not a crash, and the chip stays Not calibrated.
+5.5 Permission blocked: Recalibrate and deny again (Android blocks after two denials). The card offers `btn-open-settings-shot`; it opens the app's settings page (`d foreground` shows the settings package). Come back with the Back key, then `d mic grant`.
 5.6 A drill with only silent steps (draw, holster) cannot be run: Start reports there is nothing to listen for.
 
 ## 6. Timer: timed runs (synthetic input)
@@ -84,7 +88,7 @@ Make `ZZE2ERun`: Draw par 1.00, Shot par 0.25, Shot par 0.30, Shot par 0.30. Wit
 
 How to set the expectation: `run <beepMs> <t1> <t2> <t3>` puts the beep `beepMs` after the request and shots `tN` ms after the beep starts. A step's time is measured from the previous heard step (from zero for the first), and zero is where the beep first reaches half its level, so expect split 1 ≈ t1, split N ≈ tN − tN-1. Tolerance: ±25 ms for split 1 (the beep's onset falls inside a buffer) and ±10 ms for later splits; widen both to ±25 ms if the run caption says it was timed by read time rather than the frame clock. A difference beyond tolerance is a FAIL with the numbers.
 
-6.1 Clean run: `d synth run 150 1200 1500 1850`, Start. Expect splits 1.20 / 0.30 / 0.35, worded `0.05s under` / `0.05s over` / `0.05s over` against pars 1.25 / 0.25 / 0.30, the clock holding at about 1.85, and a caption saying the beep was heard. The run ends on its own after the third shot.
+6.1 Clean run: `d synth run 150 1200 1500 1850`, Start. Expect splits 1.20 / 0.30 / 0.35, worded `0.05s under` / `on par` / `0.05s over` against pars 1.25 / 0.30 / 0.30 (the draw's 1.00 plus the first shot's 0.25, then the two later shots), the clock holding at about 1.85, and a caption saying the beep was heard. The run ends on its own after the third shot.
 6.2 During the run, `select-drill` is disabled (take the dump right after the run ends if a dump during it fails, and check Start/Stop's label changed while running with a screenshot).
 6.3 No beep heard: `d synth run none 1200 1500 1850`. The run times from the request and the caption says the first step may read long.
 6.4 Stop early: `d synth run 150 1200`, Start, wait 3 s, Stop (tap-xy). The run finishes with one step heard and the prompt offers Save as incomplete.
@@ -128,7 +132,7 @@ Write down the profile's name, handle and Appearance setting before touching any
 Read the current values first (`settings get system font_scale`, `cmd uimode night`) and put them back afterwards.
 
 10.1 With Appearance on System, `adb shell cmd uimode night yes`: screenshot Timer, Drills, History detail, Calibration, Profile. Every screen is dark, text readable, no white boxes. Then `night no`.
-10.2 Large text: force-stop the app first (changing the font scale while it runs crashes it, a known react-native-screens issue, not a bug to file), `adb shell settings put system font_scale 1.3`, relaunch. The save prompt stacks its two buttons; History detail's summary card puts Avg under Best.
+10.2 Large text: force-stop the app first (changing the font scale while it runs crashes it, a known react-native-screens issue, not a bug to file), `adb shell settings put system font_scale 1.4`, relaunch. The save prompt stacks its two buttons; History detail's summary card puts Avg under Best. Both stack only _above_ 1.3: at exactly 1.3 they stay side by side, which is correct.
 10.3 Same at `2.0`: the History detail run table stacks each step's figures; calibration cards wrap rather than truncate. Screenshot and look.
 10.4 Restore the original font scale (force-stop first).
 

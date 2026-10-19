@@ -27,6 +27,8 @@ D="node .claude/skills/brasscount-e2e/scripts/device.mjs"     # emulator, app, U
 P="node .claude/skills/brasscount-e2e/scripts/patches.mjs"    # test-only patches
 ```
 
+In Git Bash, `ANDROID_HOME` holds the unexpanded `%LOCALAPPDATA%\Android\Sdk`, and `device.mjs` stops on it. Run `export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"` once in each Git Bash command that calls `$D`, since shell state does not carry between commands.
+
 Each documents its commands in the header comment at the top of the file; read that once. Keep scratch files (screenshots, logs) in your scratchpad directory, not the repo.
 
 ## 1. Preflight
@@ -52,12 +54,15 @@ For formatting, check only the files the branch touches (`npx prettier --check <
 ## 3. Bring up the emulator and app
 
 1. `$D emulator start`. It reuses a running emulator (and will then leave it running at the end) or boots `Medium_Phone` and waits for it.
-2. Metro: `$D metro`. If it is running on 8081, reuse it and never stop it, since it is probably the user's. If it is not running, start it yourself in the background (`npx react-native start --port 8081`) and note that you started it. If the app later sits on "Loading from 10.0.2.2:8081…", the user's Metro is wedged: see the memory note for the 8082 workaround; do not stop theirs.
-3. `$P synth on`, then build and install from **Git Bash** (the PowerShell build fails in `react-native-audio-api`'s prebuilt download):
+2. `$P synth on`, then build and install from **Git Bash** (the PowerShell build fails in `react-native-audio-api`'s prebuilt download):
    ```bash
    cd android && ./gradlew.bat app:installDebug -PreactNativeDevServerPort=8081
    ```
    This takes several minutes; run it in the background and wait for it. If the build fails on the patch, that is a problem with this skill, not the app: `$P synth off`, rebuild, and test what does not need sound, marking the sound areas BLOCKED.
+3. Metro, **after** the build: every Gradle build kills a running Metro. `:react-native-audio-api:downloadPrebuiltBinaries` creates and deletes `node_modules/react-native-audio-api/android/audioapi-binaries-temp`, and Metro's file watcher dies with `ENOENT` on it. So check `$D metro` after every build, not before:
+   - If a Metro was running on 8081 before the build, it is probably the user's: never stop it. If the build killed it, tell the user and ask them to restart it, or start one yourself only if they agree.
+   - Otherwise start it yourself in the background (`npx react-native start --port 8081`) and note that you started it. Give the background command a long timeout (the full run takes well over an hour): a background task is stopped at the default 30 min limit, and the node process then survives, orphaned, still holding the port. Either way, find it for teardown by its port (`netstat -ano | grep :8081` for the PID), not by the task.
+   - If the app later sits on "Loading from 10.0.2.2:8081…", the user's Metro is wedged: see the memory note for the 8082 workaround; do not stop theirs.
 4. `$D mic grant`, `$D synth silent`, `$D log-clear`, `$D launch`. Wait a few seconds before the first tap: the tab bar appears a moment before the app takes taps.
 5. Baseline. Write down, from the screens: Profile name, handle, Appearance and the Runs / Drills counters; History's Runs / Drills counters; the Drills tab's count; and `adb shell settings get system font_scale`. Teardown checks these come back.
 
@@ -87,9 +92,9 @@ How to drive the UI well:
 - Find things by `testID` (`$D tap btn-start`, `$D text id=text-elapsed`), and fall back to `text=` or `contains=` for rows without one. Take a fresh `$D dump` whenever you are unsure what is on screen. Positions change with font scale and scrolling, so do not reuse coordinates across them.
 - While a run is ticking the UI never goes idle and cannot be dumped: use `$D tap-xy` with coordinates from a dump taken just before Start, and read results after the run ends.
 - Take a screenshot (`$D screenshot <scratchpad>/name.png`) at each screen you check visually and look at it with the Read tool. Tests and dumps cannot see clipping, overlap, contrast or wrong theme colours; your eyes can.
-- Never send the Back key to hide the keyboard: there is no soft keyboard docked and Back pops the screen. Escape (`$D key 111`) closes a sheet.
+- Never send the Back key to hide the keyboard: there is no soft keyboard docked and Back pops the screen. While a sheet is open, though, Back (`$D key 4`) closes the sheet. Do not use Escape (`key 111`) on the par sheet: it freezes the drill editor (#125).
 - After the app has been in the background, a "Fast Refresh disconnected" toast can sit over the tab bar and swallow taps; force-stop and relaunch (`$D stop-app`, `$D launch`).
-- `$D crashes` after each area. A crash or JS error in the log is a FAIL even if the screen looked right.
+- `$D crashes` after each area. A crash or JS error in the log is a FAIL even if the screen looked right. The `ReactNoCrashSoftException` (`onWindowFocusChange … context is not ready`) logged on every cold start is framework noise; `crashes` filters it out and says how many lines it ignored.
 
 Judge each check against CLAUDE.md's description of the intended behaviour. When something looks wrong, reproduce it once more before calling it a bug, and note whether it reproduces every time. If a check cannot be done on this emulator (it is 411 dp wide, has a hardware keyboard, plays audio 400 ms late), mark it BLOCKED with the reason instead of guessing.
 
@@ -99,13 +104,14 @@ Do every step, in this order, even when testing stopped early.
 
 1. Put back what you changed on the device: profile name, handle and Appearance (through the Profile screen), `cmd uimode night no` if you changed it, the original font scale (force-stop the app first).
 2. `$P synth off`. The native code is now back to normal in the repo.
-3. `$P cleanup on`, then rebuild and install from Git Bash as in step 3.3. This one build both drops the patched native code from the emulator and loads the cleanup.
+3. `$P cleanup on`, then rebuild and install from Git Bash as in step 3.2. This one build both drops the patched native code from the emulator and loads the cleanup. The build kills Metro again: check `$D metro` and restart it as in step 3.3 before launching.
 4. `$D log-clear`, `$D launch`, wait ~5 s, `$D log`. Expect a line `BRASSCOUNT-E2E removed sessions=N drills=M; left drills=… sessions=…`. A `cleanup failed` line is a finding; report it and the data left behind.
 5. Check the baseline on screen: Drills count, History Runs / Drills and Profile counters and the profile fields all match what you wrote down. No `ZZE2E` drill is listed.
 6. `$P cleanup off`, then `$P status` must say no patched files and no e2e markers. `git status --porcelain` must match the preflight snapshot exactly. If it does not, fix that before anything else; leaving test code in the user's tree is the worst outcome of this skill.
-7. `$D synth off` is unnecessary (the installed build no longer reads it), but remove the file anyway: `adb shell run-as com.brasscount.app rm -f files/e2e-synth.txt`.
-8. Stop the Metro you started, if you started one (check the start time with `ps -W` before stopping a node process; never stop the user's).
-9. `$D emulator stop`. It shuts the emulator down gracefully if this run booted it, and leaves an emulator the user already had running alone.
+7. Relaunch once (`$D stop-app`, `$D launch`, wait until the Timer shows) while Metro serves the clean bundle. The device caches the last dev bundle it loaded, and until it does this the cached one still imports `e2eCleanup`, so the next launch without Metro, or with the user's own Metro on another branch, fails on the missing file.
+8. `$D synth off` is unnecessary (the installed build no longer reads it), but remove the file anyway: `adb shell run-as com.brasscount.app rm -f files/e2e-synth.txt`.
+9. Stop the Metro you started, if you started one, and only after step 7. Find it by its port (`netstat -ano | grep :8081`), not by its background task, which may already have ended while node kept running; check the PID's start time with `ps -W` and never stop the user's.
+10. `$D emulator stop`. It shuts the emulator down gracefully if this run booted it, and leaves an emulator the user already had running alone.
 
 ## 7. Report
 
