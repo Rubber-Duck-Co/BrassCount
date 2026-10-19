@@ -25,12 +25,14 @@
 //   scroll-down | scroll-up   one screen's worth on the main scroll area
 //   type <text>               type into the focused field (single words are reliable)
 //   clear-field [n]           move to end and delete n characters (default 80)
-//   key <code>                send a key event (111 = Escape closes a sheet; never 4 = Back to hide a keyboard)
+//   key <code>                send a key event (4 = Back closes an open sheet; never use it to hide a keyboard)
 //   screenshot <file.png>     save a screenshot (open it with the Read tool to look at it)
 // Logs
 //   log-clear                 clear logcat
 //   log [tag]                 dump ReactNativeJS logs (or the tag given)
-//   crashes                   dump the crash buffer and fatal errors since log-clear
+//   crashes                   dump the app's crashes and fatal errors since log-clear
+//                             (ignores other processes' crashes and the cold-start
+//                             onWindowFocusChange soft exception)
 
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -45,6 +47,11 @@ const DEVICE_STATE = join(STATE_DIR, 'device.json');
 const SYNTH_FILE = 'files/e2e-synth.txt';
 
 if (!SDK) fail('ANDROID_HOME is not set');
+if (SDK.includes('%')) {
+  fail(
+    `ANDROID_HOME is unexpanded (${SDK}); in Git Bash run export ANDROID_HOME="$LOCALAPPDATA/Android/Sdk"`,
+  );
+}
 const exe = process.platform === 'win32' ? '.exe' : '';
 const ADB = join(SDK, 'platform-tools', `adb${exe}`);
 const EMULATOR = join(SDK, 'emulator', `emulator${exe}`);
@@ -56,7 +63,40 @@ function fail(message) {
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-function adb(args, { allowFail = false, binary = false, timeout = 60_000 } = {}) {
+// React Native logs this soft exception on every cold start; it is not a crash. It
+// arrives as an "Unhandled SoftException" line followed by the exception's own line.
+const COLD_START_SOFT_EXCEPTION =
+  /ReactNoCrashSoftException.*onWindowFocusChange.*context is not ready/;
+
+// The crash buffer also holds other processes' crashes (the emulator's Bluetooth
+// service, Chrome). Lines are grouped by their logcat PID and a group is kept only
+// when one of its lines names the app: "Process: com.brasscount.app" for a Java
+// crash, ">>> com.brasscount.app <<<" in a native tombstone.
+function appCrashLines(lines) {
+  const pidOf = l => l.match(/^\S+\s+\S+\s+(\d+)\s+\d+\s/)?.[1];
+  const appPids = new Set(
+    lines
+      .filter(l => /brasscount/i.test(l))
+      .map(pidOf)
+      .filter(Boolean),
+  );
+  const withPid = lines.filter(l => pidOf(l) !== undefined);
+  const kept = withPid.filter(l => appPids.has(pidOf(l)));
+  return { kept, ignored: withPid.length - kept.length };
+}
+
+function isColdStartNoise(lines, i) {
+  if (COLD_START_SOFT_EXCEPTION.test(lines[i])) return true;
+  return (
+    /Unhandled SoftException/.test(lines[i]) &&
+    COLD_START_SOFT_EXCEPTION.test(lines[i + 1] ?? '')
+  );
+}
+
+function adb(
+  args,
+  { allowFail = false, binary = false, timeout = 60_000 } = {},
+) {
   try {
     return execFileSync(ADB, args, {
       encoding: binary ? 'buffer' : 'utf8',
@@ -66,7 +106,9 @@ function adb(args, { allowFail = false, binary = false, timeout = 60_000 } = {})
     });
   } catch (err) {
     if (allowFail) return binary ? Buffer.alloc(0) : String(err.stdout || '');
-    fail(`adb ${args.join(' ')} failed: ${String(err.stderr || err.message).trim()}`);
+    fail(
+      `adb ${args.join(' ')} failed: ${String(err.stderr || err.message).trim()}`,
+    );
   }
 }
 
@@ -81,8 +123,13 @@ function emulatorSerial() {
 async function emulatorStart() {
   const running = emulatorSerial();
   if (running) {
-    writeFileSync(DEVICE_STATE, JSON.stringify({ startedByUs: false, serial: running }));
-    console.log(`reusing running emulator ${running} (it was already up, so stop will leave it running)`);
+    writeFileSync(
+      DEVICE_STATE,
+      JSON.stringify({ startedByUs: false, serial: running }),
+    );
+    console.log(
+      `reusing running emulator ${running} (it was already up, so stop will leave it running)`,
+    );
   } else {
     if (!existsSync(EMULATOR)) fail(`no emulator binary at ${EMULATOR}`);
     mkdirSync(STATE_DIR, { recursive: true });
@@ -98,7 +145,10 @@ async function emulatorStart() {
   const deadline = Date.now() + 240_000;
   while (Date.now() < deadline) {
     const serial = emulatorSerial();
-    if (serial && shell('getprop sys.boot_completed', { allowFail: true }).trim() === '1') {
+    if (
+      serial &&
+      shell('getprop sys.boot_completed', { allowFail: true }).trim() === '1'
+    ) {
       console.log(`emulator ${serial} booted`);
       // Keep the screen awake and unlocked for the length of the run.
       shell('svc power stayon true', { allowFail: true });
@@ -112,9 +162,13 @@ async function emulatorStart() {
 }
 
 async function emulatorStop(force) {
-  const state = existsSync(DEVICE_STATE) ? JSON.parse(readFileSync(DEVICE_STATE, 'utf8')) : {};
+  const state = existsSync(DEVICE_STATE)
+    ? JSON.parse(readFileSync(DEVICE_STATE, 'utf8'))
+    : {};
   if (!state.startedByUs && !force) {
-    console.log('emulator was already running before this run; left running (pass --force to stop it anyway)');
+    console.log(
+      'emulator was already running before this run; left running (pass --force to stop it anyway)',
+    );
     return;
   }
   if (!emulatorSerial()) {
@@ -138,9 +192,15 @@ async function emulatorStop(force) {
 
 async function metro(port = '8081') {
   try {
-    const res = await fetch(`http://localhost:${port}/status`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`http://localhost:${port}/status`, {
+      signal: AbortSignal.timeout(3000),
+    });
     const body = await res.text();
-    console.log(body.includes('packager-status:running') ? `metro running on ${port}` : `port ${port} answered: ${body.slice(0, 80)}`);
+    console.log(
+      body.includes('packager-status:running')
+        ? `metro running on ${port}`
+        : `port ${port} answered: ${body.slice(0, 80)}`,
+    );
   } catch {
     console.log(`metro not running on ${port}`);
     process.exitCode = 2;
@@ -170,7 +230,8 @@ function parseTree(xml) {
       continue;
     }
     const attrs = {};
-    for (const a of m[1].matchAll(/([\w-]+)="([^"]*)"/g)) attrs[a[1]] = decode(a[2]);
+    for (const a of m[1].matchAll(/([\w-]+)="([^"]*)"/g))
+      attrs[a[1]] = decode(a[2]);
     const node = { attrs, children: [], parent: current };
     current.children.push(node);
     all.push(node);
@@ -180,7 +241,10 @@ function parseTree(xml) {
 }
 
 function dumpXml() {
-  const out = adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], { allowFail: true, timeout: 30_000 });
+  const out = adb(['exec-out', 'uiautomator', 'dump', '/dev/tty'], {
+    allowFail: true,
+    timeout: 30_000,
+  });
   const start = out.indexOf('<?xml');
   const end = out.lastIndexOf('</hierarchy>');
   if (start < 0 || end < 0) return null;
@@ -195,7 +259,8 @@ function nodes() {
 
 function matcher(selector) {
   const eq = selector.indexOf('=');
-  const [kind, value] = eq > 0 ? [selector.slice(0, eq), selector.slice(eq + 1)] : ['id', selector];
+  const [kind, value] =
+    eq > 0 ? [selector.slice(0, eq), selector.slice(eq + 1)] : ['id', selector];
   switch (kind) {
     case 'id':
       return n => n.attrs['resource-id'] === value;
@@ -204,9 +269,13 @@ function matcher(selector) {
     case 'desc':
       return n => n.attrs['content-desc'] === value;
     case 'contains':
-      return n => (n.attrs.text || '').includes(value) || (n.attrs['content-desc'] || '').includes(value);
+      return n =>
+        (n.attrs.text || '').includes(value) ||
+        (n.attrs['content-desc'] || '').includes(value);
     default:
-      fail(`unknown selector kind "${kind}" (use id=, text=, desc=, contains=)`);
+      fail(
+        `unknown selector kind "${kind}" (use id=, text=, desc=, contains=)`,
+      );
   }
 }
 
@@ -222,7 +291,11 @@ function deepText(n) {
 
 function describe(n) {
   const b = n.attrs.bounds || '';
-  const flags = [n.attrs.enabled === 'false' ? 'DISABLED' : '', n.attrs.checked === 'true' ? 'checked' : '', n.attrs.selected === 'true' ? 'selected' : '']
+  const flags = [
+    n.attrs.enabled === 'false' ? 'DISABLED' : '',
+    n.attrs.checked === 'true' ? 'checked' : '',
+    n.attrs.selected === 'true' ? 'selected' : '',
+  ]
     .filter(Boolean)
     .join(',');
   const id = n.attrs['resource-id'] ? `#${n.attrs['resource-id']}` : '';
@@ -243,8 +316,15 @@ async function waitFor(selector, timeoutMs = 10_000, wantGone = false) {
     }
     await sleep(600);
   } while (Date.now() < deadline);
-  if (!sawDump) fail(`no UI dump in ${timeoutMs} ms (the UI is never idle while a run ticks: use tap-xy)`);
-  fail(wantGone ? `"${selector}" still on screen after ${timeoutMs} ms` : `"${selector}" not found within ${timeoutMs} ms`);
+  if (!sawDump)
+    fail(
+      `no UI dump in ${timeoutMs} ms (the UI is never idle while a run ticks: use tap-xy)`,
+    );
+  fail(
+    wantGone
+      ? `"${selector}" still on screen after ${timeoutMs} ms`
+      : `"${selector}" not found within ${timeoutMs} ms`,
+  );
 }
 
 function tapNode(n) {
@@ -259,13 +339,18 @@ function swipe(n, direction) {
   const b = bounds(n);
   const y = Math.round((b[1] + b[3]) / 2);
   const right = b[2] - 60;
-  const [x1, x2] = direction === 'left' ? [right, right - 300] : [b[0] + 60, b[0] + 360];
+  const [x1, x2] =
+    direction === 'left' ? [right, right - 300] : [b[0] + 60, b[0] + 360];
   shell(`input swipe ${x1} ${y} ${x2} ${y} 300`);
 }
 
 function typeText(text) {
-  if (!/^[\w.@-]*$/.test(text.replace(/ /g, ''))) fail('type: letters, digits and . @ - _ only');
-  if (text.includes(' ')) console.log('note: spaces go through %s and the keyboard may autocorrect the word before them');
+  if (!/^[\w.@-]*$/.test(text.replace(/ /g, '')))
+    fail('type: letters, digits and . @ - _ only');
+  if (text.includes(' '))
+    console.log(
+      'note: spaces go through %s and the keyboard may autocorrect the word before them',
+    );
   shell(`input text ${JSON.stringify(text.replace(/ /g, '%s'))}`);
 }
 
@@ -291,36 +376,72 @@ switch (command) {
     console.log('force-stopped');
     break;
   case 'mic': {
-    const verb = args[0] === 'grant' ? 'grant' : args[0] === 'revoke' ? 'revoke' : fail('usage: mic grant|revoke');
-    shell(`pm ${verb} ${APP_ID} android.permission.RECORD_AUDIO`, { allowFail: true });
+    const verb =
+      args[0] === 'grant'
+        ? 'grant'
+        : args[0] === 'revoke'
+          ? 'revoke'
+          : fail('usage: mic grant|revoke');
+    shell(`pm ${verb} ${APP_ID} android.permission.RECORD_AUDIO`, {
+      allowFail: true,
+    });
     // A revoked permission is otherwise remembered as "denied twice" across runs.
-    if (verb === 'revoke') shell(`pm clear-permission-flags ${APP_ID} android.permission.RECORD_AUDIO user-set user-fixed`, { allowFail: true });
-    console.log(`microphone ${verb}ed`);
+    if (verb === 'revoke')
+      shell(
+        `pm clear-permission-flags ${APP_ID} android.permission.RECORD_AUDIO user-set user-fixed`,
+        { allowFail: true },
+      );
+    console.log(`microphone ${verb === 'grant' ? 'granted' : 'revoked'}`);
     break;
   }
   case 'synth': {
     const mode = args.join(' ').trim() || 'off';
-    if (!/^(off|silent|clicks( -?\d+(\.\d+)?)?( \d+)?|run (\d+|none)( \d+)*)$/.test(mode)) {
-      fail('synth: off | silent | clicks <dBFS> <everyMs> | run <beepMs|none> <t1> <t2> ...');
+    if (
+      !/^(off|silent|clicks( -?\d+(\.\d+)?)?( \d+)?|run (\d+|none)( \d+)*)$/.test(
+        mode,
+      )
+    ) {
+      fail(
+        'synth: off | silent | clicks <dBFS> <everyMs> | run <beepMs|none> <t1> <t2> ...',
+      );
     }
-    shell(`run-as ${APP_ID} sh -c 'mkdir -p files && echo ${mode} > ${SYNTH_FILE}'`);
-    const back = shell(`run-as ${APP_ID} cat ${SYNTH_FILE}`, { allowFail: true }).trim();
+    shell(
+      `run-as ${APP_ID} sh -c 'mkdir -p files && echo ${mode} > ${SYNTH_FILE}'`,
+    );
+    const back = shell(`run-as ${APP_ID} cat ${SYNTH_FILE}`, {
+      allowFail: true,
+    }).trim();
     if (back !== mode) fail(`synth file reads "${back}", expected "${mode}"`);
-    console.log(`synth: ${mode} (takes effect within 200 ms in an open capture)`);
+    console.log(
+      `synth: ${mode} (takes effect within 200 ms in an open capture)`,
+    );
     break;
   }
   case 'foreground':
-    console.log(shell('dumpsys activity activities', { allowFail: true }).split(/\r?\n/).filter(l => /mResumedActivity|topResumedActivity/.test(l)).join('\n').trim());
+    console.log(
+      shell('dumpsys activity activities', { allowFail: true })
+        .split(/\r?\n/)
+        .filter(l => /mResumedActivity|topResumedActivity/.test(l))
+        .join('\n')
+        .trim(),
+    );
     break;
   case 'dump': {
     const all = nodes();
-    if (!all) fail('no UI dump (the UI is never idle while a run ticks: use tap-xy)');
+    if (!all)
+      fail('no UI dump (the UI is never idle while a run ticks: use tap-xy)');
     for (const n of all) {
-      const interesting = n.attrs['resource-id'] || n.attrs.text || n.attrs['content-desc'];
+      const interesting =
+        n.attrs['resource-id'] || n.attrs.text || n.attrs['content-desc'];
       if (args.includes('--all') || interesting) {
         const id = n.attrs['resource-id'] ? `#${n.attrs['resource-id']}` : '';
-        const t = [n.attrs.text, n.attrs['content-desc']].filter(Boolean).map(s => JSON.stringify(s)).join(' ');
-        console.log(`${id} ${t} ${n.attrs.bounds}${n.attrs.enabled === 'false' ? ' [DISABLED]' : ''}`.trim());
+        const t = [n.attrs.text, n.attrs['content-desc']]
+          .filter(Boolean)
+          .map(s => JSON.stringify(s))
+          .join(' ');
+        console.log(
+          `${id} ${t} ${n.attrs.bounds}${n.attrs.enabled === 'false' ? ' [DISABLED]' : ''}`.trim(),
+        );
       }
     }
     break;
@@ -344,7 +465,8 @@ switch (command) {
     break;
   case 'tap': {
     const [n] = await waitFor(args[0], args[1]);
-    if (n.attrs.enabled === 'false') console.log(`warning: "${args[0]}" is DISABLED; tapping anyway`);
+    if (n.attrs.enabled === 'false')
+      console.log(`warning: "${args[0]}" is DISABLED; tapping anyway`);
     const [x, y] = tapNode(n);
     console.log(`tapped ${args[0]} at ${x},${y}`);
     break;
@@ -362,7 +484,11 @@ switch (command) {
   }
   case 'scroll-down':
   case 'scroll-up':
-    shell(command === 'scroll-down' ? 'input swipe 540 1700 540 700 400' : 'input swipe 540 700 540 1700 400');
+    shell(
+      command === 'scroll-down'
+        ? 'input swipe 540 1700 540 700 400'
+        : 'input swipe 540 700 540 1700 400',
+    );
     console.log(command);
     break;
   case 'type':
@@ -376,13 +502,19 @@ switch (command) {
     break;
   }
   case 'key':
-    if (args[0] === '4') console.log('warning: Back pops the screen; it does not hide the keyboard here');
+    if (args[0] === '4')
+      console.log(
+        'warning: Back pops the screen; it does not hide the keyboard here',
+      );
     shell(`input keyevent ${Number(args[0])}`);
     console.log(`key ${args[0]}`);
     break;
   case 'screenshot': {
     if (!args[0]) fail('usage: screenshot <file.png>');
-    writeFileSync(args[0], adb(['exec-out', 'screencap', '-p'], { binary: true }));
+    writeFileSync(
+      args[0],
+      adb(['exec-out', 'screencap', '-p'], { binary: true }),
+    );
     console.log(`saved ${args[0]}`);
     break;
   }
@@ -392,16 +524,45 @@ switch (command) {
     console.log('logcat cleared');
     break;
   case 'log':
-    console.log(adb(['logcat', '-d', '-s', `${args[0] || 'ReactNativeJS'}:V`], { allowFail: true }).trim());
+    console.log(
+      adb(['logcat', '-d', '-s', `${args[0] || 'ReactNativeJS'}:V`], {
+        allowFail: true,
+      }).trim(),
+    );
     break;
   case 'crashes': {
-    const crash = adb(['logcat', '-d', '-b', 'crash'], { allowFail: true }).trim();
-    const fatal = adb(['logcat', '-d', '*:E'], { allowFail: true })
-      .split(/\r?\n/)
-      .filter(l => /FATAL|AndroidRuntime|ReactNativeJS|Unhandled|TypeError|ReferenceError|Invariant/.test(l))
+    const crashBuffer = appCrashLines(
+      adb(['logcat', '-d', '-b', 'crash'], { allowFail: true }).split(/\r?\n/),
+    );
+    const crash = crashBuffer.kept.join('\n').trim();
+    const errors = adb(['logcat', '-d', '*:E'], { allowFail: true }).split(
+      /\r?\n/,
+    );
+    const noise = errors.filter((_, i) => isColdStartNoise(errors, i)).length;
+    const fatal = errors
+      .filter(
+        (l, i) =>
+          /FATAL|AndroidRuntime|ReactNativeJS|Unhandled|TypeError|ReferenceError|Invariant/.test(
+            l,
+          ) && !isColdStartNoise(errors, i),
+      )
       .join('\n')
       .trim();
-    console.log(crash || fatal ? `${crash}\n${fatal}`.trim() : 'no crashes or JS errors logged');
+    console.log(
+      crash || fatal
+        ? `${crash}\n${fatal}`.trim()
+        : 'no crashes or JS errors logged',
+    );
+    if (crashBuffer.ignored > 0) {
+      console.log(
+        `(ignored ${crashBuffer.ignored} crash-buffer line(s) from other processes)`,
+      );
+    }
+    if (noise > 0) {
+      console.log(
+        `(ignored ${noise} cold-start onWindowFocusChange soft-exception line(s): framework noise)`,
+      );
+    }
     if (crash || fatal) process.exitCode = 3;
     break;
   }
