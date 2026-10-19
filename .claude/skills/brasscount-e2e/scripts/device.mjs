@@ -30,8 +30,9 @@
 // Logs
 //   log-clear                 clear logcat
 //   log [tag]                 dump ReactNativeJS logs (or the tag given)
-//   crashes                   dump the crash buffer and fatal errors since log-clear
-//                             (ignores the cold-start onWindowFocusChange soft exception)
+//   crashes                   dump the app's crashes and fatal errors since log-clear
+//                             (ignores other processes' crashes and the cold-start
+//                             onWindowFocusChange soft exception)
 
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -66,6 +67,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // arrives as an "Unhandled SoftException" line followed by the exception's own line.
 const COLD_START_SOFT_EXCEPTION =
   /ReactNoCrashSoftException.*onWindowFocusChange.*context is not ready/;
+
+// The crash buffer also holds other processes' crashes (the emulator's Bluetooth
+// service, Chrome). Lines are grouped by their logcat PID and a group is kept only
+// when one of its lines names the app: "Process: com.brasscount.app" for a Java
+// crash, ">>> com.brasscount.app <<<" in a native tombstone.
+function appCrashLines(lines) {
+  const pidOf = l => l.match(/^\S+\s+\S+\s+(\d+)\s+\d+\s/)?.[1];
+  const appPids = new Set(
+    lines
+      .filter(l => /brasscount/i.test(l))
+      .map(pidOf)
+      .filter(Boolean),
+  );
+  const withPid = lines.filter(l => pidOf(l) !== undefined);
+  const kept = withPid.filter(l => appPids.has(pidOf(l)));
+  return { kept, ignored: withPid.length - kept.length };
+}
 
 function isColdStartNoise(lines, i) {
   if (COLD_START_SOFT_EXCEPTION.test(lines[i])) return true;
@@ -373,7 +391,7 @@ switch (command) {
         `pm clear-permission-flags ${APP_ID} android.permission.RECORD_AUDIO user-set user-fixed`,
         { allowFail: true },
       );
-    console.log(`microphone ${verb}ed`);
+    console.log(`microphone ${verb === 'grant' ? 'granted' : 'revoked'}`);
     break;
   }
   case 'synth': {
@@ -513,9 +531,10 @@ switch (command) {
     );
     break;
   case 'crashes': {
-    const crash = adb(['logcat', '-d', '-b', 'crash'], {
-      allowFail: true,
-    }).trim();
+    const crashBuffer = appCrashLines(
+      adb(['logcat', '-d', '-b', 'crash'], { allowFail: true }).split(/\r?\n/),
+    );
+    const crash = crashBuffer.kept.join('\n').trim();
     const errors = adb(['logcat', '-d', '*:E'], { allowFail: true }).split(
       /\r?\n/,
     );
@@ -534,6 +553,11 @@ switch (command) {
         ? `${crash}\n${fatal}`.trim()
         : 'no crashes or JS errors logged',
     );
+    if (crashBuffer.ignored > 0) {
+      console.log(
+        `(ignored ${crashBuffer.ignored} crash-buffer line(s) from other processes)`,
+      );
+    }
     if (noise > 0) {
       console.log(
         `(ignored ${noise} cold-start onWindowFocusChange soft-exception line(s): framework noise)`,
