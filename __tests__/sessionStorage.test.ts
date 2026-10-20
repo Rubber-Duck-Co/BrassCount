@@ -9,6 +9,7 @@ import {
   clearSessions,
   countSessions,
   deleteSessionById,
+  deleteSessionsByDrillId,
   loadSessionById,
   loadSessions,
   loadSessionsByDrillId,
@@ -124,6 +125,7 @@ describe('sessionStorage service', () => {
       loadByDrillId: loadSessionsByDrillId,
       loadById: loadSessionById,
       deleteById: deleteSessionById,
+      deleteByDrillId: deleteSessionsByDrillId,
       clear: clearSessions,
     });
   });
@@ -787,6 +789,71 @@ describe('sessionStorage service', () => {
       await expectRejection(deleteSessionById(saved.id), 'STORAGE_FAILURE');
 
       expect(await loadSessionById(saved.id)).toEqual(saved);
+    });
+
+    it('removes every session of one drill and leaves other drills alone', async () => {
+      const options = fakes();
+      await saveSession(mozambiqueRun, options);
+      await saveSession(mozambiqueRun, options);
+      const other = await saveSession(
+        { ...mozambiqueRun, drillId: 'drill-2' },
+        options,
+      );
+
+      await deleteSessionsByDrillId('drill-1');
+
+      expect(await loadSessions()).toEqual([other]);
+    });
+
+    it('removes an unreadable or too-new run that names the drill', async () => {
+      await writeStored(
+        'broken',
+        envelope({ ...storedSession({ id: 'broken' }), splits: [] }),
+      );
+      await writeStored(
+        'future',
+        envelope(storedSession({ id: 'future' }), 99),
+      );
+      await writeStored(
+        'elsewhere',
+        envelope(storedSession({ id: 'elsewhere', drillId: 'drill-2' })),
+      );
+
+      await deleteSessionsByDrillId('drill-1');
+
+      expect(await readStored('broken')).toBeNull();
+      expect(await readStored('future')).toBeNull();
+      expect(await readStored('elsewhere')).not.toBeNull();
+    });
+
+    it('is a no-op for a drill with no runs', async () => {
+      const saved = await saveSession(mozambiqueRun, fakes());
+
+      await expect(deleteSessionsByDrillId('no-runs')).resolves.toBeUndefined();
+
+      expect(await loadSessions()).toEqual([saved]);
+    });
+
+    it('rejects an empty drill id and leaves every session stored', async () => {
+      const saved = await saveSession(mozambiqueRun, fakes());
+
+      await expectRejection(deleteSessionsByDrillId(''), 'INVALID_INPUT');
+
+      expect(await loadSessions()).toEqual([saved]);
+    });
+
+    it('wraps a storage failure while removing', async () => {
+      const saved = await saveSession(mozambiqueRun, fakes());
+      jest
+        .spyOn(AsyncStorage, 'removeItem')
+        .mockRejectedValueOnce(new Error('unavailable'));
+
+      await expectRejection(
+        deleteSessionsByDrillId('drill-1'),
+        'STORAGE_FAILURE',
+      );
+
+      expect(await loadSessions()).toEqual([saved]);
     });
 
     it('clears every session without touching other namespaces', async () => {

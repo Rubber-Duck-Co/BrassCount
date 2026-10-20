@@ -25,7 +25,14 @@ import {
   DrillStorageService,
   saveDrill,
 } from '../src/services/drillStorage';
+import {
+  loadSessions,
+  saveSession,
+  SessionStorageError,
+  SessionStorageService,
+} from '../src/services/sessionStorage';
 import type { Drill, DrillInput } from '../src/types/drill';
+import type { SessionInput } from '../src/types/session';
 
 /**
  * The editor sits on the root stack in the app. Here it is a sibling tab:
@@ -751,6 +758,123 @@ describe('DrillsScreen', () => {
       expect(rowOrder(tree)).toEqual([kept.id]);
       expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 1']);
       expect(await storedIds()).toEqual([kept.id]);
+    });
+
+    it('warns that the runs saved with the drill go too', async () => {
+      const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      await askToDelete(tree, drill.id);
+
+      expect(textsOf(tree, SHEET)).toContain(
+        'This removes the drill and every run saved with it from this device and cannot be undone.',
+      );
+    });
+
+    describe('the runs saved with the drill', () => {
+      const run = (drillId: string): SessionInput => ({
+        drillId,
+        totalTime: 0.4,
+        completed: true,
+        splits: [{ stepId: 'step-1', label: 'Shot 1', par: 0.5, actual: 0.4 }],
+      });
+
+      it('are deleted with it, and the runs of other drills are kept', async () => {
+        const kept = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+        const deleted = await seedDrill(MOZAMBIQUE, '2026-09-02T10:00:00.000Z');
+        await saveSession(run(deleted.id));
+        await saveSession(run(deleted.id));
+        const keptRun = await saveSession(run(kept.id));
+        const { tree } = await renderScreen();
+        await askToDelete(tree, deleted.id);
+
+        await press(tree, `${SHEET}-confirm`);
+
+        expect(rowOrder(tree)).toEqual([kept.id]);
+        expect(await loadSessions()).toEqual([keptRun]);
+      });
+
+      it('are deleted before the drill itself', async () => {
+        const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+        const order: string[] = [];
+        const deleteRuns = SessionStorageService.deleteByDrillId;
+        const deleteDrill = DrillStorageService.deleteById;
+        jest
+          .spyOn(SessionStorageService, 'deleteByDrillId')
+          .mockImplementation(async id => {
+            order.push('runs');
+            await deleteRuns(id);
+          });
+        jest
+          .spyOn(DrillStorageService, 'deleteById')
+          .mockImplementation(async id => {
+            order.push('drill');
+            await deleteDrill(id);
+          });
+        const { tree } = await renderScreen();
+        await askToDelete(tree, drill.id);
+
+        await press(tree, `${SHEET}-confirm`);
+
+        expect(order).toEqual(['runs', 'drill']);
+      });
+
+      it('leave the drill stored, and not deleted, when they cannot be removed', async () => {
+        const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+        await saveSession(run(drill.id));
+        const deleteDrill = jest.spyOn(DrillStorageService, 'deleteById');
+        jest
+          .spyOn(SessionStorageService, 'deleteByDrillId')
+          .mockRejectedValueOnce(
+            new SessionStorageError(
+              'Failed to delete drill sessions',
+              'STORAGE_FAILURE',
+            ),
+          );
+        const { tree } = await renderScreen();
+        await askToDelete(tree, drill.id);
+
+        await press(tree, `${SHEET}-confirm`);
+
+        expect(textsOf(tree, `${SHEET}-error`)).toEqual([
+          'Could not delete Bill Drill. Try again.',
+        ]);
+        expect(deleteDrill).not.toHaveBeenCalled();
+        expect(rowOrder(tree)).toEqual([drill.id]);
+        expect(await storedIds()).toEqual([drill.id]);
+        expect(await loadSessions()).toHaveLength(1);
+      });
+
+      it('are deleted on a retry after the drill itself failed to delete', async () => {
+        const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+        await saveSession(run(drill.id));
+        jest
+          .spyOn(DrillStorageService, 'deleteById')
+          .mockRejectedValueOnce(
+            new DrillStorageError('Failed to delete drill', 'STORAGE_FAILURE'),
+          );
+        const { tree } = await renderScreen();
+        await askToDelete(tree, drill.id);
+        await press(tree, `${SHEET}-confirm`);
+        expect(await loadSessions()).toEqual([]);
+        expect(await storedIds()).toEqual([drill.id]);
+
+        await press(tree, `${SHEET}-confirm`);
+
+        expect(rowOrder(tree)).toEqual([]);
+        expect(await storedIds()).toEqual([]);
+      });
+
+      it('are kept when the confirmation is cancelled', async () => {
+        const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+        await saveSession(run(drill.id));
+        const { tree } = await renderScreen();
+        await askToDelete(tree, drill.id);
+
+        await press(tree, `${SHEET}-cancel`);
+
+        expect(await loadSessions()).toHaveLength(1);
+      });
     });
 
     it('shows the empty state after the last drill is deleted', async () => {

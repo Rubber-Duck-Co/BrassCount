@@ -46,7 +46,7 @@ Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial
 - **Calibration is deliberately in-memory only.** It resets when the app closes; do not persist it through `storage.ts`. Levels are dBFS and pass through `normalizeDbfs`. Keep the live microphone level out of the store.
 - **Appearance** is read once from the profile; `AppearanceProvider` renders nothing until it has. Components get the resolved theme only from `useTheme()`.
 - **Persistence.** Only `storage.ts` touches AsyncStorage. Stored shapes are `{ schemaVersion, … }` envelopes: a shape change bumps the version and upgrades older envelopes on read. Reads are validated field by field and a bad entry is skipped. Drill and profile changes go through a serial queue.
-- **Sessions** are never updated after saving. Deleting a drill leaves its sessions stored with a `drillId` that no longer resolves; history shows them as `DELETED_DRILL_NAME`.
+- **Sessions** are never updated after saving. Deleting a drill deletes its sessions first (`useDrills`), then the drill. Orphans left by older versions are not swept; history shows them as `DELETED_DRILL_NAME`.
 - **Timing** uses the readings' own capture-clock timestamps, never the time a reading reaches JS. Nothing about a run is stored until the shooter saves it.
 - **Detection is level-only**: any sound at least as loud as the expected step's threshold counts as that step.
 - **Android touchables** that are both rotated and given a `hitSlop` stop receiving presses, so rotate an inner view instead.

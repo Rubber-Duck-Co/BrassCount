@@ -218,8 +218,9 @@ const keyOfSummary = (summary: DrillHistorySummary): string => summary.drillId;
  * one was, most recently run first. Above the list, the number of runs and
  * of drills they were made against.
  *
- * A drill that has never been run is not listed. A drill deleted after it
- * was run still is, since its runs are kept, under a stand-in name.
+ * A drill that has never been run is not listed. Runs whose drill no longer
+ * exists (deleting a drill deletes its runs, but older versions left them)
+ * are still listed, under a stand-in name.
  */
 export const HistoryScreen = () => {
   const styles = useThemedStyles(createStyles);

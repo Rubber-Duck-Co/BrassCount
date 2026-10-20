@@ -209,7 +209,8 @@ const DrillSeparator = () => {
  * deleted, and the way into the editor to create one or change one.
  *
  * A drill is deleted by swiping its row left for the Delete action, then
- * confirming in a sheet. The runs recorded with it are not touched.
+ * confirming in a sheet. The runs recorded with it are deleted too, and the
+ * sheet says so.
  */
 export const DrillsScreen = () => {
   const styles = useThemedStyles(createStyles);
@@ -364,7 +365,7 @@ export const DrillsScreen = () => {
       <ConfirmSheet
         visible={pendingDelete !== null}
         title={`Delete “${pendingDelete?.name ?? ''}”?`}
-        message="This removes the drill from this device and cannot be undone."
+        message="This removes the drill and every run saved with it from this device and cannot be undone."
         confirmLabel="Delete drill"
         busyLabel="Deleting…"
         busy={deleting}

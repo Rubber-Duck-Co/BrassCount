@@ -7,9 +7,11 @@ import type { Session } from '@/types/session';
  */
 
 /**
- * What a drill is called once it has been deleted. Its runs stay stored
- * with a `drillId` that no longer resolves, and a session does not carry
- * the drill's name, so there is nothing else to call it.
+ * What a drill is called when its runs outlived it. Deleting a drill now
+ * deletes its runs, but ones left by earlier versions (or by a run saved
+ * as the drill was deleted) stay stored with a `drillId` that no longer
+ * resolves, and a session does not carry the drill's name, so there is
+ * nothing else to call it.
  */
 export const DELETED_DRILL_NAME = 'Deleted drill';
 
