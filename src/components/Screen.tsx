@@ -9,9 +9,13 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 
 import type { Theme } from '@/theme/theme';
+import { useKeyboardHeight } from '@hooks/useKeyboardHeight';
 import { useThemedStyles } from '@hooks/useTheme';
 
 import { Icon } from './Icon';
@@ -89,6 +93,8 @@ export const Screen = ({
   testID,
 }: ScreenProps) => {
   const styles = useThemedStyles(createStyles);
+  const keyboardHeight = useKeyboardHeight();
+  const { bottom: navBarHeight } = useSafeAreaInsets();
 
   const header =
     title || headerRight || onBack ? (
@@ -126,7 +132,15 @@ export const Screen = ({
     >
       {scrollable ? (
         <ScrollView
-          contentContainerStyle={[styles.scrollContent, contentStyle]}
+          contentContainerStyle={[
+            styles.scrollContent,
+            contentStyle,
+            // Room for the keyboard, so the last controls can scroll above it.
+            // Deliberately replaces the tab bar clearance: the keyboard covers it.
+            keyboardHeight > 0 && {
+              paddingBottom: keyboardHeight + navBarHeight,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
