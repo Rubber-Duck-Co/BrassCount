@@ -28,7 +28,11 @@ import { splitDelta } from './session';
  * JavaScript, so a busy JS thread delays what the screen shows and never
  * what a run records.
  *
- * Known limits, accepted until a range test says otherwise (#119):
+ * Checked on a physical phone (#139): claps and a 120 bpm metronome are
+ * timed to the hundredth, the beep is heard 50–90 ms after it is requested,
+ * and readings carry the hardware clock. Gunfire has not been tried.
+ *
+ * Known limits, accepted until a range test says otherwise (#119, #139):
  * - Detection is level-only, so a quiet shot that misses its threshold is
  *   not counted and every later step shifts onto the wrong sound.
  * - A microphone that stays saturated between shots never drops under the
