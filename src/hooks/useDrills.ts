@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import type { Drill } from '@/types/drill';
 import { DrillStorageService } from '@services/drillStorage';
+import { SessionStorageService } from '@services/sessionStorage';
 
 export type DrillsState =
   | { status: 'loading' }
@@ -24,9 +25,9 @@ export type UseDrillsResult = {
   /** Read the drills again from scratch, e.g. from a "Try again" button. */
   reload: () => void;
   /**
-   * Delete the stored drill with this id and take it off the list. Never
-   * rejects: resolves to `false`, with the list as it was, when the drill
-   * could not be deleted.
+   * Delete the stored drill with this id, and the runs saved with it, and
+   * take it off the list. Never rejects: resolves to `false`, with the list
+   * as it was, when the drill could not be deleted.
    */
   deleteDrill: (id: string) => Promise<boolean>;
 };
@@ -42,8 +43,8 @@ export type UseDrillsResult = {
  * that fails shows an error.
  *
  * A drill deleted here leaves the list as soon as storage has let go of
- * it. Its sessions are left alone: deleting a drill does not delete the
- * runs recorded with it.
+ * it. The runs recorded with it are deleted first, so a failure part way
+ * leaves a drill that can be deleted again, never runs without a drill.
  */
 export const useDrills = (): UseDrillsResult => {
   const [state, setState] = useState<DrillsState>({ status: 'loading' });
@@ -101,6 +102,11 @@ export const useDrills = (): UseDrillsResult => {
 
   const deleteDrill = useCallback(async (id: string): Promise<boolean> => {
     try {
+      // Runs first, drill second: if the second step fails the drill is
+      // still listed with some or all of its runs gone, and deleting it
+      // again finishes the job. The other order could strand runs with no
+      // drill left to delete them from.
+      await SessionStorageService.deleteByDrillId(id);
       await DrillStorageService.deleteById(id);
     } catch {
       // The drill is still stored, so it stays listed; the caller says so.

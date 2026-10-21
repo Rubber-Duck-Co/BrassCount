@@ -37,7 +37,9 @@ import { createStorageNamespace, StorageError } from './storage';
  *   - A session is a record of something that happened, so it is written
  *     once and never updated. The service generates its id and stamps
  *     `createdAt`; callers supply the drill, the total time and the
- *     splits and get the full `Session` back.
+ *     splits and get the full `Session` back. The one removal beyond a
+ *     single id is `deleteSessionsByDrillId`, which goes with a deleted
+ *     drill.
  *   - Anything read back from storage is untrusted: it is checked field
  *     by field, each `delta` is recomputed from the split's par and
  *     actual, and an entry that does not pass is skipped like corrupt JSON
@@ -414,6 +416,34 @@ export async function deleteSessionById(id: string): Promise<void> {
 }
 
 /**
+ * Delete every session run against one drill, for when the drill itself is
+ * deleted. Idempotent: a drill with no runs is a no-op.
+ *
+ * Matches on the raw stored envelope, as `loadSessionsByDrillId` does, so a
+ * run that no longer validates (or was written by a newer build) is removed
+ * with its drill instead of being left behind. A value that is not valid
+ * JSON is skipped by the namespace read and so stays stored. If a removal
+ * fails the rest may already be gone; deleting again finishes the job.
+ */
+export async function deleteSessionsByDrillId(drillId: string): Promise<void> {
+  if (!isNonEmptyString(drillId)) {
+    throw invalid('Cannot delete sessions without a valid drill id');
+  }
+  await withStorage('delete drill sessions', async () => {
+    const stored = await sessions.getAllEntries();
+    const ids = stored
+      .filter(
+        ({ value }) =>
+          isRecord(value) &&
+          isRecord(value.session) &&
+          value.session.drillId === drillId,
+      )
+      .map(({ id }) => id);
+    await Promise.all(ids.map(id => sessions.removeItem(id)));
+  });
+}
+
+/**
  * Remove every session from storage. Primarily useful for tests and "reset
  * app data" flows.
  */
@@ -432,6 +462,7 @@ export const SessionStorageService = {
   loadByDrillId: loadSessionsByDrillId,
   loadById: loadSessionById,
   deleteById: deleteSessionById,
+  deleteByDrillId: deleteSessionsByDrillId,
   clear: clearSessions,
 };
 
