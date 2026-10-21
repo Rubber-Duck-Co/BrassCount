@@ -38,13 +38,13 @@ Every screen reads real data through a service. There are no display fixtures (`
 - `src/types/` — stored models (`Drill`, `Session`, `Profile`), run types, and all navigation param lists (`navigation.ts`).
 - `src/screens/`, `src/components/` — screens compose the primitives in `components/`.
 
-Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial, History, Profile) plus `SequenceEditor` pushed over the tabs. History is a nested stack (`HistoryList` → `HistoryDetail` → `RunComparison`) so the tab bar stays visible. Navigator headers are off: each screen renders its own through `Screen`, and the bottom chrome is the custom `TabBar` (a new tab needs an entry in `tabIcons`).
+Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial, History, Profile) plus `SequenceEditor` and `Settings` (opened from Profile's header) pushed over the tabs. History is a nested stack (`HistoryList` → `HistoryDetail` → `RunComparison`) so the tab bar stays visible. Navigator headers are off: each screen renders its own through `Screen`, and the bottom chrome is the custom `TabBar` (a new tab needs an entry in `tabIcons`).
 
 ### Invariants
 
-- **State.** No state-management library: screens use `useState`/`useRef`. The only shared state is calibration and the Appearance preference, both React Context in `src/store/`.
+- **State.** No state-management library: screens use `useState`/`useRef`. The only shared state is calibration and the display preferences (Appearance, level units), both React Context in `src/store/`.
 - **Calibration is deliberately in-memory only.** It resets when the app closes; do not persist it through `storage.ts`. Levels are dBFS and pass through `normalizeDbfs`. Keep the live microphone level out of the store.
-- **Appearance** is read once from the profile; `AppearanceProvider` renders nothing until it has. Components get the resolved theme only from `useTheme()`.
+- **Display preferences** are read once from the profile; `PreferencesProvider` renders nothing until it has. Components get the resolved theme only from `useTheme()`. Level units are display only: format levels with `formatLevel`/`spokenLevel`.
 - **Persistence.** Only `storage.ts` touches AsyncStorage. Stored shapes are `{ schemaVersion, … }` envelopes: a shape change bumps the version and upgrades older envelopes on read. Reads are validated field by field and a bad entry is skipped. Drill and profile changes go through a serial queue.
 - **Sessions** are never updated after saving. Deleting a drill deletes its sessions first (`useDrills`), then the drill. Orphans left by older versions are not swept; history shows them as `DELETED_DRILL_NAME`.
 - **Timing** uses the readings' own capture-clock timestamps, never the time a reading reaches JS. Nothing about a run is stored until the shooter saves it.

@@ -16,6 +16,7 @@ import { STORAGE_ROOT, StorageError } from '../src/services/storage';
 import {
   APPEARANCE_PREFERENCES,
   DEFAULT_PROFILE,
+  LEVEL_UNITS,
   MAX_PROFILE_HANDLE_LENGTH,
   MAX_PROFILE_NAME_LENGTH,
   type Profile,
@@ -48,6 +49,7 @@ const storedProfile = (overrides: Record<string, unknown> = {}): unknown => ({
     name: 'Stored Name',
     handle: '@stored',
     appearance: 'dark',
+    levelUnit: 'dbfs',
     updatedAt: SAVED_AT,
     ...overrides,
   },
@@ -94,12 +96,18 @@ describe('profileStorage service', () => {
     expect(APPEARANCE_PREFERENCES).toEqual(['system', 'light', 'dark']);
   });
 
+  it('offers level and dBFS as the level units, level first', () => {
+    expect(LEVEL_UNITS).toEqual(['level', 'dbfs']);
+    expect(DEFAULT_PROFILE.levelUnit).toBe('level');
+  });
+
   describe('loading the profile', () => {
     it('resolves to the default profile when none has been saved', async () => {
       expect(await loadProfile()).toEqual({
         name: null,
         handle: null,
         appearance: 'system',
+        levelUnit: 'level',
         updatedAt: null,
       });
     });
@@ -185,6 +193,7 @@ describe('profileStorage service', () => {
         name: 'Stored Name',
         handle: '@stored',
         appearance: 'dark',
+        levelUnit: 'dbfs',
         updatedAt: SAVED_AT,
       });
     });
@@ -227,6 +236,16 @@ describe('profileStorage service', () => {
         { appearance: 'system' },
       ],
       [
+        'a level unit that is not a choice',
+        { levelUnit: 'spl' },
+        { levelUnit: 'level' },
+      ],
+      [
+        'a missing level unit, as a profile saved before it existed',
+        { levelUnit: undefined },
+        { levelUnit: 'level' },
+      ],
+      [
         'an unreadable timestamp',
         { updatedAt: 'yesterday' },
         { updatedAt: null },
@@ -240,6 +259,7 @@ describe('profileStorage service', () => {
           name: 'Stored Name',
           handle: '@stored',
           appearance: 'dark',
+          levelUnit: 'dbfs',
           updatedAt: SAVED_AT,
           ...expected,
         });
@@ -261,6 +281,7 @@ describe('profileStorage service', () => {
         name: 'Marty McFly',
         handle: '@martymcfly',
         appearance: 'system',
+        levelUnit: 'level',
         updatedAt: SAVED_AT,
       });
     });
@@ -293,6 +314,7 @@ describe('profileStorage service', () => {
         name: 'Doc Brown',
         handle: '@martymcfly',
         appearance: 'dark',
+        levelUnit: 'level',
         updatedAt: UPDATED_AT,
       });
       expect(await loadProfile()).toEqual(updated);
@@ -309,11 +331,42 @@ describe('profileStorage service', () => {
           name: 'Marty McFly',
           handle: '@martymcfly',
           appearance,
+          levelUnit: 'level',
           updatedAt: UPDATED_AT,
         });
         expect(await loadProfile()).toEqual(updated);
       },
     );
+
+    it.each(LEVEL_UNITS)(
+      'stores the %s level unit without touching the other fields',
+      async levelUnit => {
+        await updateProfile({ ...marty, appearance: 'dark' }, at(SAVED_AT));
+
+        const updated = await updateProfile({ levelUnit }, at(UPDATED_AT));
+
+        expect(updated).toEqual({
+          name: 'Marty McFly',
+          handle: '@martymcfly',
+          appearance: 'dark',
+          levelUnit,
+          updatedAt: UPDATED_AT,
+        });
+        expect(await loadProfile()).toEqual(updated);
+      },
+    );
+
+    it('keeps the level unit when the appearance is changed', async () => {
+      await updateProfile({ levelUnit: 'dbfs' }, at(SAVED_AT));
+
+      const updated = await updateProfile(
+        { appearance: 'light' },
+        at(UPDATED_AT),
+      );
+
+      expect(updated.levelUnit).toBe('dbfs');
+      expect((await loadProfile()).levelUnit).toBe('dbfs');
+    });
 
     it('stores an appearance before any name has been set', async () => {
       const saved = await updateProfile({ appearance: 'dark' }, at(SAVED_AT));
@@ -322,6 +375,7 @@ describe('profileStorage service', () => {
         name: null,
         handle: null,
         appearance: 'dark',
+        levelUnit: 'level',
         updatedAt: SAVED_AT,
       });
     });
@@ -370,6 +424,7 @@ describe('profileStorage service', () => {
         name: null,
         handle: null,
         appearance: 'dark',
+        levelUnit: 'level',
         updatedAt: UPDATED_AT,
       });
       expect(await loadProfile()).toEqual(updated);
@@ -393,6 +448,7 @@ describe('profileStorage service', () => {
         name: 'Marty McFly',
         handle: '@martymcfly',
         appearance: 'system',
+        levelUnit: 'level',
         updatedAt: SAVED_AT,
       });
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
@@ -416,6 +472,7 @@ describe('profileStorage service', () => {
         name: 'Marty McFly',
         handle: '@martymcfly',
         appearance: 'system',
+        levelUnit: 'level',
         updatedAt: UPDATED_AT,
       });
     });
@@ -436,6 +493,7 @@ describe('profileStorage service', () => {
         name: null,
         handle: null,
         appearance: 'light',
+        levelUnit: 'level',
         updatedAt: SAVED_AT,
       });
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
@@ -453,6 +511,7 @@ describe('profileStorage service', () => {
         name: 'Doc Brown',
         handle: '@stored',
         appearance: 'system',
+        levelUnit: 'dbfs',
         updatedAt: UPDATED_AT,
       });
     });
@@ -471,6 +530,7 @@ describe('profileStorage service', () => {
         name: null,
         handle: '@stored',
         appearance: 'light',
+        levelUnit: 'dbfs',
         updatedAt: UPDATED_AT,
       });
       // ... but it was not replaced on disk by that default.
@@ -480,6 +540,7 @@ describe('profileStorage service', () => {
           name: tooLong,
           handle: '@stored',
           appearance: 'light',
+          levelUnit: 'dbfs',
           updatedAt: UPDATED_AT,
         },
       });
@@ -498,6 +559,7 @@ describe('profileStorage service', () => {
           name: 'Marty',
           handle: '@stored',
           appearance: 'dark',
+          levelUnit: 'dbfs',
           updatedAt: UPDATED_AT,
         },
       });
@@ -514,6 +576,7 @@ describe('profileStorage service', () => {
           name: 'Stored Name',
           handle: '@stored',
           appearance: 'light',
+          levelUnit: 'dbfs',
           updatedAt: UPDATED_AT,
         },
       });
@@ -566,6 +629,8 @@ describe('profileStorage service', () => {
       ['a handle with an unsupported character', { handle: '@marty!' }],
       ['an appearance that is not a choice', { appearance: 'sepia' }],
       ['a null appearance', { appearance: null }],
+      ['a level unit that is not a choice', { levelUnit: 'spl' }],
+      ['a null level unit', { levelUnit: null }],
     ])(
       'rejects %s and leaves the stored profile alone',
       async (_case, changes) => {
@@ -696,6 +761,7 @@ describe('profileStorage service', () => {
         name: 'Doc Brown',
         handle: '@martymcfly',
         appearance: 'dark',
+        levelUnit: 'level',
         updatedAt: UPDATED_AT,
       });
       expect(stored).toEqual(last);
@@ -712,6 +778,7 @@ describe('profileStorage service', () => {
         name: 'Marty McFly',
         handle: '@martymcfly',
         appearance: 'light',
+        levelUnit: 'level',
         updatedAt: SAVED_AT,
       });
     });
@@ -737,6 +804,7 @@ describe('profileStorage service', () => {
         name: 'Doc Brown',
         handle: null,
         appearance: 'system',
+        levelUnit: 'level',
         updatedAt: UPDATED_AT,
       });
     });
@@ -783,6 +851,7 @@ describe('profileStorage service', () => {
         name: 'Marty McFly',
         handle: '@martymcfly',
         appearance: 'dark',
+        levelUnit: 'level',
         updatedAt: UPDATED_AT,
       });
     });

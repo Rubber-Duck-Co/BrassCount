@@ -1,18 +1,34 @@
-import { useContext } from 'react';
+import { useCallback, useMemo } from 'react';
 
-import {
-  AppearanceContext,
-  type AppearanceContextValue,
-} from '@store/AppearanceContext';
+import type { AppearancePreference } from '@/types/profile';
+import { usePreferences } from '@hooks/usePreferences';
+
+export type AppearanceValue = {
+  /** The Appearance choice the app is drawn with. */
+  preference: AppearancePreference;
+  /**
+   * Switch the app to `preference` straight away and store it. Rejects,
+   * with the last saved choice back on screen, when the save fails (see
+   * `PreferencesContextValue.setPreference`).
+   */
+  setPreference: (preference: AppearancePreference) => Promise<void>;
+};
 
 /**
  * Read and change the Appearance preference. Must be called under
- * `AppearanceProvider`, which `App` mounts above the navigators.
+ * `PreferencesProvider`, which `App` mounts above the navigators.
  */
-export const useAppearance = (): AppearanceContextValue => {
-  const value = useContext(AppearanceContext);
-  if (value === null) {
-    throw new Error('useAppearance must be used within an AppearanceProvider');
-  }
-  return value;
+export const useAppearance = (): AppearanceValue => {
+  const { preferences, setPreference: setAny } = usePreferences();
+  const preference = preferences.appearance;
+
+  const setPreference = useCallback(
+    (next: AppearancePreference) => setAny('appearance', next),
+    [setAny],
+  );
+
+  return useMemo(
+    () => ({ preference, setPreference }),
+    [preference, setPreference],
+  );
 };

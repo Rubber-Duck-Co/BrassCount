@@ -1,27 +1,27 @@
 import { useCallback, useState } from 'react';
 
-import { Keyboard, StyleSheet, View } from 'react-native';
+import { Keyboard, StyleSheet, TouchableOpacity, View } from 'react-native';
+
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { Theme } from '@/theme/theme';
+import type { RootStackParamList } from '@/types/navigation';
 import {
   HANDLE_PREFIX,
   MAX_PROFILE_HANDLE_LENGTH,
   MAX_PROFILE_NAME_INPUT_LENGTH,
-  type AppearancePreference,
   type Profile,
   type ProfileChanges,
 } from '@/types/profile';
-import { AppearanceSheet } from '@components/AppearanceSheet';
 import { Avatar } from '@components/Avatar';
 import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { EmptyState } from '@components/EmptyState';
-import { ListRow } from '@components/ListRow';
+import { Icon } from '@components/Icon';
 import { Screen } from '@components/Screen';
-import { SectionHeader } from '@components/SectionHeader';
 import { TextField } from '@components/TextField';
 import { Typography } from '@components/Typography';
-import { useAppearance } from '@hooks/useAppearance';
 import { useProfileOverview } from '@hooks/useProfileOverview';
 import { useThemedStyles } from '@hooks/useTheme';
 import { ProfileStorageError } from '@services/profileStorage';
@@ -30,12 +30,15 @@ import { profileHandleError, profileNameError } from '@utils/profile';
 
 const AVATAR_SIZE = 84;
 
-/** What the Appearance row says for each stored preference. */
-const APPEARANCE_SUMMARY: Record<AppearancePreference, string> = {
-  system: 'Follows your device setting',
-  light: 'Light',
-  dark: 'Dark',
-};
+/**
+ * The Settings button matches `Screen`'s back button: 40dp, taken up to
+ * the 48dp minimum touch target by its hit slop.
+ */
+const SETTINGS_BUTTON_SIZE = 40;
+const SETTINGS_ICON_SIZE = 20;
+const SETTINGS_HIT_SLOP = 4;
+
+type Nav = NativeStackNavigationProp<RootStackParamList>;
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
@@ -77,11 +80,36 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       paddingVertical: theme.spacing.xxl,
     },
-    preferenceError: {
-      marginTop: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.xs,
+    settingsButton: {
+      width: SETTINGS_BUTTON_SIZE,
+      height: SETTINGS_BUTTON_SIZE,
+      borderRadius: theme.radius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: theme.colors.border,
     },
   });
+
+/** Gear in the Profile header that opens Settings. */
+const SettingsButton = () => {
+  const styles = useThemedStyles(createStyles);
+  const navigation = useNavigation<Nav>();
+
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.navigate('Settings')}
+      accessibilityRole="button"
+      accessibilityLabel="Settings"
+      hitSlop={SETTINGS_HIT_SLOP}
+      style={styles.settingsButton}
+      testID="btn-open-settings"
+    >
+      <Icon name="settings" size={SETTINGS_ICON_SIZE} color="textPrimary" />
+    </TouchableOpacity>
+  );
+};
 
 /**
  * Words for a failed save. The service's own message is written for a
@@ -217,58 +245,6 @@ const ProfileEditor = ({ profile, onSave, onCancel }: ProfileEditorProps) => {
 };
 
 /**
- * The Preferences group: the Appearance row and the sheet it opens. The
- * choice applies at once; a save that fails puts the old theme back and
- * says so under the row.
- */
-const AppearancePreferences = () => {
-  const styles = useThemedStyles(createStyles);
-  const { preference, setPreference } = useAppearance();
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [saveFailed, setSaveFailed] = useState(false);
-
-  const choose = useCallback(
-    (next: AppearancePreference) => {
-      setPickerOpen(false);
-      setSaveFailed(false);
-      setPreference(next).catch(() => setSaveFailed(true));
-    },
-    [setPreference],
-  );
-
-  return (
-    <View>
-      <SectionHeader title="Preferences" />
-      <Card flush>
-        <ListRow
-          title="Appearance"
-          subtitle={APPEARANCE_SUMMARY[preference]}
-          onPress={() => setPickerOpen(true)}
-          testID="row-appearance"
-        />
-      </Card>
-      {saveFailed ? (
-        <Typography
-          variant="caption"
-          color="danger"
-          accessibilityLiveRegion="polite"
-          style={styles.preferenceError}
-          testID="text-appearance-error"
-        >
-          Could not save your theme. Try again.
-        </Typography>
-      ) : null}
-      <AppearanceSheet
-        visible={pickerOpen}
-        selected={preference}
-        onSelect={choose}
-        onClose={() => setPickerOpen(false)}
-      />
-    </View>
-  );
-};
-
-/**
  * Who the shooter is on this device and how much they have recorded: the
  * local profile from `ProfileStorageService`, with run and drill counts
  * from session and drill storage. There is no account behind any of it.
@@ -293,7 +269,12 @@ export const ProfileScreen = () => {
 
   if (state.status === 'loading') {
     return (
-      <Screen title="Profile" scrollable testID="screen-profile">
+      <Screen
+        title="Profile"
+        headerRight={<SettingsButton />}
+        scrollable
+        testID="screen-profile"
+      >
         <Card>
           <View style={styles.loading}>
             <Typography
@@ -311,7 +292,12 @@ export const ProfileScreen = () => {
 
   if (state.status === 'error') {
     return (
-      <Screen title="Profile" scrollable testID="screen-profile">
+      <Screen
+        title="Profile"
+        headerRight={<SettingsButton />}
+        scrollable
+        testID="screen-profile"
+      >
         <Card>
           <EmptyState
             icon="user"
@@ -329,7 +315,12 @@ export const ProfileScreen = () => {
   const { profile, runCount, drillCount } = state.overview;
 
   return (
-    <Screen title="Profile" scrollable testID="screen-profile">
+    <Screen
+      title="Profile"
+      headerRight={<SettingsButton />}
+      scrollable
+      testID="screen-profile"
+    >
       <Card>
         {editing ? (
           <ProfileEditor
@@ -374,8 +365,6 @@ export const ProfileScreen = () => {
           <Stat count={drillCount} noun="drill" testID="text-drill-count" />
         </View>
       </Card>
-
-      <AppearancePreferences />
     </Screen>
   );
 };

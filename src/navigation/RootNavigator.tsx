@@ -8,7 +8,7 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { SequenceEditorScreen } from '@/screens';
+import { SequenceEditorScreen, SettingsScreen } from '@/screens';
 import type { Theme } from '@/theme/theme';
 import type { RootStackParamList } from '@/types/navigation';
 import { useTheme } from '@hooks/useTheme';
@@ -63,6 +63,11 @@ export const RootNavigator = () => {
         <Stack.Screen
           name="SequenceEditor"
           component={SequenceEditorScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Settings"
+          component={SettingsScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

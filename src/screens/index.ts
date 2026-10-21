@@ -5,4 +5,5 @@ export * from './HistoryScreen';
 export * from './ProfileScreen';
 export * from './RunComparisonScreen';
 export * from './SequenceEditorScreen';
+export * from './SettingsScreen';
 export * from './TimerScreen';

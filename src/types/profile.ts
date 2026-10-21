@@ -1,7 +1,7 @@
 /**
  * Domain model for the local profile: who the Profile screen says the
- * shooter is, and how they want the app to look. There is one profile per
- * install and no account behind it. Persistence is handled by
+ * shooter is, and the display preferences Settings changes. There is one
+ * profile per install and no account behind it. Persistence is handled by
  * `ProfileStorageService`, which also normalises the name and handle and
  * stamps `updatedAt` — callers hand it a `ProfileChanges`.
  */
@@ -13,6 +13,16 @@
 export const APPEARANCE_PREFERENCES = ['system', 'light', 'dark'] as const;
 
 export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
+
+/**
+ * Every way a sound level can be shown, in the order a picker lists them.
+ * `level` is a 0–100 scale (-60 dBFS → 0, full scale → 100); `dbfs` is the
+ * raw reading. Display only: every level is measured, compared and kept
+ * in dBFS whichever is chosen.
+ */
+export const LEVEL_UNITS = ['level', 'dbfs'] as const;
+
+export type LevelUnit = (typeof LEVEL_UNITS)[number];
 
 /** Character every stored handle starts with. */
 export const HANDLE_PREFIX = '@';
@@ -59,6 +69,8 @@ export interface Profile {
   handle: string | null;
   /** Which theme the app should use. */
   appearance: AppearancePreference;
+  /** How sound levels are shown. */
+  levelUnit: LevelUnit;
   /**
    * ISO-8601 timestamp of the last change to the profile. `null` when the
    * profile has never been saved.
@@ -71,6 +83,7 @@ export const DEFAULT_PROFILE: Readonly<Profile> = Object.freeze({
   name: null,
   handle: null,
   appearance: 'system',
+  levelUnit: 'level',
   updatedAt: null,
 });
 
@@ -84,4 +97,5 @@ export interface ProfileChanges {
   name?: string | null;
   handle?: string | null;
   appearance?: AppearancePreference;
+  levelUnit?: LevelUnit;
 }

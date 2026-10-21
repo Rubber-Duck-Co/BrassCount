@@ -3,9 +3,11 @@ import {
   DEFAULT_PROFILE,
   HANDLE_BODY_PATTERN,
   HANDLE_PREFIX,
+  LEVEL_UNITS,
   MAX_PROFILE_HANDLE_LENGTH,
   MAX_PROFILE_NAME_LENGTH,
   type AppearancePreference,
+  type LevelUnit,
   type Profile,
   type ProfileChanges,
 } from '@/types/profile';
@@ -24,7 +26,8 @@ import { createStorageNamespace, StorageError } from './storage';
  * ProfileStorageService
  * ---------------------
  * Local persistence layer for the profile: the display name and handle the
- * Profile screen shows, and the Appearance preference the theme follows.
+ * Profile screen shows, and the display preferences Settings changes (the
+ * Appearance the theme follows and the unit sound levels are shown in).
  * There is no account behind it — the profile lives on this device only.
  *
  * Design notes:
@@ -36,7 +39,8 @@ import { createStorageNamespace, StorageError } from './storage';
  *     profile is migrated in place rather than abandoned under an old key.
  *   - A profile always exists as far as callers are concerned: until one
  *     is saved, `loadProfile` resolves to `DEFAULT_PROFILE` (no name, no
- *     handle, Appearance following the device).
+ *     handle, Appearance following the device, levels on the 0–100
+ *     scale).
  *   - Anything read back from storage is untrusted and checked field by
  *     field. Unlike a drill or a session, a field that fails falls back to
  *     its default on its own instead of discarding the whole value, so a
@@ -105,6 +109,9 @@ const isAppearancePreference = (
   value: unknown,
 ): value is AppearancePreference =>
   APPEARANCE_PREFERENCES.some(preference => preference === value);
+
+const isLevelUnit = (value: unknown): value is LevelUnit =>
+  LEVEL_UNITS.some(unit => unit === value);
 
 /**
  * Bring a name to its stored form (see `normalizeProfileName`). `null` and
@@ -192,13 +199,16 @@ const parseStoredProfile = (stored: unknown): Profile | null => {
     return null;
   }
 
-  const { name, handle, appearance, updatedAt } = stored.profile;
+  // A profile saved before a field existed reads that field as its
+  // default, so adding a field needs no schema bump.
+  const { name, handle, appearance, levelUnit, updatedAt } = stored.profile;
   return {
     name: readField(() => normalizeName(name), DEFAULT_PROFILE.name),
     handle: readField(() => normalizeHandle(handle), DEFAULT_PROFILE.handle),
     appearance: isAppearancePreference(appearance)
       ? appearance
       : DEFAULT_PROFILE.appearance,
+    levelUnit: isLevelUnit(levelUnit) ? levelUnit : DEFAULT_PROFILE.levelUnit,
     updatedAt: isTimestamp(updatedAt) ? updatedAt : DEFAULT_PROFILE.updatedAt,
   };
 };
@@ -232,11 +242,11 @@ const readStoredFields = async (): Promise<StoredProfile['profile']> => {
     return { ...DEFAULT_PROFILE };
   }
   // Only the known fields are carried over, never the whole stored object.
-  const { name, handle, appearance } = stored.profile as Record<
+  const { name, handle, appearance, levelUnit } = stored.profile as Record<
     string,
     unknown
   >;
-  return { name, handle, appearance, updatedAt: null };
+  return { name, handle, appearance, levelUnit, updatedAt: null };
 };
 
 // Queue of changes to the stored profile. `updateProfile` reads the
@@ -261,7 +271,7 @@ export async function loadProfile(): Promise<Profile> {
 }
 
 /**
- * Change the name, handle and/or Appearance preference.
+ * Change the name, handle, Appearance preference and/or level unit.
  *
  * Fields left out of `changes` keep their stored value, and `updatedAt` is
  * set to now. The name is trimmed and its inner whitespace collapsed; the
@@ -285,7 +295,8 @@ export async function loadProfile(): Promise<Profile> {
  * follow-up read. Rejects with `INVALID_INPUT` when the name is longer
  * than `MAX_PROFILE_NAME_LENGTH`, the handle is longer than
  * `MAX_PROFILE_HANDLE_LENGTH` or uses anything but letters, digits, `.`,
- * `_` and `-`, or the appearance is not one of `APPEARANCE_PREFERENCES`.
+ * `_` and `-`, the appearance is not one of `APPEARANCE_PREFERENCES`, or
+ * the level unit is not one of `LEVEL_UNITS`.
  */
 export async function updateProfile(
   changes: ProfileChanges,
@@ -307,6 +318,10 @@ export async function updateProfile(
       `Appearance must be one of: ${APPEARANCE_PREFERENCES.join(', ')}`,
     );
   }
+  const { levelUnit } = changes;
+  if (levelUnit !== undefined && !isLevelUnit(levelUnit)) {
+    throw invalid(`Level unit must be one of: ${LEVEL_UNITS.join(', ')}`);
+  }
 
   return inOrder(async () => {
     const updatedAt = getTimestamp();
@@ -323,6 +338,7 @@ export async function updateProfile(
         name: name === undefined ? existing.name : name,
         handle: handle === undefined ? existing.handle : handle,
         appearance: appearance ?? existing.appearance,
+        levelUnit: levelUnit ?? existing.levelUnit,
         updatedAt,
       },
     };
