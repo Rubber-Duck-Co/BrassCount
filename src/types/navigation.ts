@@ -5,6 +5,8 @@ export type RootStackParamList = {
   Details: { id: string };
   /** Omit `id` to build a new sequence. */
   SequenceEditor: { id?: string };
+  /** App preferences, opened from the Profile header. */
+  Settings: undefined;
 };
 
 export type MainTabParamList = {

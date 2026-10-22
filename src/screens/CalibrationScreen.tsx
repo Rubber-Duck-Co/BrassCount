@@ -11,6 +11,7 @@ import {
 
 import type { Theme } from '@/theme/theme';
 import type { CalibrationSound, SoundCalibration } from '@/types/calibration';
+import type { LevelUnit } from '@/types/profile';
 import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { Chip } from '@components/Chip';
@@ -23,9 +24,10 @@ import {
   type CalibrationCaptureMode,
   type CalibrationCaptureNoticeKind,
 } from '@hooks/useCalibrationCapture';
+import { useLevelUnit } from '@hooks/useLevelUnit';
 import { useThemedStyles } from '@hooks/useTheme';
 import { MIN_SAMPLE_DBFS, testOutcome } from '@utils/calibration';
-import { formatDecibels, spokenDecibels } from '@utils/format';
+import { formatLevel, spokenLevel } from '@utils/format';
 
 /**
  * dBFS range the meters are drawn against: full scale at the top, and a
@@ -34,6 +36,13 @@ import { formatDecibels, spokenDecibels } from '@utils/format';
  */
 const DBFS_METER_FLOOR = MIN_SAMPLE_DBFS;
 const DBFS_METER_CEILING = 0;
+
+/**
+ * The label under the meter's left end. Only the right end carries the
+ * unit (`0 … 100`, `-60 … 0 dBFS`), so the scale reads as one range.
+ */
+const meterFloorLabel = (unit: LevelUnit): string =>
+  unit === 'dbfs' ? `${DBFS_METER_FLOOR}` : formatLevel(DBFS_METER_FLOOR, unit);
 
 /**
  * Narrowest a piece of a card row may get before the row wraps, in dp at
@@ -231,6 +240,7 @@ const spokenSummary = (
   label: string,
   calibration: Readonly<SoundCalibration>,
   listening: boolean,
+  unit: LevelUnit,
 ): string => {
   // A test only ever belongs to a threshold, so there is none to report.
   if (calibration.status === 'uncalibrated') {
@@ -240,8 +250,8 @@ const spokenSummary = (
   const lastTest =
     outcome === null
       ? 'not tested yet'
-      : `last test ${spokenDecibels(calibration.lastTestDbfs)}, test ${outcome}`;
-  return `${label}, ${listening ? 'listening' : 'calibrated'}, threshold ${spokenDecibels(calibration.thresholdDbfs)}, ${lastTest}`;
+      : `last test ${spokenLevel(calibration.lastTestDbfs, unit)}, test ${outcome}`;
+  return `${label}, ${listening ? 'listening' : 'calibrated'}, threshold ${spokenLevel(calibration.thresholdDbfs, unit)}, ${lastTest}`;
 };
 
 type StatusChip = Pick<ComponentProps<typeof Chip>, 'label' | 'tone'>;
@@ -288,6 +298,7 @@ const feedbackFor = (
   calibration: Readonly<SoundCalibration>,
   listening: boolean,
   noticeKind: CalibrationCaptureNoticeKind | null,
+  unit: LevelUnit,
 ): Feedback | null => {
   if (listening) {
     return { message: `Listening. ${type.prompt} now.`, color: 'primary' };
@@ -313,8 +324,8 @@ const feedbackFor = (
       // Without this a recalibration that worked would end in silence for
       // a screen reader: the chip that turns to "Calibrated" is not live.
       return {
-        message: `Threshold set to ${formatDecibels(calibration.thresholdDbfs)}. Run a test to check it.`,
-        spoken: `Threshold set to ${spokenDecibels(calibration.thresholdDbfs)}. Run a test to check it.`,
+        message: `Threshold set to ${formatLevel(calibration.thresholdDbfs, unit)}. Run a test to check it.`,
+        spoken: `Threshold set to ${spokenLevel(calibration.thresholdDbfs, unit)}. Run a test to check it.`,
         color: 'textSecondary',
       };
   }
@@ -393,6 +404,7 @@ const CalibrationCard = memo((props: CalibrationCardProps) => {
     onCancel,
   } = props;
   const styles = useThemedStyles(createStyles);
+  const { levelUnit } = useLevelUnit();
 
   const { thresholdDbfs, status, lastTestDbfs } = calibration;
   const sound = type.label.toLowerCase();
@@ -405,7 +417,13 @@ const CalibrationCard = memo((props: CalibrationCardProps) => {
   const testDisabledHint = testDisabledReason(locked, recalibrating, status);
   const testDisabled = testDisabledHint !== undefined;
   const chip = statusChip(calibration, listening);
-  const feedback = feedbackFor(type, calibration, listening, noticeKind);
+  const feedback = feedbackFor(
+    type,
+    calibration,
+    listening,
+    noticeKind,
+    levelUnit,
+  );
 
   return (
     <Card testID={`card-calibration-${type.key}`}>
@@ -415,7 +433,12 @@ const CalibrationCard = memo((props: CalibrationCardProps) => {
        */}
       <View
         accessible
-        accessibilityLabel={spokenSummary(type.label, calibration, listening)}
+        accessibilityLabel={spokenSummary(
+          type.label,
+          calibration,
+          listening,
+          levelUnit,
+        )}
         testID={`summary-calibration-${type.key}`}
       >
         <View style={styles.cardHeader}>
@@ -461,26 +484,26 @@ const CalibrationCard = memo((props: CalibrationCardProps) => {
           )}
         </View>
 
-        <View style={styles.scaleRow}>
+        <View style={styles.scaleRow} testID={`scale-calibration-${type.key}`}>
           <Typography variant="caption" color="textTertiary">
-            {`${DBFS_METER_FLOOR}`}
+            {meterFloorLabel(levelUnit)}
           </Typography>
           <Typography variant="caption" color="textTertiary">
-            {formatDecibels(DBFS_METER_CEILING)}
+            {formatLevel(DBFS_METER_CEILING, levelUnit)}
           </Typography>
         </View>
 
         <View style={styles.readoutRow}>
           <Readout
             label="Threshold"
-            value={formatDecibels(thresholdDbfs)}
+            value={formatLevel(thresholdDbfs, levelUnit)}
             swatchStyle={styles.thresholdSwatch}
             minWidth={halfRowMinWidth}
             valueTestID={`text-threshold-${type.key}`}
           />
           <Readout
             label="Last test"
-            value={formatDecibels(lastTestDbfs)}
+            value={formatLevel(lastTestDbfs, levelUnit)}
             swatchStyle={styles.lastTestSwatch}
             minWidth={halfRowMinWidth}
             valueTestID={`text-last-test-${type.key}`}

@@ -1,5 +1,9 @@
 /** Presentation-layer formatters. Pure functions, no side effects. */
 
+import type { LevelUnit } from '@/types/profile';
+
+import { MIN_SAMPLE_DBFS } from './calibration';
+
 /**
  * Seconds → `M:SS.hh` while a drill runs, or `S.hh` under a minute so the
  * timer stays readable at a glance.
@@ -27,21 +31,49 @@ export const formatSeconds = (seconds: number): string =>
 export const spokenSeconds = (seconds: number): string =>
   `${seconds} second${seconds === 1 ? '' : 's'}`;
 
-/** Level → `-12 dB`, rounded to a whole decibel; `—` when there is none. */
-export const formatDecibels = (decibels: number | null): string =>
-  // `+ 0` turns the -0 that rounding -0.4 gives into a plain 0.
-  decibels === null ? '—' : `${Math.round(decibels) + 0} dB`;
+/** Highest value on the 0–100 level scale: a full-scale (0 dBFS) sound. */
+const LEVEL_SCALE_MAX = 100;
 
 /**
- * The same level as a screen reader should say it: `minus 12 decibels`.
- * A bare `-12 dB` is announced inconsistently, and `—` not at all.
+ * A dBFS reading → the 0–100 level scale: `MIN_SAMPLE_DBFS` (the quietest
+ * sound calibration counts) is 0 and full scale is 100, linear in dB
+ * between them. Clamped to the scale and rounded to a whole number.
  */
-export const spokenDecibels = (decibels: number | null): string => {
-  if (decibels === null) {
+export const dbfsToLevel = (dbfs: number): number => {
+  const ratio = (dbfs - MIN_SAMPLE_DBFS) / -MIN_SAMPLE_DBFS;
+  const clamped = Math.min(1, Math.max(0, ratio));
+  // `+ 0` turns any -0 from rounding into a plain 0.
+  return Math.round(clamped * LEVEL_SCALE_MAX) + 0;
+};
+
+/** A dBFS reading rounded to a whole decibel, never -0. */
+const wholeDbfs = (dbfs: number): number => Math.round(dbfs) + 0;
+
+/**
+ * A dBFS reading in the shooter's chosen unit: `72` on the level scale or
+ * `-12 dBFS`. `—` when there is none.
+ */
+export const formatLevel = (dbfs: number | null, unit: LevelUnit): string => {
+  if (dbfs === null) {
+    return '—';
+  }
+  return unit === 'level' ? `${dbfsToLevel(dbfs)}` : `${wholeDbfs(dbfs)} dBFS`;
+};
+
+/**
+ * The same level as a screen reader should say it: `level 72`, or
+ * `minus 12 decibels full scale`. A bare `-12 dBFS` is announced
+ * inconsistently, and `—` not at all.
+ */
+export const spokenLevel = (dbfs: number | null, unit: LevelUnit): string => {
+  if (dbfs === null) {
     return 'not set';
   }
-  const rounded = Math.round(decibels) + 0;
-  return `${rounded < 0 ? 'minus ' : ''}${Math.abs(rounded)} decibels`;
+  if (unit === 'level') {
+    return `level ${dbfsToLevel(dbfs)}`;
+  }
+  const rounded = wholeDbfs(dbfs);
+  return `${rounded < 0 ? 'minus ' : ''}${Math.abs(rounded)} decibels full scale`;
 };
 
 /** ISO-8601 → `15 Aug 2026`. */

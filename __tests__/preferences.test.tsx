@@ -2,14 +2,17 @@ import { Text, useColorScheme } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
-import { useAppearance } from '../src/hooks/useAppearance';
+import {
+  useAppearance,
+  type AppearanceValue,
+} from '../src/hooks/useAppearance';
+import { useLevelUnit, type LevelUnitValue } from '../src/hooks/useLevelUnit';
 import { useTheme } from '../src/hooks/useTheme';
 import { mirrorAppearance } from '../src/services/appearanceMirror';
 import {
-  AppearanceProvider,
-  type AppearanceContextValue,
-  type AppearanceProviderProps,
-} from '../src/store/AppearanceContext';
+  PreferencesProvider,
+  type PreferencesProviderProps,
+} from '../src/store/PreferencesContext';
 import { resolveThemeMode } from '../src/theme/theme';
 import { DEFAULT_PROFILE, type Profile } from '../src/types/profile';
 
@@ -25,11 +28,15 @@ jest.mock('../src/services/appearanceMirror', () => ({
 const mockedColorScheme = jest.mocked(useColorScheme);
 const mockedMirror = jest.mocked(mirrorAppearance);
 
-type Storage = NonNullable<AppearanceProviderProps['storage']>;
+type Storage = NonNullable<PreferencesProviderProps['storage']>;
 
-const profileWith = (appearance: Profile['appearance']): Profile => ({
+const profileWith = (
+  appearance: Profile['appearance'],
+  levelUnit: Profile['levelUnit'] = DEFAULT_PROFILE.levelUnit,
+): Profile => ({
   ...DEFAULT_PROFILE,
   appearance,
+  levelUnit,
 });
 
 /** A promise and the functions that settle it, for ordering saves by hand. */
@@ -43,11 +50,13 @@ const deferred = <T,>() => {
   return { promise, resolve, reject };
 };
 
-let appearance: AppearanceContextValue | undefined;
+let appearance: AppearanceValue | undefined;
+let levelUnit: LevelUnitValue | undefined;
 
-/** Shows the theme in use and keeps a handle on the context for the test. */
+/** Shows the theme in use and keeps a handle on the hooks for the test. */
 const Probe = () => {
   appearance = useAppearance();
+  levelUnit = useLevelUnit();
   return <Text testID="text-theme-mode">{useTheme().mode}</Text>;
 };
 
@@ -57,9 +66,9 @@ const render = (storage: Storage): ReactTestRenderer => {
   let tree: ReactTestRenderer | undefined;
   act(() => {
     tree = create(
-      <AppearanceProvider storage={storage}>
+      <PreferencesProvider storage={storage}>
         <Probe />
-      </AppearanceProvider>,
+      </PreferencesProvider>,
     );
   });
   if (tree === undefined) {
@@ -119,7 +128,7 @@ describe('useTheme', () => {
     mockedColorScheme.mockReturnValue('light');
   });
 
-  it('follows the device when there is no AppearanceProvider', () => {
+  it('follows the device when there is no PreferencesProvider', () => {
     mockedColorScheme.mockReturnValue('dark');
     const ThemeOnly = () => <Text testID="mode">{useTheme().mode}</Text>;
     let tree: ReactTestRenderer | undefined;
@@ -134,12 +143,13 @@ describe('useTheme', () => {
   });
 });
 
-describe('AppearanceProvider', () => {
+describe('PreferencesProvider', () => {
   afterEach(() => {
     act(() => {
       mounted.splice(0).forEach(tree => tree.unmount());
     });
     appearance = undefined;
+    levelUnit = undefined;
     mockedColorScheme.mockReturnValue('light');
     mockedMirror.mockClear();
   });
@@ -336,6 +346,173 @@ describe('AppearanceProvider', () => {
       act(() => {
         create(<Orphan />);
       });
-    }).toThrow(/AppearanceProvider/);
+    }).toThrow(/PreferencesProvider/);
+  });
+
+  it('throws when useLevelUnit is used outside the provider', () => {
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    const Orphan = () => {
+      useLevelUnit();
+      return null;
+    };
+
+    expect(() => {
+      act(() => {
+        create(<Orphan />);
+      });
+    }).toThrow(/PreferencesProvider/);
+  });
+
+  describe('level units', () => {
+    /** Pick a unit and return its save, as `choose` does for Appearance. */
+    const chooseUnit = async (
+      unit: Profile['levelUnit'],
+    ): Promise<{ saved: Promise<void> }> => {
+      let saved: Promise<void> = Promise.resolve();
+      await act(async () => {
+        saved = levelUnit!.setLevelUnit(unit);
+        saved.catch(() => {});
+      });
+      return { saved };
+    };
+
+    it('starts on the level scale when nothing is stored', async () => {
+      render({ load: async () => DEFAULT_PROFILE, update: jest.fn() });
+      await flush();
+
+      expect(levelUnit!.levelUnit).toBe('level');
+    });
+
+    it('reads the stored unit', async () => {
+      render({
+        load: async () => profileWith('light', 'dbfs'),
+        update: jest.fn(),
+      });
+      await flush();
+
+      expect(levelUnit!.levelUnit).toBe('dbfs');
+    });
+
+    it('starts on the level scale when the stored unit cannot be read', async () => {
+      render({
+        load: () => Promise.reject(new Error('unreadable')),
+        update: jest.fn(),
+      });
+      await flush();
+
+      expect(levelUnit!.levelUnit).toBe('level');
+    });
+
+    it('applies a unit before the save finishes, and stores only that field', async () => {
+      const save = deferred<Profile>();
+      const update = jest.fn(() => save.promise);
+      render({ load: async () => DEFAULT_PROFILE, update });
+      await flush();
+
+      await chooseUnit('dbfs');
+
+      expect(levelUnit!.levelUnit).toBe('dbfs');
+      expect(update).toHaveBeenCalledWith({ levelUnit: 'dbfs' });
+
+      await act(async () => {
+        save.resolve(profileWith('system', 'dbfs'));
+      });
+      expect(levelUnit!.levelUnit).toBe('dbfs');
+    });
+
+    it('does not mirror anything for a unit change', async () => {
+      render({
+        load: async () => DEFAULT_PROFILE,
+        update: async () => profileWith('system', 'dbfs'),
+      });
+      await flush();
+      mockedMirror.mockClear();
+
+      const { saved } = await chooseUnit('dbfs');
+      await saved;
+
+      expect(mockedMirror).not.toHaveBeenCalled();
+    });
+
+    it('goes back to the saved unit and rejects when the save fails', async () => {
+      const failure = new Error('disk full');
+      render({
+        load: async () => profileWith('system', 'level'),
+        update: () => Promise.reject(failure),
+      });
+      await flush();
+
+      const { saved } = await chooseUnit('dbfs');
+
+      await expect(saved).rejects.toBe(failure);
+      expect(levelUnit!.levelUnit).toBe('level');
+    });
+
+    it('keeps a later unit, without an error, when an earlier save fails', async () => {
+      const first = deferred<Profile>();
+      const second = deferred<Profile>();
+      const update = jest
+        .fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      render({ load: async () => DEFAULT_PROFILE, update });
+      await flush();
+
+      const { saved: firstSaved } = await chooseUnit('dbfs');
+      await chooseUnit('level');
+      await act(async () => {
+        first.reject(new Error('disk full'));
+      });
+
+      await expect(firstSaved).resolves.toBeUndefined();
+      expect(levelUnit!.levelUnit).toBe('level');
+    });
+
+    it('does not undo an appearance choice when a unit save fails', async () => {
+      const appearanceSave = deferred<Profile>();
+      const unitSave = deferred<Profile>();
+      const update = jest
+        .fn()
+        .mockReturnValueOnce(appearanceSave.promise)
+        .mockReturnValueOnce(unitSave.promise);
+      const tree = render({ load: async () => profileWith('light'), update });
+      await flush();
+
+      await choose('dark');
+      const { saved } = await chooseUnit('dbfs');
+      await act(async () => {
+        unitSave.reject(new Error('disk full'));
+      });
+
+      await expect(saved).rejects.toThrow('disk full');
+      expect(levelUnit!.levelUnit).toBe('level');
+      expect(modeShown(tree)).toBe('dark');
+
+      await act(async () => {
+        appearanceSave.resolve(profileWith('dark'));
+      });
+      expect(modeShown(tree)).toBe('dark');
+    });
+
+    it('does not undo a unit choice when an appearance save fails', async () => {
+      const appearanceSave = deferred<Profile>();
+      const unitSave = deferred<Profile>();
+      const update = jest
+        .fn()
+        .mockReturnValueOnce(unitSave.promise)
+        .mockReturnValueOnce(appearanceSave.promise);
+      const tree = render({ load: async () => profileWith('light'), update });
+      await flush();
+
+      await chooseUnit('dbfs');
+      const { saved } = await choose('dark');
+      await act(async () => {
+        appearanceSave.reject(new Error('disk full'));
+      });
+
+      await expect(saved).rejects.toThrow('disk full');
+      expect(modeShown(tree)).toBe('light');
+      expect(levelUnit!.levelUnit).toBe('dbfs');
+    });
   });
 });

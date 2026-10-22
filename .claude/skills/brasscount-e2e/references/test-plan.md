@@ -61,8 +61,8 @@ Calibration lives in memory only, so force-stop the app (`d stop-app`, `d launch
 4.1 Every card (`card-calibration-shot`, `-reload`, `-rack`) reads Not calibrated (`chip-calibration-*`), and its Test button is disabled.
 4.2 `d synth silent`, Recalibrate shot: the chip reads Listening, the pressed button reads Cancel, every other Recalibrate / Test button is disabled. About 3 s later it reports no sound heard (`text-feedback-shot`), and the chip is still Not calibrated.
 4.3 Cancel: start a Recalibrate and press Cancel straight away; it stops listening and nothing changes.
-4.4 `d synth clicks -3 500`, Recalibrate shot, reload and rack in turn: each becomes Calibrated with a threshold of about -9 dBFS (6 dB under the -3 dBFS clicks), and the meter fills to it.
-4.5 Test shot with `clicks -3 500`: Test passed, last test about -3 dBFS, tick on the meter.
+4.4 `d synth clicks -3 500`, Recalibrate shot, reload and rack in turn: each becomes Calibrated with a threshold of about -9 dBFS (6 dB under the -3 dBFS clicks), and the meter fills to it. With Level units on Level (the default) the readout shows about `85` and the scale reads `0 … 100`; on dBFS it shows `-9 dBFS` and `-60 … 0 dBFS` (see 9.5).
+4.5 Test shot with `clicks -3 500`: Test passed, last test about -3 dBFS (Level `95`), tick on the meter.
 4.6 `d synth clicks -20 500`, Test shot: Test failed, with the feedback line saying so; the threshold is unchanged.
 4.7 Leaving the tab mid-capture cancels it (start a Recalibrate, tap another tab, come back: not Listening).
 4.8 There is no Recalibrate all button under the three cards; the disabled Test button on an uncalibrated card reads a hint (Recalibrate this sound first).
@@ -117,15 +117,16 @@ Note History's Runs counter before this area.
 8.6 Delete a drill that has runs (`ZZE2EGone`'s, or make one): its runs stay listed under Deleted drill, and the detail title reads Deleted drill.
 8.7 Back (`btn-back`) returns to the list and the tab bar stayed visible throughout.
 
-## 9. Profile and appearance
+## 9. Profile and Settings
 
-Write down the profile's name, handle and Appearance setting before touching anything, and put them back at the end of this area.
+Write down the profile's name, handle, and Settings' Appearance and Level units before touching anything, and put them back at the end of this area.
 
 9.1 The Runs and Drills counters match History's Runs and the Drills tab's count (Profile counts the whole library).
 9.2 Edit (`btn-edit-profile`): change the name and handle (`input-profile-name`, `input-profile-handle`; type `e2ehandle` without the @). Save: the handle shows as `@e2ehandle`. Cancel (`btn-cancel-profile`) on a second edit discards it.
 9.3 Clearing the name or handle (empty field) and saving clears it.
-9.4 Appearance (`row-appearance`) → Light / Dark / System (`opt-appearance-*`) applies at once (screenshot each); choosing an option closes the sheet, and `btn-appearance-close` (the backdrop) closes it without a change. The choice survives a force-stop and relaunch.
-9.5 Restore the original name, handle and appearance, and check them on screen.
+9.4 Profile has no Preferences section. The gear (`btn-open-settings`, top right) opens Settings (`screen-settings`) over the tabs; `btn-back` returns to Profile. Settings → Display → Appearance (`row-appearance`) → Light / Dark / System (`opt-appearance-*`) applies at once (screenshot each); choosing an option closes the sheet, and `btn-appearance-close` (the backdrop) closes it without a change. The choice survives a force-stop and relaunch.
+9.5 Settings → Display → Level units (`row-level-unit`) → Level / dBFS (`opt-level-unit-*`); `btn-level-unit-close` closes without a change. With a sound calibrated, the Calibration readouts, scale labels and "Threshold set to …" line switch unit at once (Level `85` ↔ `-9 dBFS` for 4.4's threshold). The unit survives a force-stop and relaunch (calibration itself does not).
+9.6 Restore the original name, handle, appearance and level unit, and check them on screen.
 
 ## 10. Display settings: dark mode and large text
 

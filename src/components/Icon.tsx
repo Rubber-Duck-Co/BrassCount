@@ -13,7 +13,11 @@ export type IconName =
   | 'play'
   | 'chevron'
   | 'check'
-  | 'pencil';
+  | 'pencil'
+  | 'settings';
+
+/** Angles of the gear's eight teeth, in degrees. */
+const GEAR_TEETH = [0, 45, 90, 135, 180, 225, 270, 315];
 
 type IconProps = {
   name: IconName;
@@ -250,6 +254,29 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
               transform: [{ rotate: '-45deg' }],
             })}
           />
+        </View>
+      );
+
+    case 'settings':
+      // A gear: a thick ring with eight teeth, each a short bar turned to
+      // its angle and then pushed out from the centre along it.
+      return (
+        <View key={name} style={box}>
+          {GEAR_TEETH.map(angle => (
+            <View
+              key={angle}
+              style={bar({
+                width: stroke * 2,
+                height: size * 0.22,
+                borderRadius: stroke / 2,
+                transform: [
+                  { rotate: `${angle}deg` },
+                  { translateY: -size * 0.36 },
+                ],
+              })}
+            />
+          ))}
+          <View style={ring(size * 0.62, stroke * 1.4)} />
         </View>
       );
   }

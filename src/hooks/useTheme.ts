@@ -3,19 +3,20 @@ import { useContext, useMemo } from 'react';
 import { StyleSheet, useColorScheme } from 'react-native';
 
 import { resolveThemeMode, themes, type Theme } from '@/theme/theme';
-import { AppearanceContext } from '@store/AppearanceContext';
+import { PreferencesContext } from '@store/PreferencesContext';
 
 /**
  * Resolves the active theme from the Appearance preference in the profile
- * (`AppearanceProvider`), following the OS color scheme when it is
+ * (`PreferencesProvider`), following the OS color scheme when it is
  * `system` — or when there is no provider, as for a component rendered on
  * its own in a test. Screens/components should get every design token from
  * here — never import the theme module directly.
  */
 export const useTheme = (): Theme => {
   const scheme = useColorScheme();
-  const appearance = useContext(AppearanceContext);
-  return themes[resolveThemeMode(appearance?.preference ?? 'system', scheme)];
+  const preferences = useContext(PreferencesContext);
+  const appearance = preferences?.preferences.appearance ?? 'system';
+  return themes[resolveThemeMode(appearance, scheme)];
 };
 
 /**

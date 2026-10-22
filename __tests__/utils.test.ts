@@ -1,14 +1,15 @@
 import {
+  dbfsToLevel,
   formatDate,
   formatDateTime,
-  formatDecibels,
   formatElapsed,
+  formatLevel,
   formatSeconds,
   formatSignedSeconds,
   formatTimeAgo,
   pluralize,
   spokenDateTime,
-  spokenDecibels,
+  spokenLevel,
   spokenSeconds,
   spokenTimeAgo,
 } from '@utils/format';
@@ -26,18 +27,55 @@ describe('format utilities', () => {
     expect(formatSeconds(1.236)).toBe('1.24s');
   });
 
-  it('formats a level in whole decibels, or a dash when there is none', () => {
-    expect(formatDecibels(-12.4)).toBe('-12 dB');
-    expect(formatDecibels(0)).toBe('0 dB');
-    expect(formatDecibels(-0.4)).toBe('0 dB');
-    expect(formatDecibels(null)).toBe('—');
-  });
+  describe('levels', () => {
+    it('maps -60 dBFS to 0 and full scale to 100 on the level scale', () => {
+      expect(dbfsToLevel(-60)).toBe(0);
+      expect(dbfsToLevel(-30)).toBe(50);
+      expect(dbfsToLevel(0)).toBe(100);
+    });
 
-  it('words a level for a screen reader', () => {
-    expect(spokenDecibels(-12.4)).toBe('minus 12 decibels');
-    expect(spokenDecibels(0)).toBe('0 decibels');
-    expect(spokenDecibels(-0.4)).toBe('0 decibels');
-    expect(spokenDecibels(null)).toBe('not set');
+    it('clamps a reading outside -60 to 0 dBFS to the ends of the level scale', () => {
+      expect(dbfsToLevel(-60.1)).toBe(0);
+      expect(dbfsToLevel(-160)).toBe(0);
+      expect(dbfsToLevel(3)).toBe(100);
+    });
+
+    it('rounds a level to a whole number, never -0', () => {
+      // 49.5 rounds up and 49.17 down, so floor or ceil would fail one.
+      expect(dbfsToLevel(-30.3)).toBe(50);
+      expect(dbfsToLevel(-30.5)).toBe(49);
+      expect(Object.is(dbfsToLevel(-60.4), 0)).toBe(true);
+    });
+
+    it('formats a level on the 0 to 100 scale, or a dash when there is none', () => {
+      expect(formatLevel(-12.4, 'level')).toBe('79');
+      expect(formatLevel(-60, 'level')).toBe('0');
+      expect(formatLevel(-160, 'level')).toBe('0');
+      expect(formatLevel(0, 'level')).toBe('100');
+      expect(formatLevel(null, 'level')).toBe('—');
+    });
+
+    it('formats a level in whole dBFS, or a dash when there is none', () => {
+      expect(formatLevel(-12.4, 'dbfs')).toBe('-12 dBFS');
+      expect(formatLevel(-12.6, 'dbfs')).toBe('-13 dBFS');
+      expect(formatLevel(0, 'dbfs')).toBe('0 dBFS');
+      expect(formatLevel(-0.4, 'dbfs')).toBe('0 dBFS');
+      expect(formatLevel(-160, 'dbfs')).toBe('-160 dBFS');
+      expect(formatLevel(null, 'dbfs')).toBe('—');
+    });
+
+    it('words a level on the 0 to 100 scale for a screen reader', () => {
+      expect(spokenLevel(-12.4, 'level')).toBe('level 79');
+      expect(spokenLevel(-160, 'level')).toBe('level 0');
+      expect(spokenLevel(null, 'level')).toBe('not set');
+    });
+
+    it('words a dBFS level for a screen reader', () => {
+      expect(spokenLevel(-12.4, 'dbfs')).toBe('minus 12 decibels full scale');
+      expect(spokenLevel(0, 'dbfs')).toBe('0 decibels full scale');
+      expect(spokenLevel(-0.4, 'dbfs')).toBe('0 decibels full scale');
+      expect(spokenLevel(null, 'dbfs')).toBe('not set');
+    });
   });
 
   it('formats dates and handles invalid input', () => {

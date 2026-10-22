@@ -11,8 +11,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useTheme } from '@hooks/useTheme';
 import { RootNavigator } from '@navigation/RootNavigator';
-import { AppearanceProvider } from '@store/AppearanceContext';
 import { CalibrationProvider } from '@store/CalibrationContext';
+import { PreferencesProvider } from '@store/PreferencesContext';
 
 /** Status bar icons that stay readable on the theme in use. */
 const ThemedStatusBar = () => {
@@ -29,13 +29,13 @@ function App() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         {/* Holds back the app until the stored theme is known. */}
-        <AppearanceProvider>
+        <PreferencesProvider>
           <ThemedStatusBar />
           {/* Above the navigators, so calibration outlives any screen. */}
           <CalibrationProvider>
             <RootNavigator />
           </CalibrationProvider>
-        </AppearanceProvider>
+        </PreferencesProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
