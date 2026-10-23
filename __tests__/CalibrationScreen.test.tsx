@@ -40,7 +40,7 @@ import {
 } from '../src/store/PreferencesContext';
 import { CALIBRATION_SOUNDS } from '../src/types/calibration';
 import type { CalibrationSound } from '../src/types/calibration';
-import type { LevelUnit } from '../src/types/profile';
+import { DEFAULT_PROFILE, type LevelUnit } from '../src/types/profile';
 import { CALIBRATION_LISTEN_MS } from '../src/utils/calibration';
 
 // The native module itself is mocked globally in jest.setup.js.
@@ -88,7 +88,12 @@ const LevelUnitHolder = ({
   onSetter(setLevelUnit);
   const value = useMemo<PreferencesContextValue>(
     () => ({
-      preferences: { appearance: 'system', levelUnit },
+      preferences: {
+        appearance: 'system',
+        levelUnit,
+        startDelay: DEFAULT_PROFILE.startDelay,
+        beepVolume: DEFAULT_PROFILE.beepVolume,
+      },
       setPreference: async () => {},
     }),
     [levelUnit],

@@ -64,6 +64,26 @@ export async function releaseStartSequence(
   await player.release();
 }
 
+/**
+ * Sound the start beep once, with no delay and no run, so the shooter can
+ * hear a volume before using it. Rejects with `StartSequenceError` when
+ * the audio output cannot be opened or the beep cannot be played.
+ *
+ * The output is left open, as the Timer leaves it: it is shared with the
+ * Timer's runs, which open it again anyway when they next need it.
+ */
+export async function playTestBeep(
+  beep: BeepSpec = DEFAULT_BEEP,
+  player: BeepPlayer = sharedPlayer,
+): Promise<void> {
+  await prepareStartSequence(player);
+  try {
+    await player.play(beep);
+  } catch (err) {
+    throw new StartSequenceError('Failed to play the test beep', err);
+  }
+}
+
 export async function startSequence(
   options: StartSequenceOptions = {},
 ): Promise<StartSequenceResult> {
@@ -131,11 +151,14 @@ export async function startSequence(
 }
 
 export const StartSequenceService = {
-  minDelayMs: DEFAULT_MIN_DELAY_MS,
-  maxDelayMs: DEFAULT_MAX_DELAY_MS,
+  // Used only when a caller passes no range; the Timer passes the one
+  // stored in Settings.
+  defaultMinDelayMs: DEFAULT_MIN_DELAY_MS,
+  defaultMaxDelayMs: DEFAULT_MAX_DELAY_MS,
   beep: DEFAULT_BEEP,
   prepare: prepareStartSequence,
   start: startSequence,
+  testBeep: playTestBeep,
   release: releaseStartSequence,
 };
 

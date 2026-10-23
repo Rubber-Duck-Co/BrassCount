@@ -42,9 +42,9 @@ Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial
 
 ### Invariants
 
-- **State.** No state-management library: screens use `useState`/`useRef`. The only shared state is calibration and the display preferences (Appearance, level units), both React Context in `src/store/`.
+- **State.** No state-management library: screens use `useState`/`useRef`. The only shared state is calibration and the preferences (Appearance, level units, start delay, beep volume), both React Context in `src/store/`.
 - **Calibration is deliberately in-memory only.** It resets when the app closes; do not persist it through `storage.ts`. Levels are dBFS and pass through `normalizeDbfs`. Keep the live microphone level out of the store.
-- **Display preferences** are read once from the profile; `PreferencesProvider` renders nothing until it has. Components get the resolved theme only from `useTheme()`. Level units are display only: format levels with `formatLevel`/`spokenLevel`.
+- **Preferences** are read once from the profile; `PreferencesProvider` renders nothing until it has. Components get the resolved theme only from `useTheme()`. Level units are display only: format levels with `formatLevel`/`spokenLevel`. A run reads start delay and beep volume when it starts; the shortest delay stays at least `CAPTURE_CLOCK_SETTLE_MS`.
 - **Persistence.** Only `storage.ts` touches AsyncStorage. Stored shapes are `{ schemaVersion, … }` envelopes: a shape change bumps the version and upgrades older envelopes on read. Reads are validated field by field and a bad entry is skipped. Drill and profile changes go through a serial queue.
 - **Sessions** are never updated after saving. Deleting a drill deletes its sessions first (`useDrills`), then the drill. Orphans left by older versions are not swept; history shows them as `DELETED_DRILL_NAME`.
 - **Timing** uses the readings' own capture-clock timestamps, never the time a reading reaches JS. Nothing about a run is stored until the shooter saves it.
