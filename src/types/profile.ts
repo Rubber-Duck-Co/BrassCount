@@ -1,6 +1,7 @@
 /**
  * Domain model for the local profile: who the Profile screen says the
- * shooter is, and the display preferences Settings changes. There is one
+ * shooter is, and the preferences Settings changes (display, and the
+ * timer's start delay and beep volume). There is one
  * profile per install and no account behind it. Persistence is handled by
  * `ProfileStorageService`, which also normalises the name and handle and
  * stamps `updatedAt` — callers hand it a `ProfileChanges`.
@@ -23,6 +24,38 @@ export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 export const LEVEL_UNITS = ['level', 'dbfs'] as const;
 
 export type LevelUnit = (typeof LEVEL_UNITS)[number];
+
+/**
+ * The range the random delay before the start beep is drawn from, in
+ * milliseconds. `minMs` equal to `maxMs` is a fixed delay.
+ */
+export interface StartDelayRange {
+  minMs: number;
+  maxMs: number;
+}
+
+/**
+ * Shortest start delay that can be chosen, in milliseconds. Not lower: the
+ * delay is what lets the microphone's timestamps settle
+ * (`CAPTURE_CLOCK_SETTLE_MS`, 750 ms) before the beep, and the next step
+ * down is 0.5 s.
+ */
+export const MIN_START_DELAY_MS = 1000;
+/** Longest start delay that can be chosen, in milliseconds. */
+export const MAX_START_DELAY_MS = 10_000;
+/** Start delays are chosen in steps of this many milliseconds. */
+export const START_DELAY_STEP_MS = 500;
+
+/**
+ * Every beep volume, quietest first, in the order a picker lists them.
+ * Presets rather than a free value: there is no slider component, and
+ * three large choices are easy to hit with gloves on. App volume only:
+ * the phone's own media volume is never changed, so `full` is the
+ * loudest the app can play and the others step down from it.
+ */
+export const BEEP_VOLUMES = ['quiet', 'medium', 'full'] as const;
+
+export type BeepVolume = (typeof BEEP_VOLUMES)[number];
 
 /** Character every stored handle starts with. */
 export const HANDLE_PREFIX = '@';
@@ -71,6 +104,10 @@ export interface Profile {
   appearance: AppearancePreference;
   /** How sound levels are shown. */
   levelUnit: LevelUnit;
+  /** The range the random delay before each run's start beep comes from. */
+  startDelay: StartDelayRange;
+  /** How loud the start beep is. */
+  beepVolume: BeepVolume;
   /**
    * ISO-8601 timestamp of the last change to the profile. `null` when the
    * profile has never been saved.
@@ -84,6 +121,9 @@ export const DEFAULT_PROFILE: Readonly<Profile> = Object.freeze({
   handle: null,
   appearance: 'system',
   levelUnit: 'level',
+  // The 1 to 5 s the start sequence has always used.
+  startDelay: Object.freeze({ minMs: 1000, maxMs: 5000 }),
+  beepVolume: 'full',
   updatedAt: null,
 });
 
@@ -98,4 +138,7 @@ export interface ProfileChanges {
   handle?: string | null;
   appearance?: AppearancePreference;
   levelUnit?: LevelUnit;
+  /** Both ends together, so the range is checked as a whole. */
+  startDelay?: StartDelayRange;
+  beepVolume?: BeepVolume;
 }

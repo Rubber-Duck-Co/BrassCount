@@ -4,8 +4,10 @@ import { useFocusEffect } from '@react-navigation/native';
 
 import type { CalibrationSound, CalibrationState } from '@/types/calibration';
 import type { DrillStep } from '@/types/drill';
+import type { BeepVolume, StartDelayRange } from '@/types/profile';
 import type { RunResult, StepResult } from '@/types/run';
 import { useCalibration } from '@hooks/useCalibration';
+import { useTimerSettings } from '@hooks/useTimerSettings';
 import { AudioCaptureService } from '@services/audioCapture';
 import {
   DrillRunAbortError,
@@ -18,6 +20,7 @@ import {
   StartSequenceError,
   StartSequenceService,
 } from '@services/startSequence';
+import { BEEP_VOLUME_GAIN } from '@utils/startSettings';
 
 /**
  * Where a run is. `arming`: the microphone is being opened. `waiting`: the
@@ -147,6 +150,10 @@ const endRun = async (
 
 type StartSequenceOptions = {
   run: DrillRun;
+  /** The range the delay before the beep is drawn from. */
+  startDelay: StartDelayRange;
+  /** How loud the beep is. */
+  beepVolume: BeepVolume;
   signal: AbortSignal;
   /** Settles when the previous run has let go of the microphone. */
   before: Promise<void>;
@@ -162,6 +169,8 @@ type StartSequenceOptions = {
 /** Open the microphone, then sound the beep and let the run begin on it. */
 const runStartSequence = async ({
   run,
+  startDelay,
+  beepVolume,
   signal,
   before,
   isCurrent,
@@ -182,6 +191,12 @@ const runStartSequence = async ({
     }
     goTo('waiting');
     await StartSequenceService.start({
+      minDelayMs: startDelay.minMs,
+      maxDelayMs: startDelay.maxMs,
+      beep: {
+        ...StartSequenceService.beep,
+        volume: BEEP_VOLUME_GAIN[beepVolume],
+      },
       signal,
       onTrigger: () => {
         run.begin();
@@ -209,13 +224,15 @@ const runStartSequence = async ({
  * sounds the start beep after a random delay, and follows the drill run
  * engine as it hears each step.
  *
- * Thresholds come from the calibration store as they are when the run
+ * Thresholds come from the calibration store, and the start delay range
+ * and beep volume from the timer settings, as they are when the run
  * starts. A run is stopped when the screen loses focus or unmounts, so the
  * microphone is never left listening behind another tab, and it ends on
  * its own when the app is left, since capture only runs in the foreground.
  */
 export const useDrillRun = (): UseDrillRunResult => {
   const { state: calibration } = useCalibration();
+  const { startDelay, beepVolume } = useTimerSettings();
   const [phase, setPhase] = useState<DrillRunPhase>('idle');
   const [results, setResults] = useState<readonly StepResult[]>([]);
   const [result, setResult] = useState<RunResult | null>(null);
@@ -352,6 +369,8 @@ export const useDrillRun = (): UseDrillRunResult => {
       // rejects.
       settledRef.current = runStartSequence({
         run,
+        startDelay,
+        beepVolume,
         signal: controller.signal,
         before,
         isCurrent,
@@ -366,7 +385,7 @@ export const useDrillRun = (): UseDrillRunResult => {
         },
       }).catch(() => {});
     },
-    [abandon, calibration, finish, goTo],
+    [abandon, beepVolume, calibration, finish, goTo, startDelay],
   );
 
   const stop = useCallback(() => {
