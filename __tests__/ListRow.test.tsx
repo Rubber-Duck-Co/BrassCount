@@ -1,5 +1,6 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+import { Icon } from '../src/components/Icon';
 import { ListRow } from '../src/components/ListRow';
 import { Typography } from '../src/components/Typography';
 
@@ -20,8 +21,8 @@ const host = (tree: ReactTestRenderer, testID: string) =>
     node => typeof node.type === 'string' && node.props.testID === testID,
   )[0];
 
-/** The colour role the row gives the text it shows as its value. */
-const valueColor = (tree: ReactTestRenderer, value: string): unknown =>
+/** The colour role the row gives a piece of the text it shows. */
+const textColor = (tree: ReactTestRenderer, value: string): unknown =>
   tree.root
     .findAllByType(Typography)
     .find(text => text.props.children === value)?.props.color;
@@ -73,12 +74,87 @@ describe('ListRow', () => {
       <ListRow title="Shot 2" value="0.30s" valueColor="danger" />,
     );
 
-    expect(valueColor(tree, '0.30s')).toBe('danger');
+    expect(textColor(tree, '0.30s')).toBe('danger');
   });
 
   it('shows its value in the secondary text colour by default', () => {
     const tree = render(<ListRow title="Shot 2" value="0.30s" />);
 
-    expect(valueColor(tree, '0.30s')).toBe('textSecondary');
+    expect(textColor(tree, '0.30s')).toBe('textSecondary');
+  });
+
+  it('ignores presses and reads as dimmed when it is disabled', () => {
+    const onPress = jest.fn();
+    const tree = render(
+      <ListRow
+        title="Clear run history"
+        onPress={onPress}
+        disabled
+        testID="row"
+      />,
+    );
+
+    act(() => {
+      host(tree, 'row').props.onClick();
+    });
+
+    expect(onPress).not.toHaveBeenCalled();
+    expect(host(tree, 'row').props.accessibilityState).toMatchObject({
+      disabled: true,
+    });
+  });
+
+  it('can be pressed and is not read as dimmed by default', () => {
+    const onPress = jest.fn();
+    const tree = render(
+      <ListRow title="Appearance" onPress={onPress} testID="row" />,
+    );
+
+    act(() => {
+      host(tree, 'row').props.onClick();
+    });
+
+    expect(onPress).toHaveBeenCalledTimes(1);
+    expect(host(tree, 'row').props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+  });
+
+  it('shows the title of a destructive row in the danger colour', () => {
+    const tree = render(<ListRow title="Clear run history" destructive />);
+
+    expect(textColor(tree, 'Clear run history')).toBe('danger');
+  });
+
+  it('greys the title of a disabled row, even a destructive one', () => {
+    const tree = render(
+      <ListRow
+        title="Clear run history"
+        subtitle="No saved runs to delete"
+        onPress={() => {}}
+        disabled
+        destructive
+      />,
+    );
+
+    expect(textColor(tree, 'Clear run history')).toBe('textTertiary');
+    // The reason it is disabled stays as readable as any subtitle.
+    expect(textColor(tree, 'No saved runs to delete')).toBe('textTertiary');
+  });
+
+  it('hides the chevron of a disabled row', () => {
+    const chevrons = (disabled: boolean) =>
+      render(<ListRow title="Clear" onPress={() => {}} disabled={disabled} />)
+        .root.findAllByType(Icon)
+        .filter(icon => icon.props.name === 'chevron');
+
+    expect(chevrons(false)).toHaveLength(1);
+    expect(chevrons(true)).toHaveLength(0);
+  });
+
+  it('shows the title in the primary text colour by default', () => {
+    const tree = render(<ListRow title="Appearance" />);
+
+    expect(textColor(tree, 'Appearance')).toBe('textPrimary');
   });
 });
