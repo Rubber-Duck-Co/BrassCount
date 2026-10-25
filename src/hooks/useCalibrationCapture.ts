@@ -9,7 +9,7 @@ import {
   CalibrationCaptureError,
   CalibrationCaptureService,
 } from '@services/calibrationCapture';
-import { isAudibleSample, thresholdFromPeak } from '@utils/calibration';
+import { isAudibleSample } from '@utils/calibration';
 
 /** What a capture is for: setting a threshold, or checking a sound against it. */
 export type CalibrationCaptureMode = 'recalibrate' | 'test';
@@ -74,7 +74,7 @@ const noticeKindFor = (err: unknown): CalibrationCaptureNoticeKind => {
  * microphone is never left listening behind another tab.
  */
 export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
-  const { setThreshold, recordTestReading } = useCalibration();
+  const { setSample, recordTestReading } = useCalibration();
   const [active, setActive] = useState<ActiveCalibrationCapture | null>(null);
   const [notice, setNotice] = useState<CalibrationCaptureNotice | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -109,7 +109,7 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
         if (mode === 'test') {
           recordTestReading(sound, peakDbfs);
         } else if (isAudibleSample(peakDbfs)) {
-          setThreshold(sound, thresholdFromPeak(peakDbfs));
+          setSample(sound, peakDbfs);
         } else {
           setNotice({ sound, kind: 'no-sound' });
         }
@@ -125,7 +125,7 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
       abortRef.current = null;
       setActive(null);
     },
-    [recordTestReading, setThreshold],
+    [recordTestReading, setSample],
   );
 
   const recalibrate = useCallback(

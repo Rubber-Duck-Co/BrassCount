@@ -451,6 +451,96 @@ describe('SettingsScreen', () => {
     });
   });
 
+  describe('Detection', () => {
+    it('groups Sensitivity under Detection, after Timer', async () => {
+      const { tree } = await renderScreen();
+
+      const titles = tree.root
+        .findAll(node => typeof node.props.title === 'string')
+        .map(node => node.props.title);
+      expect(titles.indexOf('Detection')).toBeGreaterThan(
+        titles.indexOf('Timer'),
+      );
+      expect(has(tree, 'row-sensitivity')).toBe(true);
+    });
+
+    it('is Normal until one is chosen', async () => {
+      const { tree } = await renderScreen();
+
+      expect(subtitleOf(tree, 'row-sensitivity')).toBe('Normal');
+    });
+
+    it('shows the stored sensitivity, and names it for a screen reader', async () => {
+      await updateProfile({ sensitivity: 'high' });
+
+      const { tree } = await renderScreen();
+
+      expect(subtitleOf(tree, 'row-sensitivity')).toBe(
+        'High, fewer missed shots',
+      );
+      expect(
+        byTestId(tree, 'row-sensitivity')[0].props.accessibilityLabel,
+      ).toBe('Sensitivity, High');
+    });
+
+    it('opens the picker with the stored choice checked and each explained', async () => {
+      await updateProfile({ sensitivity: 'low' });
+      const { tree } = await renderScreen();
+
+      expect(byTestId(tree, 'opt-sensitivity-low')).toHaveLength(0);
+      await press(tree, 'row-sensitivity');
+
+      const option = (level: string) =>
+        byTestId(tree, `opt-sensitivity-${level}`)[0];
+      expect(option('low').props.accessibilityState.checked).toBe(true);
+      expect(option('normal').props.accessibilityState.checked).toBe(false);
+      expect(option('high').props.accessibilityState.checked).toBe(false);
+      expect(option('low').props.accessibilityLabel).toBe(
+        'Low, Fewer false shots',
+      );
+      expect(option('high').props.accessibilityLabel).toBe(
+        'High, Fewer missed shots',
+      );
+    });
+
+    it('switches the sensitivity at once and stores the choice', async () => {
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-sensitivity');
+      await press(tree, 'opt-sensitivity-high');
+
+      expect(subtitleOf(tree, 'row-sensitivity')).toBe(
+        'High, fewer missed shots',
+      );
+      expect(byTestId(tree, 'opt-sensitivity-high')).toHaveLength(0);
+      expect((await loadProfile()).sensitivity).toBe('high');
+    });
+
+    it('changes nothing when the picker is closed without a choice', async () => {
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-sensitivity');
+      await press(tree, 'btn-sensitivity-close');
+
+      expect(byTestId(tree, 'opt-sensitivity-high')).toHaveLength(0);
+      expect(subtitleOf(tree, 'row-sensitivity')).toBe('Normal');
+      expect((await loadProfile()).updatedAt).toBeNull();
+    });
+
+    it('puts the old sensitivity back and says so when the save fails', async () => {
+      const { tree } = await renderScreen(failingStorage);
+
+      await press(tree, 'row-sensitivity');
+      await press(tree, 'opt-sensitivity-low');
+
+      expect(subtitleOf(tree, 'row-sensitivity')).toBe('Normal');
+      expect(textOf(tree, 'text-sensitivity-error')).toBe(
+        'Could not save the sensitivity. Try again.',
+      );
+      expect((await loadProfile()).sensitivity).toBe('normal');
+    });
+  });
+
   describe('Timer', () => {
     /** Whether a control is read as disabled. */
     const isDisabled = (tree: ReactTestRenderer, testID: string): boolean =>

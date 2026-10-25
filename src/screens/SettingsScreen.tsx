@@ -8,6 +8,7 @@ import type { Theme } from '@/theme/theme';
 import type {
   AppearancePreference,
   BeepVolume,
+  DetectionSensitivity,
   LevelUnit,
 } from '@/types/profile';
 import { AppearanceSheet } from '@components/AppearanceSheet';
@@ -18,9 +19,14 @@ import { LEVEL_UNIT_COPY, LevelUnitSheet } from '@components/LevelUnitSheet';
 import { ListRow } from '@components/ListRow';
 import { Screen } from '@components/Screen';
 import { SectionHeader } from '@components/SectionHeader';
+import {
+  SENSITIVITY_COPY,
+  SensitivitySheet,
+} from '@components/SensitivitySheet';
 import { StartDelaySheet } from '@components/StartDelaySheet';
 import { Typography } from '@components/Typography';
 import { useAppearance } from '@hooks/useAppearance';
+import { useDetectionSensitivity } from '@hooks/useDetectionSensitivity';
 import { useLevelUnit } from '@hooks/useLevelUnit';
 import {
   useRunHistoryClear,
@@ -173,6 +179,50 @@ const DisplaySettings = () => {
         selected={levelUnit}
         onSelect={levelUnitPicker.choose}
         onClose={levelUnitPicker.hide}
+      />
+    </View>
+  );
+};
+
+/** What the Sensitivity row says under its title. */
+const SENSITIVITY_SUMMARY: Record<DetectionSensitivity, string> = {
+  low: 'Low, fewer false shots',
+  normal: 'Normal',
+  high: 'High, fewer missed shots',
+};
+
+/**
+ * The Detection section: Sensitivity. It sets how far below a calibrated
+ * sample the threshold sits, and applies to every calibrated sound at once
+ * without recalibrating.
+ */
+const DetectionSettings = () => {
+  const { sensitivity, setSensitivity } = useDetectionSensitivity();
+  const picker = usePreferencePicker(setSensitivity);
+
+  return (
+    <View>
+      <SectionHeader title="Detection" />
+      <Card flush>
+        <ListRow
+          title="Sensitivity"
+          subtitle={SENSITIVITY_SUMMARY[sensitivity]}
+          accessibilityLabel={`Sensitivity, ${SENSITIVITY_COPY[sensitivity].label}`}
+          onPress={picker.show}
+          testID="row-sensitivity"
+        />
+      </Card>
+      {picker.saveFailed ? (
+        <SaveError
+          message="Could not save the sensitivity. Try again."
+          testID="text-sensitivity-error"
+        />
+      ) : null}
+      <SensitivitySheet
+        visible={picker.open}
+        selected={sensitivity}
+        onSelect={picker.choose}
+        onClose={picker.hide}
       />
     </View>
   );
@@ -449,7 +499,7 @@ const TimerSettings = () => {
 
 /**
  * App preferences, pushed over the tabs from the Profile header. Grouped
- * into sections: Display, Timer, Data and About.
+ * into sections: Display, Timer, Detection, Data and About.
  */
 export const SettingsScreen = () => {
   const styles = useThemedStyles(createStyles);
@@ -465,6 +515,7 @@ export const SettingsScreen = () => {
       <View style={styles.sections}>
         <DisplaySettings />
         <TimerSettings />
+        <DetectionSettings />
         <DataSettings />
         <AboutSettings />
       </View>

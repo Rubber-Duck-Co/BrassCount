@@ -37,6 +37,23 @@ export type SoundCalibration = {
 );
 
 /**
+ * What calibrating one sound keeps: the loudest level of its sample, from
+ * which the threshold follows (see `deriveCalibration`), so a change of
+ * detection sensitivity can move it without a new sample. `peakDbfs` is
+ * `null` while the sound is uncalibrated.
+ */
+export type CalibrationSample = {
+  peakDbfs: number | null;
+  /** Level measured by the most recent test since the sample was taken. */
+  lastTestDbfs: number | null;
+};
+
+/** The samples of every sound: what the calibration store holds. */
+export type CalibrationSamples = Readonly<
+  Record<CalibrationSound, Readonly<CalibrationSample>>
+>;
+
+/**
  * Calibration for every sound. Held in memory only: it is deliberately
  * not persisted, so it resets when the app is closed.
  *

@@ -17,11 +17,12 @@ import {
 
 /**
  * The preferences Settings changes, as stored on the profile: the display
- * ones, and the timer's start delay range and beep volume.
+ * ones, the timer's start delay range and beep volume, and the detection
+ * sensitivity.
  */
 export type Preferences = Pick<
   Profile,
-  'appearance' | 'levelUnit' | 'startDelay' | 'beepVolume'
+  'appearance' | 'levelUnit' | 'startDelay' | 'beepVolume' | 'sensitivity'
 >;
 
 export type PreferenceKey = keyof Preferences;
@@ -58,6 +59,7 @@ const preferencesOf = (profile: Readonly<Profile>): Preferences => ({
   levelUnit: profile.levelUnit,
   startDelay: profile.startDelay,
   beepVolume: profile.beepVolume,
+  sensitivity: profile.sensitivity,
 });
 
 const DEFAULT_PREFERENCES: Readonly<Preferences> =
@@ -92,6 +94,7 @@ export const PreferencesProvider = ({
     levelUnit: 0,
     startDelay: 0,
     beepVolume: 0,
+    sensitivity: 0,
   });
 
   useEffect(() => {

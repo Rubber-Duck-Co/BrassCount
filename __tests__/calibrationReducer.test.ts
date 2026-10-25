@@ -5,19 +5,15 @@ import {
   normalizeDbfs,
 } from '../src/store/calibrationReducer';
 import { CALIBRATION_SOUNDS, DBFS_MIN } from '../src/types/calibration';
-import type { CalibrationState } from '../src/types/calibration';
+import type { CalibrationSamples } from '../src/types/calibration';
 
-const UNCALIBRATED = {
-  thresholdDbfs: null,
-  status: 'uncalibrated',
-  lastTestDbfs: null,
-};
+const UNCALIBRATED = { peakDbfs: null, lastTestDbfs: null };
 
-const calibratedShot = (): CalibrationState =>
+const calibratedShot = (): CalibrationSamples =>
   calibrationReducer(createInitialCalibrationState(), {
-    type: 'setThreshold',
+    type: 'setSample',
     sound: 'shot',
-    thresholdDbfs: -12,
+    peakDbfs: -12,
   });
 
 describe('calibrationReducer', () => {
@@ -30,38 +26,31 @@ describe('calibrationReducer', () => {
     });
   });
 
-  it('marks a sound calibrated when its threshold is set', () => {
-    const state = calibratedShot();
-
-    expect(state.shot).toEqual({
-      thresholdDbfs: -12,
-      status: 'calibrated',
+  it("keeps a sample's peak as the sound's calibration", () => {
+    expect(calibratedShot().shot).toEqual({
+      peakDbfs: -12,
       lastTestDbfs: null,
     });
   });
 
-  it('leaves the other sounds alone when one threshold is set', () => {
+  it('leaves the other sounds alone when one sample is set', () => {
     const state = calibratedShot();
 
     expect(state.reload).toEqual(UNCALIBRATED);
     expect(state.rack).toEqual(UNCALIBRATED);
   });
 
-  it('records a test reading without changing the threshold or status', () => {
+  it('records a test reading without changing the peak', () => {
     const state = calibrationReducer(calibratedShot(), {
       type: 'recordTestReading',
       sound: 'shot',
       dbfs: -9.5,
     });
 
-    expect(state.shot).toEqual({
-      thresholdDbfs: -12,
-      status: 'calibrated',
-      lastTestDbfs: -9.5,
-    });
+    expect(state.shot).toEqual({ peakDbfs: -12, lastTestDbfs: -9.5 });
   });
 
-  it('ignores a test reading for a sound with no threshold', () => {
+  it('ignores a test reading for a sound with no sample', () => {
     const before = createInitialCalibrationState();
 
     const state = calibrationReducer(before, {
@@ -88,7 +77,7 @@ describe('calibrationReducer', () => {
     expect(state.shot).toEqual(UNCALIBRATED);
   });
 
-  it('discards the last test reading when the threshold changes', () => {
+  it('discards the last test reading when the sample changes', () => {
     const tested = calibrationReducer(calibratedShot(), {
       type: 'recordTestReading',
       sound: 'shot',
@@ -96,23 +85,19 @@ describe('calibrationReducer', () => {
     });
 
     const state = calibrationReducer(tested, {
-      type: 'setThreshold',
+      type: 'setSample',
       sound: 'shot',
-      thresholdDbfs: -20,
+      peakDbfs: -20,
     });
 
-    expect(state.shot).toEqual({
-      thresholdDbfs: -20,
-      status: 'calibrated',
-      lastTestDbfs: null,
-    });
+    expect(state.shot).toEqual({ peakDbfs: -20, lastTestDbfs: null });
   });
 
   it('resets only the requested sound', () => {
     const both = calibrationReducer(calibratedShot(), {
-      type: 'setThreshold',
+      type: 'setSample',
       sound: 'reload',
-      thresholdDbfs: -25,
+      peakDbfs: -25,
     });
 
     const state = calibrationReducer(both, {
@@ -121,7 +106,7 @@ describe('calibrationReducer', () => {
     });
 
     expect(state.shot).toEqual(UNCALIBRATED);
-    expect(state.reload.thresholdDbfs).toBe(-25);
+    expect(state.reload.peakDbfs).toBe(-25);
   });
 
   it('returns every sound to uncalibrated on resetAll', () => {
@@ -135,9 +120,9 @@ describe('calibrationReducer', () => {
     const snapshot = JSON.parse(JSON.stringify(before));
 
     const after = calibrationReducer(before, {
-      type: 'setThreshold',
+      type: 'setSample',
       sound: 'shot',
-      thresholdDbfs: -12,
+      peakDbfs: -12,
     });
 
     expect(after).not.toBe(before);

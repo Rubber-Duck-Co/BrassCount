@@ -106,6 +106,7 @@ const TestPreferences = ({
       preferences: {
         appearance: DEFAULT_PROFILE.appearance,
         levelUnit: DEFAULT_PROFILE.levelUnit,
+        sensitivity: DEFAULT_PROFILE.sensitivity,
         ...settings,
       },
       setPreference: async () => {},
@@ -162,7 +163,7 @@ const renderHook = (timerSettings: TimerSettings = DEFAULT_TIMER_SETTINGS) => {
     thresholdDbfs = -10,
     sound: CalibrationSound = 'shot',
   ): void => {
-    act(() => store?.setThreshold(sound, thresholdDbfs));
+    act(() => store?.setSample(sound, thresholdDbfs + 6));
   };
   calibrate();
   const changeTimerSettings = (settings: TimerSettings): void => {
@@ -416,8 +417,8 @@ describe('useDrillRun', () => {
     await startRun(read);
 
     // Recalibrated mid-run: the run keeps the -10 it started with.
-    calibrate(-2);
-    hear(ZERO + 1402, -4);
+    calibrate(-6);
+    hear(ZERO + 1402, -8);
 
     expect(read().results).toHaveLength(1);
   });
@@ -507,11 +508,11 @@ describe('useDrillRun', () => {
 
   it('starts with the thresholds of the moment, not those it was mounted with', async () => {
     const { read, calibrate } = renderHook();
-    calibrate(-2);
+    calibrate(-6);
     await startRun(read);
 
-    // Loud enough for the -10 the hook was mounted with, not for the -2 now.
-    hear(ZERO + 1402, -4);
+    // Loud enough for the -10 the hook was mounted with, not for the -6 now.
+    hear(ZERO + 1402, -8);
 
     expect(read().results).toEqual([]);
   });

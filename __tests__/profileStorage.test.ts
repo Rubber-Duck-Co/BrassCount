@@ -61,6 +61,7 @@ const storedProfile = (overrides: Record<string, unknown> = {}): unknown => ({
     levelUnit: 'dbfs',
     startDelay: DEFAULT_START_DELAY,
     beepVolume: 'full',
+    sensitivity: 'normal',
     updatedAt: SAVED_AT,
     ...overrides,
   },
@@ -121,6 +122,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: null,
       });
     });
@@ -209,6 +211,7 @@ describe('profileStorage service', () => {
         levelUnit: 'dbfs',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: SAVED_AT,
       });
     });
@@ -277,6 +280,7 @@ describe('profileStorage service', () => {
           levelUnit: 'dbfs',
           startDelay: DEFAULT_START_DELAY,
           beepVolume: 'full',
+          sensitivity: 'normal',
           updatedAt: SAVED_AT,
           ...expected,
         });
@@ -301,6 +305,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: SAVED_AT,
       });
     });
@@ -336,6 +341,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
       expect(await loadProfile()).toEqual(updated);
@@ -355,6 +361,7 @@ describe('profileStorage service', () => {
           levelUnit: 'level',
           startDelay: DEFAULT_START_DELAY,
           beepVolume: 'full',
+          sensitivity: 'normal',
           updatedAt: UPDATED_AT,
         });
         expect(await loadProfile()).toEqual(updated);
@@ -375,6 +382,7 @@ describe('profileStorage service', () => {
           levelUnit,
           startDelay: DEFAULT_START_DELAY,
           beepVolume: 'full',
+          sensitivity: 'normal',
           updatedAt: UPDATED_AT,
         });
         expect(await loadProfile()).toEqual(updated);
@@ -403,6 +411,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: SAVED_AT,
       });
     });
@@ -454,6 +463,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
       expect(await loadProfile()).toEqual(updated);
@@ -480,6 +490,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: SAVED_AT,
       });
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
@@ -506,6 +517,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
     });
@@ -529,6 +541,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: SAVED_AT,
       });
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
@@ -549,6 +562,7 @@ describe('profileStorage service', () => {
         levelUnit: 'dbfs',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
     });
@@ -570,6 +584,7 @@ describe('profileStorage service', () => {
         levelUnit: 'dbfs',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
       // ... but it was not replaced on disk by that default.
@@ -582,6 +597,7 @@ describe('profileStorage service', () => {
           levelUnit: 'dbfs',
           startDelay: DEFAULT_START_DELAY,
           beepVolume: 'full',
+          sensitivity: 'normal',
           updatedAt: UPDATED_AT,
         },
       });
@@ -603,6 +619,7 @@ describe('profileStorage service', () => {
           levelUnit: 'dbfs',
           startDelay: DEFAULT_START_DELAY,
           beepVolume: 'full',
+          sensitivity: 'normal',
           updatedAt: UPDATED_AT,
         },
       });
@@ -622,6 +639,7 @@ describe('profileStorage service', () => {
           levelUnit: 'dbfs',
           startDelay: DEFAULT_START_DELAY,
           beepVolume: 'full',
+          sensitivity: 'normal',
           updatedAt: UPDATED_AT,
         },
       });
@@ -862,6 +880,7 @@ describe('profileStorage service', () => {
         levelUnit: 'dbfs',
         startDelay: { minMs: 1500, maxMs: 1500 },
         beepVolume: 'quiet',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
     });
@@ -919,6 +938,71 @@ describe('profileStorage service', () => {
 
       expect(DEFAULT_PROFILE.startDelay.minMs).toBe(1000);
       expect((await loadProfile()).startDelay.minMs).toBe(1000);
+    });
+  });
+
+  describe('detection sensitivity', () => {
+    it('defaults to normal', async () => {
+      expect(DEFAULT_PROFILE.sensitivity).toBe('normal');
+      expect((await loadProfile()).sensitivity).toBe('normal');
+    });
+
+    it.each(['low', 'normal', 'high'] as const)(
+      'stores %s and reads it back',
+      async sensitivity => {
+        const saved = await updateProfile({ sensitivity }, at());
+
+        expect(saved.sensitivity).toBe(sensitivity);
+        expect((await loadProfile()).sensitivity).toBe(sensitivity);
+      },
+    );
+
+    it('keeps the other fields when the sensitivity is changed', async () => {
+      await updateProfile({ ...marty, beepVolume: 'quiet' }, at(SAVED_AT));
+
+      const updated = await updateProfile({ sensitivity: 'high' }, at());
+
+      expect(updated.name).toBe('Marty McFly');
+      expect(updated.beepVolume).toBe('quiet');
+    });
+
+    it('keeps the sensitivity when something else is changed', async () => {
+      await updateProfile({ sensitivity: 'low' }, at(SAVED_AT));
+
+      const updated = await updateProfile({ name: 'Marty' }, at());
+
+      expect(updated.sensitivity).toBe('low');
+    });
+
+    it('reads a profile saved before sensitivity existed as normal', async () => {
+      await writeStored(storedProfile({ sensitivity: undefined }));
+
+      const profile = await loadProfile();
+
+      expect(profile.sensitivity).toBe('normal');
+      expect(profile.levelUnit).toBe('dbfs');
+    });
+
+    it.each([
+      ['a name that is not a choice', 'extreme'],
+      ['a number', 6],
+      ['null', null],
+    ])('reads a stored sensitivity of %s as normal', async (_case, stored) => {
+      await writeStored(storedProfile({ sensitivity: stored }));
+
+      expect((await loadProfile()).sensitivity).toBe('normal');
+    });
+
+    it.each([
+      ['a name that is not a choice', 'extreme'],
+      ['a margin in decibels', 6],
+      ['null', null],
+    ])('rejects %s as INVALID_INPUT', async (_case, sensitivity) => {
+      await expectRejection(
+        updateProfile({ sensitivity } as unknown as ProfileChanges, at()),
+        'INVALID_INPUT',
+      );
+      expect(await readStored()).toBeNull();
     });
   });
 
@@ -1001,6 +1085,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
       expect(stored).toEqual(last);
@@ -1020,6 +1105,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: SAVED_AT,
       });
     });
@@ -1048,6 +1134,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
     });
@@ -1097,6 +1184,7 @@ describe('profileStorage service', () => {
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
         beepVolume: 'full',
+        sensitivity: 'normal',
         updatedAt: UPDATED_AT,
       });
     });
