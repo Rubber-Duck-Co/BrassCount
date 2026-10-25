@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 
-import { StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, StyleSheet, View } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 
@@ -13,6 +13,7 @@ import type {
 import { AppearanceSheet } from '@components/AppearanceSheet';
 import { BEEP_VOLUME_COPY, BeepVolumeSheet } from '@components/BeepVolumeSheet';
 import { Card } from '@components/Card';
+import { ConfirmSheet } from '@components/ConfirmSheet';
 import { LEVEL_UNIT_COPY, LevelUnitSheet } from '@components/LevelUnitSheet';
 import { ListRow } from '@components/ListRow';
 import { Screen } from '@components/Screen';
@@ -21,9 +22,15 @@ import { StartDelaySheet } from '@components/StartDelaySheet';
 import { Typography } from '@components/Typography';
 import { useAppearance } from '@hooks/useAppearance';
 import { useLevelUnit } from '@hooks/useLevelUnit';
+import {
+  useRunHistoryClear,
+  type RunCountState,
+} from '@hooks/useRunHistoryClear';
 import { useThemedStyles } from '@hooks/useTheme';
 import { useTimerSettings } from '@hooks/useTimerSettings';
 import { StartSequenceService } from '@services/startSequence';
+import { APP_VERSION } from '@utils/appInfo';
+import { pluralize } from '@utils/format';
 import {
   BEEP_VOLUME_GAIN,
   describeStartDelay,
@@ -51,6 +58,14 @@ const createStyles = (theme: Theme) =>
     preferenceError: {
       marginTop: theme.spacing.sm,
       paddingHorizontal: theme.spacing.xs,
+    },
+    // Lines up with the ListRow above it.
+    privacyRow: {
+      paddingVertical: theme.spacing.md - theme.spacing.xs,
+      paddingHorizontal: theme.spacing.md,
+    },
+    privacy: {
+      gap: theme.spacing.xs,
     },
   });
 
@@ -159,6 +174,150 @@ const DisplaySettings = () => {
         onSelect={levelUnitPicker.choose}
         onClose={levelUnitPicker.hide}
       />
+    </View>
+  );
+};
+
+/** What the Clear run history row says under its title. */
+const runCountSummary = (runCount: RunCountState): string => {
+  switch (runCount.status) {
+    case 'loading':
+      return 'Counting saved runs…';
+    case 'unknown':
+      return 'Deletes every saved run. Drills are kept.';
+    case 'ready':
+      return runCount.runCount === 0
+        ? 'No saved runs to delete'
+        : `${pluralize(runCount.runCount, 'saved run')}. Drills are kept.`;
+  }
+};
+
+/**
+ * The Data section: Clear run history. Deletes every saved run after a
+ * confirmation that names how many, and keeps drills and the profile.
+ * The row is disabled while the runs are counted and when there are none;
+ * if they cannot be counted, clearing is still offered.
+ */
+const DataSettings = () => {
+  const { runCount, clearRuns } = useRunHistoryClear();
+  const [confirming, setConfirming] = useState(false);
+  // How many runs the sheet asks about, fixed when it opens so the title
+  // does not change under the reader, or while the sheet slides away.
+  const [askedCount, setAskedCount] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [clearFailed, setClearFailed] = useState(false);
+  // A second press of the confirm button lands before `clearing` has
+  // rendered, so the guard is a ref.
+  const clearingRef = useRef(false);
+
+  const clearUnavailable =
+    runCount.status === 'loading' ||
+    (runCount.status === 'ready' && runCount.runCount === 0);
+  const knownCount = runCount.status === 'ready' ? runCount.runCount : null;
+
+  const requestClear = useCallback(() => {
+    setClearFailed(false);
+    setAskedCount(knownCount);
+    setConfirming(true);
+  }, [knownCount]);
+
+  const cancelClear = useCallback(() => {
+    if (clearingRef.current) {
+      return;
+    }
+    setConfirming(false);
+    setClearFailed(false);
+  }, []);
+
+  const confirmClear = async () => {
+    if (clearingRef.current) {
+      return;
+    }
+    clearingRef.current = true;
+    setClearing(true);
+    setClearFailed(false);
+
+    // `clearRuns` settles a failure into `false`, so this never rejects.
+    const cleared = await clearRuns();
+
+    clearingRef.current = false;
+    setClearing(false);
+    if (!cleared) {
+      // The sheet stays up with the reason; nothing is reported deleted.
+      setClearFailed(true);
+      return;
+    }
+    // The sheet, and the reader's focus with it, is gone: say what happened.
+    AccessibilityInfo.announceForAccessibility(
+      askedCount === null
+        ? 'Deleted every saved run'
+        : `Deleted ${pluralize(askedCount, 'run')}`,
+    );
+    setConfirming(false);
+  };
+
+  return (
+    <View>
+      <SectionHeader title="Data" />
+      <Card flush>
+        <ListRow
+          title="Clear run history"
+          subtitle={runCountSummary(runCount)}
+          onPress={requestClear}
+          disabled={clearUnavailable}
+          destructive
+          testID="row-clear-history"
+        />
+      </Card>
+      <ConfirmSheet
+        visible={confirming}
+        title={
+          askedCount === null
+            ? 'Delete every saved run?'
+            : `Delete ${pluralize(askedCount, 'run')}?`
+        }
+        message="Every saved run is removed from this phone. Your drills and profile are kept. This cannot be undone."
+        confirmLabel="Delete runs"
+        busyLabel="Deleting…"
+        busy={clearing}
+        error={
+          clearFailed
+            ? 'Could not delete your runs. They are still saved. Try again.'
+            : undefined
+        }
+        onConfirm={confirmClear}
+        onCancel={cancelClear}
+        testID="sheet-clear-history"
+      />
+    </View>
+  );
+};
+
+/** The About section: the app version and where the shooter's data lives. */
+const AboutSettings = () => {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <View>
+      <SectionHeader title="About" />
+      <Card flush>
+        <ListRow
+          title="Version"
+          value={APP_VERSION}
+          accessibilityLabel={`Version ${APP_VERSION}`}
+          divided
+          testID="row-version"
+        />
+        <View style={styles.privacyRow}>
+          <View style={styles.privacy} accessible testID="text-privacy">
+            <Typography variant="bodyStrong">Your data</Typography>
+            <Typography variant="caption" color="textSecondary">
+              Everything is stored only on this phone. There is no account, and
+              nothing is sent anywhere. Calibration resets when the app closes.
+            </Typography>
+          </View>
+        </View>
+      </Card>
     </View>
   );
 };
@@ -290,7 +449,7 @@ const TimerSettings = () => {
 
 /**
  * App preferences, pushed over the tabs from the Profile header. Grouped
- * into sections: Display, then Timer.
+ * into sections: Display, Timer, Data and About.
  */
 export const SettingsScreen = () => {
   const styles = useThemedStyles(createStyles);
@@ -306,6 +465,8 @@ export const SettingsScreen = () => {
       <View style={styles.sections}>
         <DisplaySettings />
         <TimerSettings />
+        <DataSettings />
+        <AboutSettings />
       </View>
     </Screen>
   );

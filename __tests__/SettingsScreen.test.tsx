@@ -1,4 +1,4 @@
-import { Text } from 'react-native';
+import { AccessibilityInfo, Text } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -10,13 +10,22 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useLevelUnit } from '../src/hooks/useLevelUnit';
+import { useProfileOverview } from '../src/hooks/useProfileOverview';
 import { useTheme } from '../src/hooks/useTheme';
 import { SettingsScreen } from '../src/screens/SettingsScreen';
+import { loadDrills, saveDrill } from '../src/services/drillStorage';
 import {
   ProfileStorageError,
   loadProfile,
   updateProfile,
 } from '../src/services/profileStorage';
+import {
+  SessionStorageError,
+  SessionStorageService,
+  countSessions,
+  loadSessions,
+  saveSession,
+} from '../src/services/sessionStorage';
 import {
   StartSequenceError,
   StartSequenceService,
@@ -26,6 +35,7 @@ import {
   type PreferencesProviderProps,
 } from '../src/store/PreferencesContext';
 import type { Profile } from '../src/types/profile';
+import { APP_VERSION } from '../src/utils/appInfo';
 
 type TestTabParamList = {
   Profile: undefined;
@@ -39,8 +49,18 @@ const metrics = {
 
 const Tab = createBottomTabNavigator<TestTabParamList>();
 
-/** Stands in for the Profile screen Settings is opened from. */
-const Blank = () => null;
+/**
+ * Stands in for the Profile screen Settings is opened from, showing the
+ * run count the real one reads each time it gains focus.
+ */
+const ProfileProbe = () => {
+  const { state } = useProfileOverview();
+  return (
+    <Text testID="text-profile-runs">
+      {state.status === 'ready' ? String(state.overview.runCount) : ''}
+    </Text>
+  );
+};
 
 /**
  * Says which theme and level unit the rest of the app is drawn with, as
@@ -67,6 +87,7 @@ type Storage = PreferencesProviderProps['storage'];
 type Harness = {
   tree: ReactTestRenderer;
   currentRoute: () => string | undefined;
+  goTo: (route: keyof TestTabParamList) => Promise<void>;
 };
 
 const mounted: ReactTestRenderer[] = [];
@@ -95,7 +116,7 @@ const renderScreen = async (storage = realStorage): Promise<Harness> => {
               initialRouteName="Settings"
               screenOptions={{ headerShown: false }}
             >
-              <Tab.Screen name="Profile" component={Blank} />
+              <Tab.Screen name="Profile" component={ProfileProbe} />
               <Tab.Screen name="Settings" component={SettingsScreen} />
             </Tab.Navigator>
           </NavigationContainer>
@@ -112,6 +133,12 @@ const renderScreen = async (storage = realStorage): Promise<Harness> => {
   return {
     tree,
     currentRoute: () => navigationRef.getCurrentRoute()?.name,
+    goTo: async route => {
+      await act(async () => {
+        navigationRef.navigate(route);
+      });
+      await settle();
+    },
   };
 };
 
@@ -830,6 +857,379 @@ describe('SettingsScreen', () => {
         expect(has(tree, 'text-beep-volume-error')).toBe(false);
         expect(isChecked(tree, 'medium')).toBe(true);
       });
+    });
+  });
+
+  describe('Data', () => {
+    const SHEET = 'sheet-clear-history';
+
+    const seedDrill = () =>
+      saveDrill({ name: 'Bill Drill', steps: [{ type: 'shot', par: 0.5 }] });
+
+    /** Save `count` runs against one drill. */
+    const seedRuns = async (count: number): Promise<void> => {
+      for (let run = 0; run < count; run += 1) {
+        await saveSession({
+          drillId: 'drill-1',
+          totalTime: 0.4,
+          completed: true,
+          splits: [
+            { stepId: 'step-1', label: 'Shot 1', par: 0.5, actual: 0.4 },
+          ],
+        });
+      }
+    };
+
+    /** Every string rendered under the first element with this testID. */
+    const textsUnder = (tree: ReactTestRenderer, testID: string): string[] =>
+      byTestId(tree, testID)[0]
+        .findAll(node => typeof node.props.children === 'string')
+        .map(node => node.props.children);
+
+    /** What a screen reader is told about the row's state. */
+    const rowState = (tree: ReactTestRenderer) =>
+      byTestId(tree, 'row-clear-history').find(
+        node => node.props.accessibilityState !== undefined,
+      )?.props.accessibilityState;
+
+    const isAsking = (tree: ReactTestRenderer): boolean =>
+      has(tree, `${SHEET}-confirm`);
+
+    /**
+     * Stub out what a screen reader is told. The jest preset already mocks
+     * it, so a spy can carry calls over from earlier tests: start clean.
+     */
+    const silenceAnnouncements = () => {
+      const announce = jest
+        .spyOn(AccessibilityInfo, 'announceForAccessibility')
+        .mockImplementation(() => {});
+      announce.mockClear();
+      return announce;
+    };
+
+    it('offers to clear the history under Data, styled as destructive', async () => {
+      await seedRuns(1);
+
+      const { tree } = await renderScreen();
+
+      expect(tree.root.findAllByProps({ title: 'Data' })).not.toHaveLength(0);
+      expect(byTestId(tree, 'row-clear-history')[0].props.destructive).toBe(
+        true,
+      );
+      expect(rowState(tree)).toEqual({ disabled: false });
+    });
+
+    it('says how many runs are saved', async () => {
+      await seedRuns(3);
+
+      const { tree } = await renderScreen();
+
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        '3 saved runs. Drills are kept.',
+      );
+    });
+
+    it('is disabled when there are no runs', async () => {
+      const { tree } = await renderScreen();
+
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        'No saved runs to delete',
+      );
+      expect(rowState(tree)).toEqual({ disabled: true });
+      expect(
+        byTestId(tree, 'row-clear-history').some(
+          node => node.props.disabled === true,
+        ),
+      ).toBe(true);
+    });
+
+    it('is disabled while the runs are being counted', async () => {
+      await seedRuns(2);
+      jest
+        .spyOn(SessionStorageService, 'count')
+        .mockImplementationOnce(() => new Promise<number>(() => {}));
+
+      const { tree } = await renderScreen();
+
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        'Counting saved runs…',
+      );
+      expect(rowState(tree)).toEqual({ disabled: true });
+    });
+
+    it('still offers to clear when the runs cannot be counted', async () => {
+      await seedRuns(2);
+      jest
+        .spyOn(SessionStorageService, 'count')
+        .mockRejectedValueOnce(
+          new SessionStorageError('unreadable', 'STORAGE_FAILURE'),
+        );
+      const { tree } = await renderScreen();
+      expect(rowState(tree)).toEqual({ disabled: false });
+
+      await press(tree, 'row-clear-history');
+
+      expect(textsUnder(tree, SHEET)).toContain('Delete every saved run?');
+    });
+
+    it('clears runs it could not count, and says every run went', async () => {
+      const announce = silenceAnnouncements();
+      await seedRuns(2);
+      jest
+        .spyOn(SessionStorageService, 'count')
+        .mockRejectedValueOnce(
+          new SessionStorageError('unreadable', 'STORAGE_FAILURE'),
+        );
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+
+      await press(tree, `${SHEET}-confirm`);
+
+      expect(await countSessions()).toBe(0);
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        'No saved runs to delete',
+      );
+      expect(announce).toHaveBeenCalledWith('Deleted every saved run');
+    });
+
+    it('asks first, naming how many runs will be deleted', async () => {
+      await seedRuns(37);
+      const { tree } = await renderScreen();
+      expect(isAsking(tree)).toBe(false);
+
+      await press(tree, 'row-clear-history');
+
+      const texts = textsUnder(tree, SHEET);
+      expect(texts).toContain('Delete 37 runs?');
+      expect(texts).toContain(
+        'Every saved run is removed from this phone. Your drills and profile are kept. This cannot be undone.',
+      );
+      expect(texts).toContain('Delete runs');
+      expect(byTestId(tree, `${SHEET}-confirm`)[0].props.variant).toBe(
+        'danger',
+      );
+      expect(await countSessions()).toBe(37);
+    });
+
+    it('says "run" for a single run', async () => {
+      await seedRuns(1);
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-clear-history');
+
+      expect(textsUnder(tree, SHEET)).toContain('Delete 1 run?');
+    });
+
+    it('gives the question to a screen reader as the heading of the sheet', async () => {
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-clear-history');
+
+      const heading = byTestId(tree, SHEET)[0].findAll(
+        node =>
+          node.props.accessibilityRole === 'header' &&
+          node.props.children === 'Delete 2 runs?',
+      );
+      expect(heading).not.toHaveLength(0);
+    });
+
+    it('deletes nothing when the confirmation is cancelled', async () => {
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+
+      await press(tree, `${SHEET}-cancel`);
+
+      expect(isAsking(tree)).toBe(false);
+      expect(await countSessions()).toBe(2);
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        '2 saved runs. Drills are kept.',
+      );
+    });
+
+    it('deletes nothing when the sheet is dismissed from the backdrop', async () => {
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+
+      await press(tree, `${SHEET}-backdrop`);
+
+      expect(isAsking(tree)).toBe(false);
+      expect(await countSessions()).toBe(2);
+    });
+
+    it('deletes every run and keeps the drills and profile once confirmed', async () => {
+      const announce = silenceAnnouncements();
+      const drill = await seedDrill();
+      await updateProfile({ name: 'Sam', appearance: 'dark' });
+      await seedRuns(3);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+
+      await press(tree, `${SHEET}-confirm`);
+
+      expect(isAsking(tree)).toBe(false);
+      expect(await loadSessions()).toEqual([]);
+      expect(await countSessions()).toBe(0);
+      expect((await loadDrills()).map(({ id }) => id)).toEqual([drill.id]);
+      const profile = await loadProfile();
+      expect(profile.name).toBe('Sam');
+      expect(profile.appearance).toBe('dark');
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        'No saved runs to delete',
+      );
+      expect(rowState(tree)).toEqual({ disabled: true });
+      expect(announce).toHaveBeenCalledWith('Deleted 3 runs');
+    });
+
+    it('shows a run count of 0 on Profile after the history is cleared', async () => {
+      silenceAnnouncements();
+      await seedRuns(2);
+      const { tree, goTo } = await renderScreen();
+      await goTo('Profile');
+      expect(textOf(tree, 'text-profile-runs')).toBe('2');
+      await goTo('Settings');
+
+      await press(tree, 'row-clear-history');
+      await press(tree, `${SHEET}-confirm`);
+      await goTo('Profile');
+
+      expect(textOf(tree, 'text-profile-runs')).toBe('0');
+    });
+
+    it('counts runs saved since the screen was last shown', async () => {
+      await seedRuns(1);
+      const { tree, goTo } = await renderScreen();
+      await goTo('Profile');
+
+      await seedRuns(1);
+      await goTo('Settings');
+
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        '2 saved runs. Drills are kept.',
+      );
+    });
+
+    it('keeps the runs and says so when storage fails', async () => {
+      const announce = silenceAnnouncements();
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+      jest
+        .spyOn(AsyncStorage, 'removeMany')
+        .mockRejectedValueOnce(new Error('disk full'));
+
+      await press(tree, `${SHEET}-confirm`);
+
+      expect(isAsking(tree)).toBe(true);
+      expect(textOf(tree, `${SHEET}-error`)).toBe(
+        'Could not delete your runs. They are still saved. Try again.',
+      );
+      expect(await countSessions()).toBe(2);
+      expect(subtitleOf(tree, 'row-clear-history')).toBe(
+        '2 saved runs. Drills are kept.',
+      );
+      expect(announce).not.toHaveBeenCalledWith(
+        expect.stringContaining('Deleted'),
+      );
+    });
+
+    it('deletes the runs when tried again after a failure', async () => {
+      silenceAnnouncements();
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+      jest
+        .spyOn(SessionStorageService, 'clear')
+        .mockRejectedValueOnce(
+          new SessionStorageError('disk full', 'STORAGE_FAILURE'),
+        );
+      await press(tree, `${SHEET}-confirm`);
+      expect(has(tree, `${SHEET}-error`)).toBe(true);
+
+      await press(tree, `${SHEET}-confirm`);
+
+      expect(isAsking(tree)).toBe(false);
+      expect(await countSessions()).toBe(0);
+    });
+
+    it('drops the error when the sheet is opened again', async () => {
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+      jest
+        .spyOn(SessionStorageService, 'clear')
+        .mockRejectedValueOnce(
+          new SessionStorageError('disk full', 'STORAGE_FAILURE'),
+        );
+      await press(tree, `${SHEET}-confirm`);
+      await press(tree, `${SHEET}-cancel`);
+
+      await press(tree, 'row-clear-history');
+
+      expect(has(tree, `${SHEET}-error`)).toBe(false);
+    });
+
+    it('cannot be cancelled or confirmed twice while the runs are deleted', async () => {
+      silenceAnnouncements();
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+      let finish: () => void = () => {};
+      const clear = jest
+        .spyOn(SessionStorageService, 'clear')
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>(resolve => {
+              finish = resolve;
+            }),
+        );
+
+      await press(tree, `${SHEET}-confirm`);
+      await press(tree, `${SHEET}-confirm`);
+      await press(tree, `${SHEET}-cancel`);
+
+      expect(clear).toHaveBeenCalledTimes(1);
+      expect(isAsking(tree)).toBe(true);
+      expect(textsUnder(tree, SHEET)).toContain('Deleting…');
+
+      await act(async () => {
+        finish();
+      });
+      await settle();
+
+      expect(isAsking(tree)).toBe(false);
+    });
+  });
+
+  describe('About', () => {
+    it('shows the version from package.json', async () => {
+      const { version } = jest.requireActual<{ version: string }>(
+        '../package.json',
+      );
+
+      const { tree } = await renderScreen();
+
+      expect(tree.root.findAllByProps({ title: 'About' })).not.toHaveLength(0);
+      expect(APP_VERSION).toBe(version);
+      expect(byTestId(tree, 'row-version')[0].props.value).toBe(version);
+      expect(byTestId(tree, 'row-version')[0].props.accessibilityLabel).toBe(
+        `Version ${version}`,
+      );
+    });
+
+    it('says the data stays on the phone and calibration resets', async () => {
+      const { tree } = await renderScreen();
+
+      const note = byTestId(tree, 'text-privacy')[0]
+        .findAll(node => typeof node.props.children === 'string')
+        .map(node => node.props.children)
+        .join(' ');
+      expect(note).toContain('stored only on this phone');
+      expect(note).toContain('no account');
+      expect(note).toContain('nothing is sent anywhere');
+      expect(note).toContain('Calibration resets when the app');
     });
   });
 });

@@ -26,6 +26,15 @@ type ListRowProps = {
   left?: ReactNode;
   right?: ReactNode;
   onPress?: () => void;
+  /**
+   * A pressable row that cannot be pressed right now: its title is greyed,
+   * its chevron hidden and a screen reader reads it as dimmed. Say why in
+   * the subtitle, which keeps its full contrast so the reason stays
+   * readable.
+   */
+  disabled?: boolean;
+  /** The row does something that cannot be undone: its title is `danger`. */
+  destructive?: boolean;
   /** Show a trailing chevron. Implied when `onPress` is set and no `right`. */
   chevron?: boolean;
   /** Hairline separator below the row. Omit on the last row of a group. */
@@ -74,6 +83,17 @@ const createStyles = (theme: Theme) =>
     },
   });
 
+/** The title's colour: greyed when disabled, `danger` when destructive. */
+const titleColor = (
+  disabled: boolean,
+  destructive: boolean,
+): keyof SemanticColors => {
+  if (disabled) {
+    return 'textTertiary';
+  }
+  return destructive ? 'danger' : 'textPrimary';
+};
+
 /** One line in a grouped list. Sits inside a `flush` Card. */
 export const ListRow = ({
   title,
@@ -84,6 +104,8 @@ export const ListRow = ({
   left,
   right,
   onPress,
+  disabled = false,
+  destructive = false,
   chevron,
   divided = false,
   accessibilityLabel,
@@ -92,7 +114,8 @@ export const ListRow = ({
   testID,
 }: ListRowProps) => {
   const styles = useThemedStyles(createStyles);
-  const showChevron = chevron ?? (Boolean(onPress) && !right && !value);
+  const showChevron =
+    chevron ?? (Boolean(onPress) && !disabled && !right && !value);
 
   const content = (
     <>
@@ -106,7 +129,11 @@ export const ListRow = ({
       {left}
 
       <View style={styles.body}>
-        <Typography variant="bodyStrong" numberOfLines={1}>
+        <Typography
+          variant="bodyStrong"
+          color={titleColor(disabled, destructive)}
+          numberOfLines={1}
+        >
           {title}
         </Typography>
         {subtitle ? (
@@ -137,7 +164,9 @@ export const ListRow = ({
       <TouchableOpacity
         testID={testID}
         onPress={onPress}
+        disabled={disabled}
         accessibilityRole="button"
+        accessibilityState={{ disabled }}
         accessibilityLabel={accessibilityLabel}
         accessibilityActions={accessibilityActions}
         onAccessibilityAction={onAccessibilityAction}

@@ -37,9 +37,9 @@ import { createStorageNamespace, StorageError } from './storage';
  *   - A session is a record of something that happened, so it is written
  *     once and never updated. The service generates its id and stamps
  *     `createdAt`; callers supply the drill, the total time and the
- *     splits and get the full `Session` back. The one removal beyond a
- *     single id is `deleteSessionsByDrillId`, which goes with a deleted
- *     drill.
+ *     splits and get the full `Session` back. The removals beyond a
+ *     single id are `deleteSessionsByDrillId`, which goes with a deleted
+ *     drill, and `clearSessions`, which clears the whole history.
  *   - Anything read back from storage is untrusted: it is checked field
  *     by field, each `delta` is recomputed from the split's par and
  *     actual, and an entry that does not pass is skipped like corrupt JSON
@@ -444,8 +444,9 @@ export async function deleteSessionsByDrillId(drillId: string): Promise<void> {
 }
 
 /**
- * Remove every session from storage. Primarily useful for tests and "reset
- * app data" flows.
+ * Remove every session from storage, and nothing else: drills and the
+ * profile are kept. Backs Settings → Clear run history, and resets state
+ * between tests.
  */
 export async function clearSessions(): Promise<void> {
   await withStorage('clear sessions', () => sessions.clear());
