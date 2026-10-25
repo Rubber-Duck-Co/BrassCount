@@ -10,7 +10,7 @@ export interface BeepSpec {
 export const DEFAULT_BEEP: BeepSpec = {
   frequencyHz: 1000,
   durationMs: 300,
-  volume: 0.9,
+  volume: 1,
   waveform: 'sine',
 };
 

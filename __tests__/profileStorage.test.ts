@@ -12,18 +12,27 @@ import {
   updateProfile,
   type ProfileStorageOptions,
 } from '../src/services/profileStorage';
+import {
+  DEFAULT_MAX_DELAY_MS,
+  DEFAULT_MIN_DELAY_MS,
+} from '../src/services/startSequence';
 import { STORAGE_ROOT, StorageError } from '../src/services/storage';
 import {
   APPEARANCE_PREFERENCES,
+  BEEP_VOLUMES,
   DEFAULT_PROFILE,
   LEVEL_UNITS,
   MAX_PROFILE_HANDLE_LENGTH,
   MAX_PROFILE_NAME_LENGTH,
+  MAX_START_DELAY_MS,
+  MIN_START_DELAY_MS,
   type Profile,
   type ProfileChanges,
 } from '../src/types/profile';
 
 const SAVED_AT = '2026-10-01T08:00:00.000Z';
+/** The 1 to 5 s range every profile starts with. */
+const DEFAULT_START_DELAY = { minMs: 1000, maxMs: 5000 };
 const UPDATED_AT = '2026-10-02T09:30:00.000Z';
 
 const PROFILE_KEY = `${STORAGE_ROOT}:profile:v1:local`;
@@ -50,6 +59,8 @@ const storedProfile = (overrides: Record<string, unknown> = {}): unknown => ({
     handle: '@stored',
     appearance: 'dark',
     levelUnit: 'dbfs',
+    startDelay: DEFAULT_START_DELAY,
+    beepVolume: 'full',
     updatedAt: SAVED_AT,
     ...overrides,
   },
@@ -108,6 +119,8 @@ describe('profileStorage service', () => {
         handle: null,
         appearance: 'system',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: null,
       });
     });
@@ -194,6 +207,8 @@ describe('profileStorage service', () => {
         handle: '@stored',
         appearance: 'dark',
         levelUnit: 'dbfs',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: SAVED_AT,
       });
     });
@@ -260,6 +275,8 @@ describe('profileStorage service', () => {
           handle: '@stored',
           appearance: 'dark',
           levelUnit: 'dbfs',
+          startDelay: DEFAULT_START_DELAY,
+          beepVolume: 'full',
           updatedAt: SAVED_AT,
           ...expected,
         });
@@ -282,6 +299,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'system',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: SAVED_AT,
       });
     });
@@ -315,6 +334,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'dark',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
       expect(await loadProfile()).toEqual(updated);
@@ -332,6 +353,8 @@ describe('profileStorage service', () => {
           handle: '@martymcfly',
           appearance,
           levelUnit: 'level',
+          startDelay: DEFAULT_START_DELAY,
+          beepVolume: 'full',
           updatedAt: UPDATED_AT,
         });
         expect(await loadProfile()).toEqual(updated);
@@ -350,6 +373,8 @@ describe('profileStorage service', () => {
           handle: '@martymcfly',
           appearance: 'dark',
           levelUnit,
+          startDelay: DEFAULT_START_DELAY,
+          beepVolume: 'full',
           updatedAt: UPDATED_AT,
         });
         expect(await loadProfile()).toEqual(updated);
@@ -376,6 +401,8 @@ describe('profileStorage service', () => {
         handle: null,
         appearance: 'dark',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: SAVED_AT,
       });
     });
@@ -425,6 +452,8 @@ describe('profileStorage service', () => {
         handle: null,
         appearance: 'dark',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
       expect(await loadProfile()).toEqual(updated);
@@ -449,6 +478,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'system',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: SAVED_AT,
       });
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
@@ -473,6 +504,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'system',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
     });
@@ -494,6 +527,8 @@ describe('profileStorage service', () => {
         handle: null,
         appearance: 'light',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: SAVED_AT,
       });
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
@@ -512,6 +547,8 @@ describe('profileStorage service', () => {
         handle: '@stored',
         appearance: 'system',
         levelUnit: 'dbfs',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
     });
@@ -531,6 +568,8 @@ describe('profileStorage service', () => {
         handle: '@stored',
         appearance: 'light',
         levelUnit: 'dbfs',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
       // ... but it was not replaced on disk by that default.
@@ -541,6 +580,8 @@ describe('profileStorage service', () => {
           handle: '@stored',
           appearance: 'light',
           levelUnit: 'dbfs',
+          startDelay: DEFAULT_START_DELAY,
+          beepVolume: 'full',
           updatedAt: UPDATED_AT,
         },
       });
@@ -560,6 +601,8 @@ describe('profileStorage service', () => {
           handle: '@stored',
           appearance: 'dark',
           levelUnit: 'dbfs',
+          startDelay: DEFAULT_START_DELAY,
+          beepVolume: 'full',
           updatedAt: UPDATED_AT,
         },
       });
@@ -577,6 +620,8 @@ describe('profileStorage service', () => {
           handle: '@stored',
           appearance: 'light',
           levelUnit: 'dbfs',
+          startDelay: DEFAULT_START_DELAY,
+          beepVolume: 'full',
           updatedAt: UPDATED_AT,
         },
       });
@@ -631,6 +676,36 @@ describe('profileStorage service', () => {
       ['a null appearance', { appearance: null }],
       ['a level unit that is not a choice', { levelUnit: 'spl' }],
       ['a null level unit', { levelUnit: null }],
+      [
+        'a start delay whose shortest end is past its longest',
+        { startDelay: { minMs: 3000, maxMs: 2500 } },
+      ],
+      [
+        'a start delay shorter than a second',
+        { startDelay: { minMs: 500, maxMs: 2000 } },
+      ],
+      ['a start delay of nothing', { startDelay: { minMs: 0, maxMs: 2000 } }],
+      [
+        'a start delay longer than ten seconds',
+        { startDelay: { minMs: 1000, maxMs: 10_500 } },
+      ],
+      [
+        'a start delay that is not on a half-second step',
+        { startDelay: { minMs: 1200, maxMs: 2000 } },
+      ],
+      [
+        'a start delay that is not a number',
+        { startDelay: { minMs: '1000', maxMs: 2000 } },
+      ],
+      ['a start delay with a missing end', { startDelay: { minMs: 1000 } }],
+      ['a start delay that is not a range', { startDelay: 2000 }],
+      ['a null start delay', { startDelay: null }],
+      ['a beep volume that is not a choice', { beepVolume: 'deafening' }],
+      ['a beep volume given as a gain', { beepVolume: 0.5 }],
+      [
+        'a beep volume from an earlier build of this branch',
+        { beepVolume: 'loud' },
+      ],
     ])(
       'rejects %s and leaves the stored profile alone',
       async (_case, changes) => {
@@ -682,6 +757,168 @@ describe('profileStorage service', () => {
       );
 
       expect(await AsyncStorage.getAllKeys()).toEqual([]);
+    });
+  });
+
+  describe('timer settings', () => {
+    it('offers quiet, medium and full as the beep volumes, full by default', () => {
+      expect(BEEP_VOLUMES).toEqual(['quiet', 'medium', 'full']);
+      expect(DEFAULT_PROFILE.beepVolume).toBe('full');
+    });
+
+    it('starts with the 1 to 5 s delay the start sequence has always used', () => {
+      expect(DEFAULT_PROFILE.startDelay).toEqual({
+        minMs: DEFAULT_MIN_DELAY_MS,
+        maxMs: DEFAULT_MAX_DELAY_MS,
+      });
+    });
+
+    it('stores a start delay range and reads it back', async () => {
+      const saved = await updateProfile(
+        { startDelay: { minMs: 1500, maxMs: 2500 } },
+        at(SAVED_AT),
+      );
+
+      expect(saved.startDelay).toEqual({ minMs: 1500, maxMs: 2500 });
+      expect((await loadProfile()).startDelay).toEqual({
+        minMs: 1500,
+        maxMs: 2500,
+      });
+    });
+
+    it('stores a fixed delay, with both ends equal', async () => {
+      await updateProfile({ startDelay: { minMs: 2000, maxMs: 2000 } }, at());
+
+      expect((await loadProfile()).startDelay).toEqual({
+        minMs: 2000,
+        maxMs: 2000,
+      });
+    });
+
+    it('accepts a range on the outermost bounds', async () => {
+      const startDelay = {
+        minMs: MIN_START_DELAY_MS,
+        maxMs: MAX_START_DELAY_MS,
+      };
+
+      const saved = await updateProfile({ startDelay }, at());
+
+      expect(saved.startDelay).toEqual({ minMs: 1000, maxMs: 10_000 });
+    });
+
+    it('stores only the two ends of a range', async () => {
+      const startDelay = { minMs: 1000, maxMs: 2000, unit: 'ms' };
+
+      await updateProfile({ startDelay } as ProfileChanges, at());
+
+      expect(await readStored()).toMatchObject({
+        profile: { startDelay: { minMs: 1000, maxMs: 2000 } },
+      });
+      expect(
+        (await readStored()) as { profile: { startDelay: object } },
+      ).not.toHaveProperty('profile.startDelay.unit');
+    });
+
+    it.each(BEEP_VOLUMES)(
+      'stores the %s beep volume and reads it back',
+      async beepVolume => {
+        const saved = await updateProfile({ beepVolume }, at());
+
+        expect(saved.beepVolume).toBe(beepVolume);
+        expect((await loadProfile()).beepVolume).toBe(beepVolume);
+      },
+    );
+
+    it('keeps the timer settings when another field is changed', async () => {
+      await updateProfile(
+        { startDelay: { minMs: 2000, maxMs: 4000 }, beepVolume: 'medium' },
+        at(SAVED_AT),
+      );
+
+      const updated = await updateProfile(
+        { appearance: 'dark', name: 'Marty' },
+        at(UPDATED_AT),
+      );
+
+      expect(updated.startDelay).toEqual({ minMs: 2000, maxMs: 4000 });
+      expect(updated.beepVolume).toBe('medium');
+    });
+
+    it('keeps the other fields when the timer settings are changed', async () => {
+      await updateProfile(
+        { ...marty, appearance: 'dark', levelUnit: 'dbfs' },
+        at(SAVED_AT),
+      );
+
+      const updated = await updateProfile(
+        { startDelay: { minMs: 1500, maxMs: 1500 }, beepVolume: 'quiet' },
+        at(UPDATED_AT),
+      );
+
+      expect(updated).toEqual({
+        name: 'Marty McFly',
+        handle: '@martymcfly',
+        appearance: 'dark',
+        levelUnit: 'dbfs',
+        startDelay: { minMs: 1500, maxMs: 1500 },
+        beepVolume: 'quiet',
+        updatedAt: UPDATED_AT,
+      });
+    });
+
+    it('reads a profile saved before the timer settings existed with their defaults', async () => {
+      await writeStored(
+        storedProfile({ startDelay: undefined, beepVolume: undefined }),
+      );
+
+      const profile = await loadProfile();
+
+      expect(profile.startDelay).toEqual(DEFAULT_START_DELAY);
+      expect(profile.beepVolume).toBe('full');
+      expect(profile.appearance).toBe('dark');
+    });
+
+    it.each<[string, unknown]>([
+      ['its shortest end past its longest', { minMs: 4000, maxMs: 2000 }],
+      ['an end off the half-second steps', { minMs: 1000, maxMs: 2750 }],
+      ['an end past ten seconds', { minMs: 1000, maxMs: 60_000 }],
+      ['a negative end', { minMs: -500, maxMs: 2000 }],
+      ['ends that are text', { minMs: '1', maxMs: '5' }],
+      ['a bare number', 3000],
+    ])(
+      'reads a stored start delay with %s as the default and keeps the other fields',
+      async (_case, startDelay) => {
+        await writeStored(storedProfile({ startDelay, beepVolume: 'medium' }));
+
+        const profile = await loadProfile();
+
+        expect(profile.startDelay).toEqual(DEFAULT_START_DELAY);
+        expect(profile.beepVolume).toBe('medium');
+        expect(profile.levelUnit).toBe('dbfs');
+      },
+    );
+
+    it('reads a stored beep volume that is not a choice as full', async () => {
+      await writeStored(
+        storedProfile({
+          beepVolume: 'max',
+          startDelay: { minMs: 2000, maxMs: 3000 },
+        }),
+      );
+
+      const profile = await loadProfile();
+
+      expect(profile.beepVolume).toBe('full');
+      expect(profile.startDelay).toEqual({ minMs: 2000, maxMs: 3000 });
+    });
+
+    it('hands out a start delay the caller may change without touching the default', async () => {
+      const profile = await loadProfile();
+
+      profile.startDelay.minMs = 4000;
+
+      expect(DEFAULT_PROFILE.startDelay.minMs).toBe(1000);
+      expect((await loadProfile()).startDelay.minMs).toBe(1000);
     });
   });
 
@@ -762,6 +999,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'dark',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
       expect(stored).toEqual(last);
@@ -779,6 +1018,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'light',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: SAVED_AT,
       });
     });
@@ -805,6 +1046,8 @@ describe('profileStorage service', () => {
         handle: null,
         appearance: 'system',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
     });
@@ -852,6 +1095,8 @@ describe('profileStorage service', () => {
         handle: '@martymcfly',
         appearance: 'dark',
         levelUnit: 'level',
+        startDelay: DEFAULT_START_DELAY,
+        beepVolume: 'full',
         updatedAt: UPDATED_AT,
       });
     });

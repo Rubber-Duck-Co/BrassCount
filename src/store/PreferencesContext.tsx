@@ -15,8 +15,14 @@ import {
   type ProfileStorageServiceType,
 } from '@services/profileStorage';
 
-/** The display preferences Settings changes, as stored on the profile. */
-export type Preferences = Pick<Profile, 'appearance' | 'levelUnit'>;
+/**
+ * The preferences Settings changes, as stored on the profile: the display
+ * ones, and the timer's start delay range and beep volume.
+ */
+export type Preferences = Pick<
+  Profile,
+  'appearance' | 'levelUnit' | 'startDelay' | 'beepVolume'
+>;
 
 export type PreferenceKey = keyof Preferences;
 
@@ -28,8 +34,8 @@ export type PreferencesContextValue = {
    * save fails that preference goes back to its last saved value and the
    * promise rejects with the service's `ProfileStorageError` — unless a
    * newer choice for the same preference was made meanwhile, in which case
-   * it resolves and the newer choice stays. The other preference is never
-   * touched by the rollback.
+   * it resolves and the newer choice stays. The other
+   * preferences are never touched by the rollback.
    */
   setPreference: <K extends PreferenceKey>(
     key: K,
@@ -50,15 +56,18 @@ export type PreferencesProviderProps = {
 const preferencesOf = (profile: Readonly<Profile>): Preferences => ({
   appearance: profile.appearance,
   levelUnit: profile.levelUnit,
+  startDelay: profile.startDelay,
+  beepVolume: profile.beepVolume,
 });
 
 const DEFAULT_PREFERENCES: Readonly<Preferences> =
   preferencesOf(DEFAULT_PROFILE);
 
 /**
- * Holds the display preferences from the stored profile: the Appearance
- * that `useTheme()` resolves into the light or dark theme, and the unit
- * sound levels are shown in.
+ * Holds the preferences from the stored profile: the Appearance that
+ * `useTheme()` resolves into the light or dark theme, the unit sound levels
+ * are shown in, and the start delay range and beep volume the Timer's next
+ * run uses.
  *
  * Nothing below it renders until the stored preferences have been read,
  * so a shooter who pinned dark never sees a light first frame from React.
@@ -81,6 +90,8 @@ export const PreferencesProvider = ({
   const changeIdsRef = useRef<Record<PreferenceKey, number>>({
     appearance: 0,
     levelUnit: 0,
+    startDelay: 0,
+    beepVolume: 0,
   });
 
   useEffect(() => {

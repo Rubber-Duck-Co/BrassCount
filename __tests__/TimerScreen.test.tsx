@@ -32,6 +32,7 @@ import {
   saveDrill,
   updateDrill,
 } from '../src/services/drillStorage';
+import { updateProfile } from '../src/services/profileStorage';
 import { loadSessions } from '../src/services/sessionStorage';
 import {
   StartSequenceAbortError,
@@ -45,6 +46,7 @@ import {
   CalibrationProvider,
   type CalibrationContextValue,
 } from '../src/store/CalibrationContext';
+import { PreferencesProvider } from '../src/store/PreferencesContext';
 import type { DrillInput } from '../src/types/drill';
 import { formatElapsed } from '../src/utils/format';
 
@@ -195,14 +197,17 @@ const renderScreen = async ({
               store = value;
             }}
           />
-          <NavigationContainer ref={navigationRef}>
-            <Tab.Navigator screenOptions={{ headerShown: false }}>
-              <Tab.Screen name="Timer" component={TimerScreen} />
-              <Tab.Screen name="Elsewhere" component={Blank} />
-              <Tab.Screen name="Calibration" component={Blank} />
-              <Tab.Screen name="SequenceEditor" component={Blank} />
-            </Tab.Navigator>
-          </NavigationContainer>
+          {/* Renders the navigator once the stored timer settings are read. */}
+          <PreferencesProvider>
+            <NavigationContainer ref={navigationRef}>
+              <Tab.Navigator screenOptions={{ headerShown: false }}>
+                <Tab.Screen name="Timer" component={TimerScreen} />
+                <Tab.Screen name="Elsewhere" component={Blank} />
+                <Tab.Screen name="Calibration" component={Blank} />
+                <Tab.Screen name="SequenceEditor" component={Blank} />
+              </Tab.Navigator>
+            </NavigationContainer>
+          </PreferencesProvider>
         </CalibrationProvider>
       </SafeAreaProvider>,
       // Host elements get a stand-in, so the screen has a ref to focus.
@@ -522,6 +527,24 @@ describe('TimerScreen', () => {
       expect(buttonLabel(tree)).toBe('Cancel start');
       expect(subtitle(tree)).toBe('Stand by…');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
+    });
+
+    it('starts with the delay range and beep volume stored in Settings', async () => {
+      // Stored before the screen mounts, as after an app restart.
+      await updateProfile({
+        startDelay: { minMs: 2000, maxMs: 3500 },
+        beepVolume: 'quiet',
+      });
+      const { tree } = await renderScreen();
+
+      await press(tree, 'btn-start');
+
+      expect(startMock).toHaveBeenCalledTimes(1);
+      expect(pendingStart?.options).toMatchObject({
+        minDelayMs: 2000,
+        maxDelayMs: 3500,
+        beep: { volume: 0.25 },
+      });
     });
 
     it('reads Cancel during the wait, since pressing it cancels the start', async () => {

@@ -1,15 +1,20 @@
 import {
   APPEARANCE_PREFERENCES,
+  BEEP_VOLUMES,
   DEFAULT_PROFILE,
   HANDLE_BODY_PATTERN,
   HANDLE_PREFIX,
   LEVEL_UNITS,
   MAX_PROFILE_HANDLE_LENGTH,
   MAX_PROFILE_NAME_LENGTH,
+  MAX_START_DELAY_MS,
+  MIN_START_DELAY_MS,
+  START_DELAY_STEP_MS,
   type AppearancePreference,
   type LevelUnit,
   type Profile,
   type ProfileChanges,
+  type StartDelayRange,
 } from '@/types/profile';
 import { isRecord, isTimestamp } from '@utils/guards';
 import {
@@ -18,6 +23,7 @@ import {
   profileNameLength,
 } from '@utils/profile';
 import { createSerialQueue } from '@utils/serialQueue';
+import { isBeepVolume, isStartDelayRange } from '@utils/startSettings';
 import { getTimestamp as defaultGetTimestamp } from '@utils/timestamp';
 
 import { createStorageNamespace, StorageError } from './storage';
@@ -26,8 +32,9 @@ import { createStorageNamespace, StorageError } from './storage';
  * ProfileStorageService
  * ---------------------
  * Local persistence layer for the profile: the display name and handle the
- * Profile screen shows, and the display preferences Settings changes (the
- * Appearance the theme follows and the unit sound levels are shown in).
+ * Profile screen shows, and the preferences Settings changes (the
+ * Appearance the theme follows, the unit sound levels are shown in, and
+ * the timer's start delay range and beep volume).
  * There is no account behind it — the profile lives on this device only.
  *
  * Design notes:
@@ -40,13 +47,16 @@ import { createStorageNamespace, StorageError } from './storage';
  *   - A profile always exists as far as callers are concerned: until one
  *     is saved, `loadProfile` resolves to `DEFAULT_PROFILE` (no name, no
  *     handle, Appearance following the device, levels on the 0–100
- *     scale).
+ *     scale, a 1 to 5 s start delay, the normal beep volume).
  *   - Anything read back from storage is untrusted and checked field by
  *     field. Unlike a drill or a session, a field that fails falls back to
  *     its default on its own instead of discarding the whole value, so a
  *     name that no longer passes cannot also reset the theme.
  *   - A name or handle is bounded (`MAX_PROFILE_NAME_LENGTH`,
- *     `MAX_PROFILE_HANDLE_LENGTH`) on save and on read alike.
+ *     `MAX_PROFILE_HANDLE_LENGTH`) on save and on read alike, and so is
+ *     the start delay range (`isStartDelayRange`). The range is one
+ *     field, saved and checked as a whole, so its shortest end can never
+ *     be stored past its longest.
  *   - Updates and clears run one at a time, in the order they were
  *     requested, so a name saved while Appearance is being switched cannot
  *     undo it.
@@ -112,6 +122,26 @@ const isAppearancePreference = (
 
 const isLevelUnit = (value: unknown): value is LevelUnit =>
   LEVEL_UNITS.some(unit => unit === value);
+
+/** A copy of `DEFAULT_PROFILE` that a caller may change freely. */
+const defaultProfile = (): Profile => ({
+  ...DEFAULT_PROFILE,
+  startDelay: { ...DEFAULT_PROFILE.startDelay },
+});
+
+/**
+ * Check a start delay range and return a clean copy holding only its two
+ * ends. Both must be whole steps within the bounds, and the shortest no
+ * longer than the longest.
+ */
+const normalizeStartDelay = (range: unknown): StartDelayRange => {
+  if (!isStartDelayRange(range)) {
+    throw invalid(
+      `A start delay must run from ${MIN_START_DELAY_MS} to ${MAX_START_DELAY_MS} ms in steps of ${START_DELAY_STEP_MS} ms, shortest first`,
+    );
+  }
+  return { minMs: range.minMs, maxMs: range.maxMs };
+};
 
 /**
  * Bring a name to its stored form (see `normalizeProfileName`). `null` and
@@ -201,7 +231,15 @@ const parseStoredProfile = (stored: unknown): Profile | null => {
 
   // A profile saved before a field existed reads that field as its
   // default, so adding a field needs no schema bump.
-  const { name, handle, appearance, levelUnit, updatedAt } = stored.profile;
+  const {
+    name,
+    handle,
+    appearance,
+    levelUnit,
+    startDelay,
+    beepVolume,
+    updatedAt,
+  } = stored.profile;
   return {
     name: readField(() => normalizeName(name), DEFAULT_PROFILE.name),
     handle: readField(() => normalizeHandle(handle), DEFAULT_PROFILE.handle),
@@ -209,6 +247,13 @@ const parseStoredProfile = (stored: unknown): Profile | null => {
       ? appearance
       : DEFAULT_PROFILE.appearance,
     levelUnit: isLevelUnit(levelUnit) ? levelUnit : DEFAULT_PROFILE.levelUnit,
+    // A fresh copy of the known fields, never the stored object itself.
+    startDelay: isStartDelayRange(startDelay)
+      ? { minMs: startDelay.minMs, maxMs: startDelay.maxMs }
+      : { ...DEFAULT_PROFILE.startDelay },
+    beepVolume: isBeepVolume(beepVolume)
+      ? beepVolume
+      : DEFAULT_PROFILE.beepVolume,
     updatedAt: isTimestamp(updatedAt) ? updatedAt : DEFAULT_PROFILE.updatedAt,
   };
 };
@@ -239,14 +284,20 @@ const readStoredFields = async (): Promise<StoredProfile['profile']> => {
     profiles.getItem(PROFILE_ID),
   );
   if (parseStoredProfile(stored) === null || !isRecord(stored)) {
-    return { ...DEFAULT_PROFILE };
+    return defaultProfile();
   }
   // Only the known fields are carried over, never the whole stored object.
-  const { name, handle, appearance, levelUnit } = stored.profile as Record<
-    string,
-    unknown
-  >;
-  return { name, handle, appearance, levelUnit, updatedAt: null };
+  const { name, handle, appearance, levelUnit, startDelay, beepVolume } =
+    stored.profile as Record<string, unknown>;
+  return {
+    name,
+    handle,
+    appearance,
+    levelUnit,
+    startDelay,
+    beepVolume,
+    updatedAt: null,
+  };
 };
 
 // Queue of changes to the stored profile. `updateProfile` reads the
@@ -267,11 +318,12 @@ export async function loadProfile(): Promise<Profile> {
   const stored = await withStorage('load profile', () =>
     profiles.getItem(PROFILE_ID),
   );
-  return parseStoredProfile(stored) ?? { ...DEFAULT_PROFILE };
+  return parseStoredProfile(stored) ?? defaultProfile();
 }
 
 /**
- * Change the name, handle, Appearance preference and/or level unit.
+ * Change the name, handle, Appearance preference, level unit, start delay
+ * range and/or beep volume.
  *
  * Fields left out of `changes` keep their stored value, and `updatedAt` is
  * set to now. The name is trimmed and its inner whitespace collapsed; the
@@ -296,7 +348,10 @@ export async function loadProfile(): Promise<Profile> {
  * than `MAX_PROFILE_NAME_LENGTH`, the handle is longer than
  * `MAX_PROFILE_HANDLE_LENGTH` or uses anything but letters, digits, `.`,
  * `_` and `-`, the appearance is not one of `APPEARANCE_PREFERENCES`, or
- * the level unit is not one of `LEVEL_UNITS`.
+ * the level unit is not one of `LEVEL_UNITS`, the start delay range has
+ * an end that is not a whole step of `START_DELAY_STEP_MS` between
+ * `MIN_START_DELAY_MS` and `MAX_START_DELAY_MS` or a shortest end past
+ * its longest, or the beep volume is not one of `BEEP_VOLUMES`.
  */
 export async function updateProfile(
   changes: ProfileChanges,
@@ -322,6 +377,14 @@ export async function updateProfile(
   if (levelUnit !== undefined && !isLevelUnit(levelUnit)) {
     throw invalid(`Level unit must be one of: ${LEVEL_UNITS.join(', ')}`);
   }
+  const startDelay =
+    changes.startDelay === undefined
+      ? undefined
+      : normalizeStartDelay(changes.startDelay);
+  const { beepVolume } = changes;
+  if (beepVolume !== undefined && !isBeepVolume(beepVolume)) {
+    throw invalid(`Beep volume must be one of: ${BEEP_VOLUMES.join(', ')}`);
+  }
 
   return inOrder(async () => {
     const updatedAt = getTimestamp();
@@ -339,6 +402,8 @@ export async function updateProfile(
         handle: handle === undefined ? existing.handle : handle,
         appearance: appearance ?? existing.appearance,
         levelUnit: levelUnit ?? existing.levelUnit,
+        startDelay: startDelay ?? existing.startDelay,
+        beepVolume: beepVolume ?? existing.beepVolume,
         updatedAt,
       },
     };
@@ -346,7 +411,7 @@ export async function updateProfile(
       profiles.setItem(PROFILE_ID, stored),
     );
     // What `loadProfile` will now read back, not what was written.
-    return parseStoredProfile(stored) ?? { ...DEFAULT_PROFILE };
+    return parseStoredProfile(stored) ?? defaultProfile();
   });
 }
 

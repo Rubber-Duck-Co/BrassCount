@@ -2,12 +2,17 @@
  * @format
  */
 
-import type { BeepPlayer, BeepSpec } from '../src/services/beepPlayer';
+import {
+  DEFAULT_BEEP,
+  type BeepPlayer,
+  type BeepSpec,
+} from '../src/services/beepPlayer';
 import {
   DEFAULT_MAX_DELAY_MS,
   DEFAULT_MIN_DELAY_MS,
   StartSequenceAbortError,
   StartSequenceError,
+  playTestBeep,
   startSequence,
 } from '../src/services/startSequence';
 import { CAPTURE_CLOCK_SETTLE_MS } from '../src/types/audio';
@@ -202,5 +207,42 @@ describe('startSequence', () => {
 
     await jest.advanceTimersByTimeAsync(DEFAULT_MIN_DELAY_MS);
     await rejects;
+  });
+});
+
+describe('playTestBeep', () => {
+  it('opens the output and plays the beep it is given, at once', async () => {
+    const player = createFakePlayer();
+    const beep: BeepSpec = { ...DEFAULT_BEEP, volume: 0.5 };
+
+    await playTestBeep(beep, player);
+
+    expect(player.prepare).toHaveBeenCalledTimes(1);
+    expect(player.play).toHaveBeenCalledWith(beep);
+    expect(player.release).not.toHaveBeenCalled();
+  });
+
+  it('wraps a beep that cannot be played', async () => {
+    const cause = new Error('no output');
+    const player = createFakePlayer(async () => {
+      throw cause;
+    });
+
+    const error: unknown = await playTestBeep(DEFAULT_BEEP, player).catch(
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(StartSequenceError);
+    expect((error as StartSequenceError).cause).toBe(cause);
+  });
+
+  it('wraps an output that cannot be opened, and plays nothing', async () => {
+    const player = createFakePlayer();
+    player.prepare.mockRejectedValueOnce(new Error('busy'));
+
+    await expect(playTestBeep(DEFAULT_BEEP, player)).rejects.toBeInstanceOf(
+      StartSequenceError,
+    );
+    expect(player.play).not.toHaveBeenCalled();
   });
 });

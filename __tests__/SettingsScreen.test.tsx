@@ -27,6 +27,10 @@ import {
   saveSession,
 } from '../src/services/sessionStorage';
 import {
+  StartSequenceError,
+  StartSequenceService,
+} from '../src/services/startSequence';
+import {
   PreferencesProvider,
   type PreferencesProviderProps,
 } from '../src/store/PreferencesContext';
@@ -444,6 +448,415 @@ describe('SettingsScreen', () => {
       );
       expect(has(tree, 'text-appearance-error')).toBe(false);
       expect((await loadProfile()).levelUnit).toBe('level');
+    });
+  });
+
+  describe('Timer', () => {
+    /** Whether a control is read as disabled. */
+    const isDisabled = (tree: ReactTestRenderer, testID: string): boolean =>
+      byTestId(tree, testID).some(
+        node => node.props.accessibilityState?.disabled === true,
+      );
+
+    /** Press a stepper button `times` times. */
+    const pressTimes = async (
+      tree: ReactTestRenderer,
+      testID: string,
+      times: number,
+    ) => {
+      for (let i = 0; i < times; i += 1) {
+        await press(tree, testID);
+      }
+    };
+
+    const isChecked = (tree: ReactTestRenderer, volume: string): boolean =>
+      byTestId(tree, `opt-beep-volume-${volume}`)[0].props.accessibilityState
+        .checked;
+
+    /** Stand in for the audio output, recording each test beep's volume. */
+    const spyOnTestBeep = () =>
+      jest.spyOn(StartSequenceService, 'testBeep').mockResolvedValue();
+
+    it('groups Start delay and Beep volume under Timer, after Display', async () => {
+      const { tree } = await renderScreen();
+
+      const headers = tree.root
+        .findAll(
+          node =>
+            typeof node.props.title === 'string' &&
+            ['Display', 'Timer'].includes(node.props.title) &&
+            node.props.testID === undefined &&
+            node.props.onPress === undefined,
+        )
+        .map(node => node.props.title);
+      expect(headers.indexOf('Display')).toBeLessThan(headers.indexOf('Timer'));
+      expect(has(tree, 'row-start-delay')).toBe(true);
+      expect(has(tree, 'row-beep-volume')).toBe(true);
+    });
+
+    describe('Start delay', () => {
+      it('is a random 1 to 5 s until one is chosen', async () => {
+        const { tree } = await renderScreen();
+
+        expect(subtitleOf(tree, 'row-start-delay')).toBe('Random, 1 to 5 s');
+        expect(
+          byTestId(tree, 'row-start-delay')[0].props.accessibilityLabel,
+        ).toBe('Start delay, Random, 1 to 5 seconds');
+      });
+
+      it('shows the stored range, and a fixed delay as fixed', async () => {
+        await updateProfile({ startDelay: { minMs: 2500, maxMs: 2500 } });
+
+        const { tree } = await renderScreen();
+
+        expect(subtitleOf(tree, 'row-start-delay')).toBe('Fixed, 2.5 s');
+      });
+
+      it('opens the picker on the stored range', async () => {
+        await updateProfile({ startDelay: { minMs: 1500, maxMs: 4000 } });
+        const { tree } = await renderScreen();
+
+        await press(tree, 'row-start-delay');
+
+        expect(textOf(tree, 'stepper-start-delay-min-value')).toBe('1.5 s');
+        expect(textOf(tree, 'stepper-start-delay-max-value')).toBe('4 s');
+        expect(textOf(tree, 'text-start-delay-summary')).toBe(
+          'Random, 1.5 to 4 s',
+        );
+      });
+
+      it('moves each end in half-second steps and stores the range on Save', async () => {
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+
+        await press(tree, 'stepper-start-delay-min-longer');
+        await pressTimes(tree, 'stepper-start-delay-max-longer', 3);
+        expect(textOf(tree, 'text-start-delay-summary')).toBe(
+          'Random, 1.5 to 6.5 s',
+        );
+        await press(tree, 'btn-start-delay-save');
+
+        expect(has(tree, 'btn-start-delay-save')).toBe(false);
+        expect(subtitleOf(tree, 'row-start-delay')).toBe(
+          'Random, 1.5 to 6.5 s',
+        );
+        expect((await loadProfile()).startDelay).toEqual({
+          minMs: 1500,
+          maxMs: 6500,
+        });
+      });
+
+      it('says each end in words for a screen reader', async () => {
+        const { tree } = await renderScreen();
+
+        await press(tree, 'row-start-delay');
+
+        expect(
+          byTestId(tree, 'stepper-start-delay-min-value')[0].props
+            .accessibilityLabel,
+        ).toBe('Shortest delay, 1 second');
+        expect(
+          byTestId(tree, 'stepper-start-delay-max-shorter')[0].props
+            .accessibilityLabel,
+        ).toBe('Shorten the longest delay');
+      });
+
+      it('will not let the shortest pass the longest, and saves equal ends as a fixed delay', async () => {
+        await updateProfile({ startDelay: { minMs: 2000, maxMs: 3000 } });
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+
+        await pressTimes(tree, 'stepper-start-delay-min-longer', 5);
+
+        expect(textOf(tree, 'stepper-start-delay-min-value')).toBe('3 s');
+        expect(isDisabled(tree, 'stepper-start-delay-min-longer')).toBe(true);
+        expect(isDisabled(tree, 'stepper-start-delay-max-shorter')).toBe(true);
+        expect(textOf(tree, 'text-start-delay-summary')).toBe('Fixed, 3 s');
+
+        await press(tree, 'btn-start-delay-save');
+
+        expect((await loadProfile()).startDelay).toEqual({
+          minMs: 3000,
+          maxMs: 3000,
+        });
+      });
+
+      it('will not let the longest go below the shortest', async () => {
+        await updateProfile({ startDelay: { minMs: 2000, maxMs: 3000 } });
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+
+        await pressTimes(tree, 'stepper-start-delay-max-shorter', 5);
+
+        expect(textOf(tree, 'stepper-start-delay-max-value')).toBe('2 s');
+        expect(isDisabled(tree, 'stepper-start-delay-max-shorter')).toBe(true);
+      });
+
+      it('stops at one second and at ten seconds', async () => {
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+
+        await pressTimes(tree, 'stepper-start-delay-min-shorter', 3);
+        await pressTimes(tree, 'stepper-start-delay-max-longer', 15);
+
+        expect(textOf(tree, 'stepper-start-delay-min-value')).toBe('1 s');
+        expect(textOf(tree, 'stepper-start-delay-max-value')).toBe('10 s');
+        expect(isDisabled(tree, 'stepper-start-delay-min-shorter')).toBe(true);
+        expect(isDisabled(tree, 'stepper-start-delay-max-longer')).toBe(true);
+        expect(isDisabled(tree, 'stepper-start-delay-min-longer')).toBe(false);
+        expect(isDisabled(tree, 'stepper-start-delay-max-shorter')).toBe(false);
+      });
+
+      it('keeps nothing when the picker is cancelled, and opens fresh next time', async () => {
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+        await pressTimes(tree, 'stepper-start-delay-max-longer', 2);
+
+        await press(tree, 'btn-start-delay-cancel');
+
+        expect(has(tree, 'btn-start-delay-save')).toBe(false);
+        expect(subtitleOf(tree, 'row-start-delay')).toBe('Random, 1 to 5 s');
+        expect((await loadProfile()).updatedAt).toBeNull();
+
+        await press(tree, 'row-start-delay');
+        expect(textOf(tree, 'stepper-start-delay-max-value')).toBe('5 s');
+      });
+
+      it('opens on the saved range after an edit was dismissed', async () => {
+        await updateProfile({ startDelay: { minMs: 2000, maxMs: 3000 } });
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+        await pressTimes(tree, 'stepper-start-delay-min-longer', 2);
+        await press(tree, 'btn-start-delay-close');
+
+        await press(tree, 'row-start-delay');
+
+        expect(textOf(tree, 'stepper-start-delay-min-value')).toBe('2 s');
+        expect(textOf(tree, 'text-start-delay-summary')).toBe(
+          'Random, 2 to 3 s',
+        );
+      });
+
+      it('keeps nothing when the picker is dismissed from the backdrop', async () => {
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+        await press(tree, 'stepper-start-delay-max-longer');
+
+        await press(tree, 'btn-start-delay-close');
+
+        expect(has(tree, 'btn-start-delay-save')).toBe(false);
+        expect((await loadProfile()).updatedAt).toBeNull();
+      });
+
+      it('puts the old range back and says so when the save fails', async () => {
+        const { tree } = await renderScreen(failingStorage);
+        await press(tree, 'row-start-delay');
+        await press(tree, 'stepper-start-delay-max-longer');
+
+        await press(tree, 'btn-start-delay-save');
+
+        expect(subtitleOf(tree, 'row-start-delay')).toBe('Random, 1 to 5 s');
+        expect(textOf(tree, 'text-start-delay-error')).toBe(
+          'Could not save the start delay. Try again.',
+        );
+        expect(
+          byTestId(tree, 'text-start-delay-error').some(
+            node => node.props.accessibilityLiveRegion === 'polite',
+          ),
+        ).toBe(true);
+        expect((await loadProfile()).startDelay).toEqual({
+          minMs: 1000,
+          maxMs: 5000,
+        });
+      });
+
+      it('leaves the other preferences alone', async () => {
+        await updateProfile({ appearance: 'dark', beepVolume: 'medium' });
+        const { tree } = await renderScreen();
+        await press(tree, 'row-start-delay');
+        await press(tree, 'stepper-start-delay-min-longer');
+
+        await press(tree, 'btn-start-delay-save');
+
+        const profile = await loadProfile();
+        expect(profile.appearance).toBe('dark');
+        expect(profile.beepVolume).toBe('medium');
+        expect(textOf(tree, 'text-theme-mode')).toBe('dark');
+      });
+    });
+
+    describe('Beep volume', () => {
+      it('is Full until one is chosen', async () => {
+        const { tree } = await renderScreen();
+
+        expect(subtitleOf(tree, 'row-beep-volume')).toBe('Full');
+      });
+
+      it('opens the picker with the stored volume checked', async () => {
+        await updateProfile({ beepVolume: 'quiet' });
+        const { tree } = await renderScreen();
+
+        await press(tree, 'row-beep-volume');
+
+        expect(isChecked(tree, 'quiet')).toBe(true);
+        expect(isChecked(tree, 'full')).toBe(false);
+        expect(isChecked(tree, 'medium')).toBe(false);
+      });
+
+      it('stores a chosen volume at once and keeps the picker open', async () => {
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+
+        await press(tree, 'opt-beep-volume-medium');
+
+        expect(isChecked(tree, 'medium')).toBe(true);
+        expect(has(tree, 'btn-test-beep')).toBe(true);
+        expect(subtitleOf(tree, 'row-beep-volume')).toBe('Medium');
+        expect((await loadProfile()).beepVolume).toBe('medium');
+      });
+
+      it('closes with Done', async () => {
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+
+        await press(tree, 'btn-beep-volume-done');
+
+        expect(has(tree, 'btn-test-beep')).toBe(false);
+      });
+
+      it('plays the test beep at full volume by default', async () => {
+        const testBeep = spyOnTestBeep();
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+
+        await press(tree, 'btn-test-beep');
+
+        expect(testBeep).toHaveBeenCalledTimes(1);
+        expect(testBeep.mock.calls[0][0]).toEqual({
+          ...StartSequenceService.beep,
+          volume: 1,
+        });
+      });
+
+      it('plays the test beep at the volume just chosen', async () => {
+        const testBeep = spyOnTestBeep();
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+
+        await press(tree, 'opt-beep-volume-quiet');
+        await press(tree, 'btn-test-beep');
+        await press(tree, 'opt-beep-volume-medium');
+        await press(tree, 'btn-test-beep');
+
+        expect(testBeep.mock.calls.map(([beep]) => beep?.volume)).toEqual([
+          0.25, 0.5,
+        ]);
+      });
+
+      it('names the volume a test beep will play at for a screen reader', async () => {
+        await updateProfile({ beepVolume: 'medium' });
+        const { tree } = await renderScreen();
+
+        await press(tree, 'row-beep-volume');
+
+        expect(
+          byTestId(tree, 'btn-test-beep')[0].props.accessibilityLabel,
+        ).toBe('Test beep, Medium');
+      });
+
+      it('says so when the test beep cannot be played', async () => {
+        jest
+          .spyOn(StartSequenceService, 'testBeep')
+          .mockRejectedValue(new StartSequenceError('no output'));
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+
+        await press(tree, 'btn-test-beep');
+
+        expect(textOf(tree, 'text-beep-volume-error')).toBe(
+          'Could not play the beep. Check the phone is not muted.',
+        );
+      });
+
+      it('clears the test beep error once a beep plays', async () => {
+        const testBeep = jest
+          .spyOn(StartSequenceService, 'testBeep')
+          .mockRejectedValueOnce(new StartSequenceError('no output'))
+          .mockResolvedValue();
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+        await press(tree, 'btn-test-beep');
+        expect(has(tree, 'text-beep-volume-error')).toBe(true);
+
+        await press(tree, 'btn-test-beep');
+
+        expect(testBeep).toHaveBeenCalledTimes(2);
+        expect(has(tree, 'text-beep-volume-error')).toBe(false);
+      });
+
+      it('puts the old volume back and says so when the save fails', async () => {
+        const { tree } = await renderScreen(failingStorage);
+        await press(tree, 'row-beep-volume');
+
+        await press(tree, 'opt-beep-volume-medium');
+
+        expect(isChecked(tree, 'full')).toBe(true);
+        expect(isChecked(tree, 'medium')).toBe(false);
+        expect(textOf(tree, 'text-beep-volume-error')).toBe(
+          'Could not save the beep volume. Try again.',
+        );
+        await press(tree, 'btn-beep-volume-done');
+        expect(subtitleOf(tree, 'row-beep-volume')).toBe('Full');
+        expect((await loadProfile()).beepVolume).toBe('full');
+
+        // Shown once, in the sheet: opening it again starts clean.
+        await press(tree, 'row-beep-volume');
+        expect(has(tree, 'text-beep-volume-error')).toBe(false);
+      });
+
+      it('shows no error for a test beep that fails after the sheet was closed', async () => {
+        let fail: () => void = () => {};
+        jest.spyOn(StartSequenceService, 'testBeep').mockImplementationOnce(
+          () =>
+            new Promise<void>((_, reject) => {
+              fail = () => reject(new StartSequenceError('no output'));
+            }),
+        );
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+        await press(tree, 'btn-test-beep');
+        await press(tree, 'btn-beep-volume-done');
+
+        await act(async () => {
+          fail();
+        });
+        await settle();
+        await press(tree, 'row-beep-volume');
+
+        expect(has(tree, 'text-beep-volume-error')).toBe(false);
+      });
+
+      it('shows no error for a test beep overtaken by a newer choice', async () => {
+        let fail: () => void = () => {};
+        jest.spyOn(StartSequenceService, 'testBeep').mockImplementationOnce(
+          () =>
+            new Promise<void>((_, reject) => {
+              fail = () => reject(new StartSequenceError('no output'));
+            }),
+        );
+        const { tree } = await renderScreen();
+        await press(tree, 'row-beep-volume');
+        await press(tree, 'btn-test-beep');
+        await press(tree, 'opt-beep-volume-medium');
+
+        await act(async () => {
+          fail();
+        });
+        await settle();
+
+        expect(has(tree, 'text-beep-volume-error')).toBe(false);
+        expect(isChecked(tree, 'medium')).toBe(true);
+      });
     });
   });
 

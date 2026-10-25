@@ -1,3 +1,5 @@
+import { useMemo, useState, type ReactNode } from 'react';
+
 import { DeviceEventEmitter, PermissionsAndroid, Platform } from 'react-native';
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -7,11 +9,13 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { useCalibration } from '../src/hooks/useCalibration';
 import { useDrillRun, type UseDrillRunResult } from '../src/hooks/useDrillRun';
 import { AUDIO_AMPLITUDE_EVENT } from '../src/services/audioCapture';
+import type { BeepPlayer, BeepSpec } from '../src/services/beepPlayer';
 import { DrillRunError } from '../src/services/drillRunEngine';
 import {
   StartSequenceAbortError,
   StartSequenceError,
   StartSequenceService,
+  startSequence,
   type StartSequenceOptions,
   type StartSequenceResult,
 } from '../src/services/startSequence';
@@ -20,8 +24,14 @@ import {
   CalibrationProvider,
   type CalibrationContextValue,
 } from '../src/store/CalibrationContext';
+import {
+  PreferencesContext,
+  type Preferences,
+  type PreferencesContextValue,
+} from '../src/store/PreferencesContext';
 import type { CalibrationSound } from '../src/types/calibration';
 import type { DrillStep } from '../src/types/drill';
+import { DEFAULT_PROFILE } from '../src/types/profile';
 
 jest.mock('../src/services/startSequence', () => {
   const actual = jest.requireActual('../src/services/startSequence');
@@ -69,10 +79,51 @@ let captureNow = REQUESTED_AT - 3000;
 
 const mounted: ReactTestRenderer[] = [];
 
-/** Mount the hook on a screen of its own, with the store it reads from. */
-const renderHook = () => {
+type TimerSettings = Pick<Preferences, 'startDelay' | 'beepVolume'>;
+
+const DEFAULT_TIMER_SETTINGS: TimerSettings = {
+  startDelay: DEFAULT_PROFILE.startDelay,
+  beepVolume: DEFAULT_PROFILE.beepVolume,
+};
+
+/**
+ * Stands in for `PreferencesProvider`: holds the timer settings in state,
+ * so a test can change them as Settings would, and renders at once.
+ */
+const TestPreferences = ({
+  initial,
+  onSetter,
+  children,
+}: {
+  initial: TimerSettings;
+  onSetter: (set: (settings: TimerSettings) => void) => void;
+  children: ReactNode;
+}) => {
+  const [settings, setSettings] = useState<TimerSettings>(initial);
+  onSetter(setSettings);
+  const value = useMemo<PreferencesContextValue>(
+    () => ({
+      preferences: {
+        appearance: DEFAULT_PROFILE.appearance,
+        levelUnit: DEFAULT_PROFILE.levelUnit,
+        ...settings,
+      },
+      setPreference: async () => {},
+    }),
+    [settings],
+  );
+  return (
+    <PreferencesContext.Provider value={value}>
+      {children}
+    </PreferencesContext.Provider>
+  );
+};
+
+/** Mount the hook on a screen of its own, with the stores it reads from. */
+const renderHook = (timerSettings: TimerSettings = DEFAULT_TIMER_SETTINGS) => {
   let hook: UseDrillRunResult | undefined;
   let store: CalibrationContextValue | undefined;
+  let setTimerSettings: (settings: TimerSettings) => void = () => {};
   const Probe = () => {
     hook = useDrillRun();
     store = useCalibration();
@@ -81,13 +132,20 @@ const renderHook = () => {
   let tree: ReactTestRenderer | undefined;
   act(() => {
     tree = create(
-      <CalibrationProvider>
-        <NavigationContainer>
-          <Tab.Navigator screenOptions={{ headerShown: false }}>
-            <Tab.Screen name="Probe" component={Probe} />
-          </Tab.Navigator>
-        </NavigationContainer>
-      </CalibrationProvider>,
+      <TestPreferences
+        initial={timerSettings}
+        onSetter={set => {
+          setTimerSettings = set;
+        }}
+      >
+        <CalibrationProvider>
+          <NavigationContainer>
+            <Tab.Navigator screenOptions={{ headerShown: false }}>
+              <Tab.Screen name="Probe" component={Probe} />
+            </Tab.Navigator>
+          </NavigationContainer>
+        </CalibrationProvider>
+      </TestPreferences>,
     );
   });
   if (tree === undefined) {
@@ -107,7 +165,10 @@ const renderHook = () => {
     act(() => store?.setThreshold(sound, thresholdDbfs));
   };
   calibrate();
-  return { tree, read, calibrate };
+  const changeTimerSettings = (settings: TimerSettings): void => {
+    act(() => setTimerSettings(settings));
+  };
+  return { tree, read, calibrate, changeTimerSettings };
 };
 
 const settle = async (): Promise<void> => {
@@ -238,6 +299,116 @@ describe('useDrillRun', () => {
       beepDelayMs: 84,
     });
     expect(read().results).toHaveLength(2);
+  });
+
+  describe('timer settings', () => {
+    it('starts with the 1 to 5 s delay and the full beep by default', async () => {
+      const { read } = renderHook();
+
+      act(() => read().start(TWO_SHOTS));
+      await settle();
+
+      expect(startMock).toHaveBeenCalledTimes(1);
+      expect(startMock.mock.calls[0][0]).toMatchObject({
+        minDelayMs: 1000,
+        maxDelayMs: 5000,
+        beep: { ...StartSequenceService.beep, volume: 1 },
+      });
+    });
+
+    it('passes the stored delay range and volume to the start sequence', async () => {
+      const { read } = renderHook({
+        startDelay: { minMs: 1500, maxMs: 3500 },
+        beepVolume: 'medium',
+      });
+
+      act(() => read().start(TWO_SHOTS));
+      await settle();
+
+      expect(startMock.mock.calls[0][0]).toMatchObject({
+        minDelayMs: 1500,
+        maxDelayMs: 3500,
+        beep: {
+          frequencyHz: StartSequenceService.beep.frequencyHz,
+          durationMs: StartSequenceService.beep.durationMs,
+          waveform: StartSequenceService.beep.waveform,
+          volume: 0.5,
+        },
+      });
+    });
+
+    it('plays the quiet beep at a quarter volume', async () => {
+      const { read } = renderHook({
+        startDelay: DEFAULT_PROFILE.startDelay,
+        beepVolume: 'quiet',
+      });
+
+      act(() => read().start(TWO_SHOTS));
+      await settle();
+
+      expect(startMock.mock.calls[0][0]?.beep?.volume).toBe(0.25);
+    });
+
+    it('uses the settings as they are when each run starts', async () => {
+      const { read, changeTimerSettings } = renderHook();
+      act(() => read().start(TWO_SHOTS));
+      await settle();
+      act(() => read().reset());
+
+      changeTimerSettings({
+        startDelay: { minMs: 2000, maxMs: 2000 },
+        beepVolume: 'quiet',
+      });
+      act(() => read().start(TWO_SHOTS));
+      await settle();
+
+      expect(startMock).toHaveBeenCalledTimes(2);
+      expect(startMock.mock.calls[0][0]).toMatchObject({
+        minDelayMs: 1000,
+        maxDelayMs: 5000,
+      });
+      expect(startMock.mock.calls[1][0]).toMatchObject({
+        minDelayMs: 2000,
+        maxDelayMs: 2000,
+        beep: { volume: 0.25 },
+      });
+    });
+
+    it('waits the delay drawn from the stored range, then beeps at the stored volume', async () => {
+      const played: { at: number; spec: BeepSpec | undefined }[] = [];
+      const player: BeepPlayer = {
+        prepare: async () => {},
+        play: async spec => {
+          played.push({ at: Date.now(), spec });
+        },
+        release: async () => {},
+      };
+      // The real start sequence, with a fake clock source and player.
+      startMock.mockImplementationOnce(options =>
+        startSequence({ ...options, random: () => 0.5, player }),
+      );
+      const { read } = renderHook({
+        startDelay: { minMs: 1500, maxMs: 3500 },
+        beepVolume: 'medium',
+      });
+      act(() => read().start(TWO_SHOTS));
+      await settle();
+      const startedWaiting = Date.now();
+
+      // Halfway through 1.5 to 3.5 s is 2.5 s.
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(2499);
+      });
+      expect(played).toHaveLength(0);
+      await act(async () => {
+        await jest.advanceTimersByTimeAsync(1);
+      });
+
+      expect(played).toHaveLength(1);
+      expect(played[0].at - startedWaiting).toBe(2500);
+      expect(played[0].spec?.volume).toBe(0.5);
+      expect(read().phase).toBe('running');
+    });
   });
 
   it('listens with the thresholds as they are when the run starts', async () => {
