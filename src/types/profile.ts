@@ -57,6 +57,16 @@ export const BEEP_VOLUMES = ['quiet', 'medium', 'full'] as const;
 
 export type BeepVolume = (typeof BEEP_VOLUMES)[number];
 
+/**
+ * Every detection sensitivity, least sensitive first, in the order a
+ * picker lists them. It sets how far below a calibrated sample the
+ * threshold sits: `low` hears fewer false shots, `high` misses fewer
+ * quiet ones. See `SENSITIVITY_MARGIN_DB`.
+ */
+export const DETECTION_SENSITIVITIES = ['low', 'normal', 'high'] as const;
+
+export type DetectionSensitivity = (typeof DETECTION_SENSITIVITIES)[number];
+
 /** Character every stored handle starts with. */
 export const HANDLE_PREFIX = '@';
 
@@ -108,6 +118,8 @@ export interface Profile {
   startDelay: StartDelayRange;
   /** How loud the start beep is. */
   beepVolume: BeepVolume;
+  /** How far below a calibrated sample the detection threshold sits. */
+  sensitivity: DetectionSensitivity;
   /**
    * ISO-8601 timestamp of the last change to the profile. `null` when the
    * profile has never been saved.
@@ -124,6 +136,7 @@ export const DEFAULT_PROFILE: Readonly<Profile> = Object.freeze({
   // The 1 to 5 s the start sequence has always used.
   startDelay: Object.freeze({ minMs: 1000, maxMs: 5000 }),
   beepVolume: 'full',
+  sensitivity: 'normal',
   updatedAt: null,
 });
 
@@ -141,4 +154,5 @@ export interface ProfileChanges {
   /** Both ends together, so the range is checked as a whole. */
   startDelay?: StartDelayRange;
   beepVolume?: BeepVolume;
+  sensitivity?: DetectionSensitivity;
 }

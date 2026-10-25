@@ -46,8 +46,13 @@ import {
   CalibrationProvider,
   type CalibrationContextValue,
 } from '../src/store/CalibrationContext';
-import { PreferencesProvider } from '../src/store/PreferencesContext';
+import {
+  PreferencesContext,
+  PreferencesProvider,
+  type PreferencesContextValue,
+} from '../src/store/PreferencesContext';
 import type { DrillInput } from '../src/types/drill';
+import { DEFAULT_PROFILE } from '../src/types/profile';
 import { formatElapsed } from '../src/utils/format';
 
 jest.mock('../src/services/startSequence', () => {
@@ -179,6 +184,22 @@ let captureNow = REQUESTED_AT - 3000;
 const mounted: ReactTestRenderer[] = [];
 
 /**
+ * What the calibration store reads its sensitivity from. It is mounted above
+ * the real `PreferencesProvider`, which renders nothing until the stored
+ * settings are read, so the store is available at once.
+ */
+const CALIBRATION_PREFERENCES: PreferencesContextValue = {
+  preferences: {
+    appearance: DEFAULT_PROFILE.appearance,
+    levelUnit: DEFAULT_PROFILE.levelUnit,
+    startDelay: DEFAULT_PROFILE.startDelay,
+    beepVolume: DEFAULT_PROFILE.beepVolume,
+    sensitivity: DEFAULT_PROFILE.sensitivity,
+  },
+  setPreference: async () => {},
+};
+
+/**
  * Mount the screen as a tab, the way the app does: it stops a run when its
  * tab loses focus, so it needs a navigator to tell it.
  */
@@ -191,24 +212,26 @@ const renderScreen = async ({
   act(() => {
     tree = create(
       <SafeAreaProvider initialMetrics={metrics}>
-        <CalibrationProvider>
-          <StoreHandle
-            onValue={value => {
-              store = value;
-            }}
-          />
-          {/* Renders the navigator once the stored timer settings are read. */}
-          <PreferencesProvider>
-            <NavigationContainer ref={navigationRef}>
-              <Tab.Navigator screenOptions={{ headerShown: false }}>
-                <Tab.Screen name="Timer" component={TimerScreen} />
-                <Tab.Screen name="Elsewhere" component={Blank} />
-                <Tab.Screen name="Calibration" component={Blank} />
-                <Tab.Screen name="SequenceEditor" component={Blank} />
-              </Tab.Navigator>
-            </NavigationContainer>
-          </PreferencesProvider>
-        </CalibrationProvider>
+        <PreferencesContext.Provider value={CALIBRATION_PREFERENCES}>
+          <CalibrationProvider>
+            <StoreHandle
+              onValue={value => {
+                store = value;
+              }}
+            />
+            {/* Renders the navigator once the stored timer settings are read. */}
+            <PreferencesProvider>
+              <NavigationContainer ref={navigationRef}>
+                <Tab.Navigator screenOptions={{ headerShown: false }}>
+                  <Tab.Screen name="Timer" component={TimerScreen} />
+                  <Tab.Screen name="Elsewhere" component={Blank} />
+                  <Tab.Screen name="Calibration" component={Blank} />
+                  <Tab.Screen name="SequenceEditor" component={Blank} />
+                </Tab.Navigator>
+              </NavigationContainer>
+            </PreferencesProvider>
+          </CalibrationProvider>
+        </PreferencesContext.Provider>
       </SafeAreaProvider>,
       // Host elements get a stand-in, so the screen has a ref to focus.
       { createNodeMock: () => ({}) },
@@ -218,12 +241,12 @@ const renderScreen = async ({
     throw new Error('render failed');
   }
   mounted.push(tree);
-  const { setThreshold } = store;
+  const { setSample } = store;
   if (calibrate) {
     act(() => {
-      setThreshold('shot', -10);
-      setThreshold('reload', -30);
-      setThreshold('rack', -25);
+      setSample('shot', -4);
+      setSample('reload', -24);
+      setSample('rack', -19);
     });
   }
   // The drills are read from storage before there is anything to time.
@@ -231,8 +254,8 @@ const renderScreen = async ({
   return {
     tree,
     navigationRef,
-    setThreshold: (...args: Parameters<typeof setThreshold>): void => {
-      act(() => setThreshold(...args));
+    setSample: (...args: Parameters<typeof setSample>): void => {
+      act(() => setSample(...args));
     },
     /** Switch to another tab, or back to the Timer. */
     goTo: async (tab: 'Timer' | 'Elsewhere'): Promise<void> => {
@@ -568,8 +591,8 @@ describe('TimerScreen', () => {
     });
 
     it('names every sound a drill needs that is not calibrated', async () => {
-      const { tree, setThreshold } = await renderScreen({ calibrate: false });
-      setThreshold('reload', -30);
+      const { tree, setSample } = await renderScreen({ calibrate: false });
+      setSample('reload', -24);
 
       // Dot Torture uses shots, a reload and a rack.
       await pick(tree, 'Dot Torture');
@@ -592,13 +615,13 @@ describe('TimerScreen', () => {
     });
 
     it('stops asking for calibration once the sounds it named are calibrated', async () => {
-      const { tree, setThreshold, goTo } = await renderScreen({
+      const { tree, setSample, goTo } = await renderScreen({
         calibrate: false,
       });
       await press(tree, 'btn-start');
       await goTo('Elsewhere');
 
-      setThreshold('shot', -10);
+      setSample('shot', -4);
       await goTo('Timer');
 
       expect(subtitle(tree)).toBe('Ready when you are');
@@ -606,10 +629,10 @@ describe('TimerScreen', () => {
     });
 
     it('starts once the missing sound has been calibrated', async () => {
-      const { tree, setThreshold } = await renderScreen({ calibrate: false });
+      const { tree, setSample } = await renderScreen({ calibrate: false });
       await press(tree, 'btn-start');
 
-      setThreshold('shot', -10);
+      setSample('shot', -4);
       await press(tree, 'btn-start');
 
       expect(buttonLabel(tree)).toBe('Cancel start');

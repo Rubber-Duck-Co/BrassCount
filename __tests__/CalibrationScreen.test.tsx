@@ -40,7 +40,11 @@ import {
 } from '../src/store/PreferencesContext';
 import { CALIBRATION_SOUNDS } from '../src/types/calibration';
 import type { CalibrationSound } from '../src/types/calibration';
-import { DEFAULT_PROFILE, type LevelUnit } from '../src/types/profile';
+import {
+  DEFAULT_PROFILE,
+  type DetectionSensitivity,
+  type LevelUnit,
+} from '../src/types/profile';
 import { CALIBRATION_LISTEN_MS } from '../src/utils/calibration';
 
 // The native module itself is mocked globally in jest.setup.js.
@@ -72,20 +76,29 @@ const StoreHandle = ({
 };
 
 /**
- * Stands in for `PreferencesProvider` with the level unit held in plain
- * state, so a test can switch it the way Settings does without storage.
+ * Stands in for `PreferencesProvider` with the level unit and detection
+ * sensitivity held in plain state, so a test can switch them the way
+ * Settings does without storage.
  */
 const LevelUnitHolder = ({
   initial,
   onSetter,
+  onSensitivitySetter,
   children,
 }: {
   initial: LevelUnit;
   onSetter: (set: (unit: LevelUnit) => void) => void;
+  onSensitivitySetter: (
+    set: (sensitivity: DetectionSensitivity) => void,
+  ) => void;
   children: ReactNode;
 }) => {
   const [levelUnit, setLevelUnit] = useState<LevelUnit>(initial);
+  const [sensitivity, setSensitivity] = useState<DetectionSensitivity>(
+    DEFAULT_PROFILE.sensitivity,
+  );
   onSetter(setLevelUnit);
+  onSensitivitySetter(setSensitivity);
   const value = useMemo<PreferencesContextValue>(
     () => ({
       preferences: {
@@ -93,10 +106,11 @@ const LevelUnitHolder = ({
         levelUnit,
         startDelay: DEFAULT_PROFILE.startDelay,
         beepVolume: DEFAULT_PROFILE.beepVolume,
+        sensitivity,
       },
       setPreference: async () => {},
     }),
-    [levelUnit],
+    [levelUnit, sensitivity],
   );
   return (
     <PreferencesContext.Provider value={value}>
@@ -119,6 +133,7 @@ const renderScreen = ({
   const navigationRef = createNavigationContainerRef<TestTabParamList>();
   let store: CalibrationContextValue | undefined;
   let setLevelUnit: ((unit: LevelUnit) => void) | undefined;
+  let setSensitivity: ((sensitivity: DetectionSensitivity) => void) | undefined;
   let tree: ReactTestRenderer | undefined;
   act(() => {
     tree = create(
@@ -127,6 +142,9 @@ const renderScreen = ({
           initial={levelUnit}
           onSetter={set => {
             setLevelUnit = set;
+          }}
+          onSensitivitySetter={set => {
+            setSensitivity = set;
           }}
         >
           <CalibrationProvider>
@@ -162,6 +180,12 @@ const renderScreen = ({
     goTo: (tab: keyof TestTabParamList): void => {
       act(() => {
         navigationRef.navigate(tab);
+      });
+    },
+    /** Change the detection sensitivity, as choosing one in Settings does. */
+    chooseSensitivity: (sensitivity: DetectionSensitivity): void => {
+      act(() => {
+        setSensitivity?.(sensitivity);
       });
     },
     /** Change the level unit, as choosing one in Settings does. */
@@ -426,7 +450,7 @@ describe('CalibrationScreen', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
-      store().setThreshold('reload', -24);
+      store().setSample('reload', -18);
     });
 
     expect(spokenSummary(tree, 'reload')).toBe(
@@ -437,7 +461,7 @@ describe('CalibrationScreen', () => {
   it('announces the last test reading once one is recorded', () => {
     const { tree, store } = renderScreen();
     act(() => {
-      store().setThreshold('reload', -24);
+      store().setSample('reload', -18);
     });
 
     act(() => {
@@ -453,7 +477,7 @@ describe('CalibrationScreen', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
-      store().setThreshold('shot', -12);
+      store().setSample('shot', -6);
     });
 
     expect(lastTestText(tree, 'shot')).toBe('—');
@@ -463,7 +487,7 @@ describe('CalibrationScreen', () => {
   it('shows the last test reading and marks it on the meter', () => {
     const { tree, store } = renderScreen();
     act(() => {
-      store().setThreshold('shot', -30);
+      store().setSample('shot', -24);
     });
 
     act(() => {
@@ -480,7 +504,7 @@ describe('CalibrationScreen', () => {
   it('keeps a last test reading below the meter floor at the start of the bar', () => {
     const { tree, store } = renderScreen();
     act(() => {
-      store().setThreshold('rack', -40);
+      store().setSample('rack', -34);
     });
 
     act(() => {
@@ -494,14 +518,14 @@ describe('CalibrationScreen', () => {
   it('drops the last test reading when the sound is recalibrated', () => {
     const { tree, store } = renderScreen();
     act(() => {
-      store().setThreshold('shot', -30);
+      store().setSample('shot', -24);
     });
     act(() => {
       store().recordTestReading('shot', -15);
     });
 
     act(() => {
-      store().setThreshold('shot', -20);
+      store().setSample('shot', -14);
     });
 
     expect(lastTestText(tree, 'shot')).toBe('—');
@@ -511,8 +535,8 @@ describe('CalibrationScreen', () => {
   it('shows a last test reading only on the sound that was tested', () => {
     const { tree, store } = renderScreen();
     act(() => {
-      store().setThreshold('shot', -30);
-      store().setThreshold('reload', -40);
+      store().setSample('shot', -24);
+      store().setSample('reload', -34);
     });
 
     act(() => {
@@ -533,7 +557,7 @@ describe('CalibrationScreen', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
-      store().setThreshold('shot', -15);
+      store().setSample('shot', -9);
     });
 
     expect(meterFillWidth(tree, 'shot')).toBe('75%');
@@ -543,7 +567,7 @@ describe('CalibrationScreen', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
-      store().setThreshold('rack', -80);
+      store().setSample('rack', -74);
     });
 
     expect(meterFillWidth(tree, 'rack')).toBe('0%');
@@ -564,7 +588,7 @@ describe('CalibrationScreen', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
-      store().setThreshold('shot', -12.4);
+      store().setSample('shot', -6.4);
     });
 
     expect(chipLabel(tree, 'shot')).toBe('Calibrated');
@@ -575,7 +599,7 @@ describe('CalibrationScreen', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
-      store().setThreshold('shot', -12);
+      store().setSample('shot', -6);
     });
 
     expect(chipLabel(tree, 'reload')).toBe('Not calibrated');
@@ -585,7 +609,7 @@ describe('CalibrationScreen', () => {
   it('goes back to not calibrated when the store is reset', () => {
     const { tree, store } = renderScreen();
     act(() => {
-      store().setThreshold('rack', -40);
+      store().setSample('rack', -34);
     });
 
     act(() => {
@@ -596,12 +620,52 @@ describe('CalibrationScreen', () => {
     expect(thresholdText(tree, 'rack')).toBe('—');
   });
 
+  describe('detection sensitivity', () => {
+    it('moves the threshold readout of every calibrated sound with no new sample', () => {
+      const { tree, store, chooseSensitivity } = renderScreen();
+      act(() => {
+        store().setSample('shot', -12);
+        store().setSample('rack', -40);
+      });
+      expect(thresholdText(tree, 'shot')).toBe('-18 dBFS');
+      expect(thresholdText(tree, 'rack')).toBe('-46 dBFS');
+
+      chooseSensitivity('high');
+      expect(thresholdText(tree, 'shot')).toBe('-22 dBFS');
+      expect(thresholdText(tree, 'rack')).toBe('-50 dBFS');
+
+      chooseSensitivity('low');
+      expect(thresholdText(tree, 'shot')).toBe('-15 dBFS');
+      expect(thresholdText(tree, 'rack')).toBe('-43 dBFS');
+    });
+
+    it('leaves a sound that is not calibrated unset', () => {
+      const { tree, chooseSensitivity } = renderScreen();
+
+      chooseSensitivity('high');
+
+      expect(thresholdText(tree, 'reload')).toBe('—');
+    });
+
+    it('judges the last test against the threshold the sensitivity gives', () => {
+      const { tree, store, chooseSensitivity } = renderScreen();
+      act(() => {
+        store().setSample('shot', -12);
+        store().recordTestReading('shot', -20);
+      });
+
+      expect(chipLabel(tree, 'shot')).toBe('Test failed');
+      chooseSensitivity('high');
+      expect(chipLabel(tree, 'shot')).toBe('Test passed');
+    });
+  });
+
   describe('level units', () => {
     it('shows levels on the 0 to 100 scale', () => {
       const { tree, store } = renderScreen({ levelUnit: 'level' });
 
       act(() => {
-        store().setThreshold('shot', -18);
+        store().setSample('shot', -12);
         store().recordTestReading('shot', -12.4);
       });
 
@@ -614,7 +678,7 @@ describe('CalibrationScreen', () => {
       const { tree, store } = renderScreen({ levelUnit: 'level' });
 
       act(() => {
-        store().setThreshold('rack', -40);
+        store().setSample('rack', -34);
         store().recordTestReading('rack', -Infinity);
       });
 
@@ -625,7 +689,7 @@ describe('CalibrationScreen', () => {
       const { tree, store } = renderScreen({ levelUnit: 'level' });
 
       act(() => {
-        store().setThreshold('shot', -18);
+        store().setSample('shot', -12);
       });
 
       expect(feedbackText(tree, 'shot')).toBe(
@@ -643,7 +707,7 @@ describe('CalibrationScreen', () => {
       const { tree, store } = renderScreen({ levelUnit: 'dbfs' });
 
       act(() => {
-        store().setThreshold('shot', -18);
+        store().setSample('shot', -12);
       });
 
       expect(thresholdText(tree, 'shot')).toBe('-18 dBFS');
@@ -661,7 +725,7 @@ describe('CalibrationScreen', () => {
         levelUnit: 'level',
       });
       act(() => {
-        store().setThreshold('shot', -18);
+        store().setSample('shot', -12);
         store().recordTestReading('shot', -12.4);
       });
 

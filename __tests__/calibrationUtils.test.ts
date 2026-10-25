@@ -1,10 +1,14 @@
 import { DBFS_MIN } from '../src/types/calibration';
-import type { SoundCalibration } from '../src/types/calibration';
+import type {
+  CalibrationSamples,
+  SoundCalibration,
+} from '../src/types/calibration';
 import {
+  deriveCalibration,
   isAudibleSample,
   MIN_SAMPLE_DBFS,
+  SENSITIVITY_MARGIN_DB,
   testOutcome,
-  THRESHOLD_MARGIN_DB,
   thresholdFromPeak,
 } from '../src/utils/calibration';
 
@@ -29,14 +33,63 @@ describe('isAudibleSample', () => {
 });
 
 describe('thresholdFromPeak', () => {
-  it('sets the threshold a margin below the loudest level', () => {
-    expect(thresholdFromPeak(-12)).toBe(-12 - THRESHOLD_MARGIN_DB);
-    expect(thresholdFromPeak(0)).toBe(-THRESHOLD_MARGIN_DB);
+  it.each([
+    ['low', 3],
+    ['normal', 6],
+    ['high', 10],
+  ] as const)('sets the %s threshold %p dB below the peak', (level, margin) => {
+    expect(SENSITIVITY_MARGIN_DB[level]).toBe(margin);
+    expect(thresholdFromPeak(-12, level)).toBe(-12 - margin);
+    expect(thresholdFromPeak(0, level)).toBe(-margin);
   });
 
-  it('never goes below the bottom of the dBFS scale', () => {
-    expect(thresholdFromPeak(DBFS_MIN)).toBe(DBFS_MIN);
-    expect(thresholdFromPeak(DBFS_MIN + 1)).toBe(DBFS_MIN);
+  it('gives normal sensitivity the threshold calibration has always set', () => {
+    expect(thresholdFromPeak(-20, 'normal')).toBe(-26);
+  });
+
+  it.each(['low', 'normal', 'high'] as const)(
+    'never goes below the bottom of the dBFS scale on %s',
+    level => {
+      expect(thresholdFromPeak(DBFS_MIN, level)).toBe(DBFS_MIN);
+      expect(thresholdFromPeak(DBFS_MIN + 1, level)).toBe(DBFS_MIN);
+    },
+  );
+});
+
+describe('deriveCalibration', () => {
+  const samples: CalibrationSamples = {
+    shot: { peakDbfs: -10, lastTestDbfs: -14 },
+    reload: { peakDbfs: null, lastTestDbfs: null },
+    rack: { peakDbfs: -30, lastTestDbfs: null },
+  };
+
+  it('puts every calibrated sound its sensitivity margin below its peak', () => {
+    const state = deriveCalibration(samples, 'high');
+
+    expect(state.shot).toEqual({
+      status: 'calibrated',
+      thresholdDbfs: -20,
+      lastTestDbfs: -14,
+    });
+    expect(state.rack.thresholdDbfs).toBe(-40);
+  });
+
+  it('moves every threshold when only the sensitivity changes', () => {
+    const low = deriveCalibration(samples, 'low');
+    const high = deriveCalibration(samples, 'high');
+
+    expect(low.shot.thresholdDbfs).toBe(-13);
+    expect(high.shot.thresholdDbfs).toBe(-20);
+    expect(low.rack.thresholdDbfs).toBe(-33);
+    expect(high.rack.thresholdDbfs).toBe(-40);
+  });
+
+  it('leaves a sound with no sample uncalibrated', () => {
+    expect(deriveCalibration(samples, 'normal').reload).toEqual({
+      status: 'uncalibrated',
+      thresholdDbfs: null,
+      lastTestDbfs: null,
+    });
   });
 });
 

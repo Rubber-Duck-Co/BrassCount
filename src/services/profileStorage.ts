@@ -2,6 +2,7 @@ import {
   APPEARANCE_PREFERENCES,
   BEEP_VOLUMES,
   DEFAULT_PROFILE,
+  DETECTION_SENSITIVITIES,
   HANDLE_BODY_PATTERN,
   HANDLE_PREFIX,
   LEVEL_UNITS,
@@ -11,6 +12,7 @@ import {
   MIN_START_DELAY_MS,
   START_DELAY_STEP_MS,
   type AppearancePreference,
+  type DetectionSensitivity,
   type LevelUnit,
   type Profile,
   type ProfileChanges,
@@ -122,6 +124,11 @@ const isAppearancePreference = (
 
 const isLevelUnit = (value: unknown): value is LevelUnit =>
   LEVEL_UNITS.some(unit => unit === value);
+
+const isDetectionSensitivity = (
+  value: unknown,
+): value is DetectionSensitivity =>
+  DETECTION_SENSITIVITIES.some(sensitivity => sensitivity === value);
 
 /** A copy of `DEFAULT_PROFILE` that a caller may change freely. */
 const defaultProfile = (): Profile => ({
@@ -238,6 +245,7 @@ const parseStoredProfile = (stored: unknown): Profile | null => {
     levelUnit,
     startDelay,
     beepVolume,
+    sensitivity,
     updatedAt,
   } = stored.profile;
   return {
@@ -254,6 +262,9 @@ const parseStoredProfile = (stored: unknown): Profile | null => {
     beepVolume: isBeepVolume(beepVolume)
       ? beepVolume
       : DEFAULT_PROFILE.beepVolume,
+    sensitivity: isDetectionSensitivity(sensitivity)
+      ? sensitivity
+      : DEFAULT_PROFILE.sensitivity,
     updatedAt: isTimestamp(updatedAt) ? updatedAt : DEFAULT_PROFILE.updatedAt,
   };
 };
@@ -287,8 +298,15 @@ const readStoredFields = async (): Promise<StoredProfile['profile']> => {
     return defaultProfile();
   }
   // Only the known fields are carried over, never the whole stored object.
-  const { name, handle, appearance, levelUnit, startDelay, beepVolume } =
-    stored.profile as Record<string, unknown>;
+  const {
+    name,
+    handle,
+    appearance,
+    levelUnit,
+    startDelay,
+    beepVolume,
+    sensitivity,
+  } = stored.profile as Record<string, unknown>;
   return {
     name,
     handle,
@@ -296,6 +314,7 @@ const readStoredFields = async (): Promise<StoredProfile['profile']> => {
     levelUnit,
     startDelay,
     beepVolume,
+    sensitivity,
     updatedAt: null,
   };
 };
@@ -351,7 +370,8 @@ export async function loadProfile(): Promise<Profile> {
  * the level unit is not one of `LEVEL_UNITS`, the start delay range has
  * an end that is not a whole step of `START_DELAY_STEP_MS` between
  * `MIN_START_DELAY_MS` and `MAX_START_DELAY_MS` or a shortest end past
- * its longest, or the beep volume is not one of `BEEP_VOLUMES`.
+ * its longest, the beep volume is not one of `BEEP_VOLUMES`, or the
+ * sensitivity is not one of `DETECTION_SENSITIVITIES`.
  */
 export async function updateProfile(
   changes: ProfileChanges,
@@ -385,6 +405,12 @@ export async function updateProfile(
   if (beepVolume !== undefined && !isBeepVolume(beepVolume)) {
     throw invalid(`Beep volume must be one of: ${BEEP_VOLUMES.join(', ')}`);
   }
+  const { sensitivity } = changes;
+  if (sensitivity !== undefined && !isDetectionSensitivity(sensitivity)) {
+    throw invalid(
+      `Sensitivity must be one of: ${DETECTION_SENSITIVITIES.join(', ')}`,
+    );
+  }
 
   return inOrder(async () => {
     const updatedAt = getTimestamp();
@@ -404,6 +430,7 @@ export async function updateProfile(
         levelUnit: levelUnit ?? existing.levelUnit,
         startDelay: startDelay ?? existing.startDelay,
         beepVolume: beepVolume ?? existing.beepVolume,
+        sensitivity: sensitivity ?? existing.sensitivity,
         updatedAt,
       },
     };

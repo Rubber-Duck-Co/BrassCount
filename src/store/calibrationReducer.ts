@@ -1,8 +1,8 @@
 import { DBFS_MAX, DBFS_MIN } from '@/types/calibration';
 import type {
+  CalibrationSample,
+  CalibrationSamples,
   CalibrationSound,
-  CalibrationState,
-  SoundCalibration,
 } from '@/types/calibration';
 
 /**
@@ -21,19 +21,18 @@ export class CalibrationError extends Error {
 }
 
 export type CalibrationAction =
-  | { type: 'setThreshold'; sound: CalibrationSound; thresholdDbfs: number }
+  | { type: 'setSample'; sound: CalibrationSound; peakDbfs: number }
   | { type: 'recordTestReading'; sound: CalibrationSound; dbfs: number }
   | { type: 'resetSound'; sound: CalibrationSound }
   | { type: 'resetAll' };
 
-const UNCALIBRATED: Readonly<SoundCalibration> = {
-  thresholdDbfs: null,
-  status: 'uncalibrated',
+const UNCALIBRATED: Readonly<CalibrationSample> = {
+  peakDbfs: null,
   lastTestDbfs: null,
 };
 
 /** Every sound uncalibrated — the state of a freshly launched app. */
-export const createInitialCalibrationState = (): CalibrationState => ({
+export const createInitialCalibrationState = (): CalibrationSamples => ({
   shot: UNCALIBRATED,
   reload: UNCALIBRATED,
   rack: UNCALIBRATED,
@@ -60,25 +59,29 @@ export const normalizeDbfs = (value: number): number => {
   return Math.max(value, DBFS_MIN);
 };
 
+/**
+ * The store keeps each sound's sample peak, never its threshold: the
+ * threshold follows from the peak and the detection sensitivity
+ * (`deriveCalibration`), so it can change without a new sample.
+ */
 export const calibrationReducer = (
-  state: CalibrationState,
+  state: CalibrationSamples,
   action: CalibrationAction,
-): CalibrationState => {
+): CalibrationSamples => {
   switch (action.type) {
-    case 'setThreshold':
+    case 'setSample':
       return {
         ...state,
         [action.sound]: {
-          thresholdDbfs: action.thresholdDbfs,
-          status: 'calibrated',
-          // A test measured against the previous threshold no longer applies.
+          peakDbfs: action.peakDbfs,
+          // A test measured against the previous sample no longer applies.
           lastTestDbfs: null,
         },
       };
     case 'recordTestReading':
       // A test measures a sound against its threshold, so with no
-      // threshold there is nothing for the reading to belong to.
-      if (state[action.sound].status === 'uncalibrated') {
+      // sample there is nothing for the reading to belong to.
+      if (state[action.sound].peakDbfs === null) {
         return state;
       }
       return {
