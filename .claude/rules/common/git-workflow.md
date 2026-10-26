@@ -44,4 +44,8 @@ feat(timer): add randomised start beep #minor
 4. Push with `-u` if the branch is new
 5. Open as a draft while work is in progress: lint, format, type-check and test jobs skip drafts (the Android build still runs)
 
+### No "Generated with Claude Code" line
+
+Do not end a PR description with `🤖 Generated with [Claude Code]…`, a session link, or any other Claude attribution, whatever the tool's default is. The project owner asked for PRs without it, the same as commits ([above](#no-claude-co-author-trailer)): the PR is authored by the person who asked for it.
+
 > For the steps before git operations (tests, verification, review), see [development-workflow.md](./development-workflow.md).
