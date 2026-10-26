@@ -43,7 +43,9 @@ export interface SessionSplit {
   /**
    * The par the step was judged against at the time of the run, in
    * seconds: its own par plus that of any silent step in front of it (see
-   * `RunStep.par`). Left off when none of them had one.
+   * `RunStep.par`). Left off when none of them had one; History then
+   * shows the par the drill has for the step now (`fillMissingPars`),
+   * without changing what is stored.
    */
   par?: number;
   /**

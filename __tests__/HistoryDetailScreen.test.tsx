@@ -918,6 +918,164 @@ describe('HistoryDetailScreen', () => {
     });
   });
 
+  describe('a par added after the run', () => {
+    /** A draw and two shots, none of them with a par yet. */
+    const seedUntimedDrill = (): Promise<Drill> =>
+      saveDrill({
+        name: 'El Presidente',
+        steps: [{ type: 'draw' }, { type: 'shot' }, { type: 'shot' }],
+      });
+
+    /** A run of `drill` as the timer saves one: a split per heard shot. */
+    const seedRunOf = (
+      drill: Drill,
+      at: string,
+      [first, second]: [number, number],
+      pars: [number | undefined, number | undefined] = [undefined, undefined],
+    ): Promise<Session> => {
+      const [, shot1, shot2] = drill.steps;
+      const splits: SessionSplitInput[] = [
+        { stepId: shot1.id, label: 'Shot 1', par: pars[0], actual: first },
+        { stepId: shot2.id, label: 'Shot 2', par: pars[1], actual: second },
+      ].map(({ par, ...split }) =>
+        par === undefined ? split : { ...split, par },
+      );
+      return seedSession(drill.id, first + second, at, splits);
+    };
+
+    /** Give the drill these step pars, keeping each step's identity. */
+    const setPars = (
+      drill: Drill,
+      pars: (number | undefined)[],
+    ): Promise<Drill> =>
+      updateDrill(drill.id, {
+        steps: drill.steps.map((step, index) => {
+          const par = pars[index];
+          return par === undefined
+            ? { id: step.id, type: step.type }
+            : { id: step.id, type: step.type, par };
+        }),
+      });
+
+    it('shows a run saved before the drill had pars against the pars it has now', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
+      await setPars(drill, [1.5, undefined, 0.25]);
+
+      const { tree } = await renderScreen(drill);
+
+      // The draw is silent, so its par is the first shot's, as in a run.
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '1.50s', 'ACTUAL', '1.62s', 'Δ', '+0.12s'],
+        ...['Shot 2', 'PAR', '0.25s', 'ACTUAL', '0.24s', 'Δ', '-0.01s'],
+      ]);
+      expect(spokenSteps(tree, run)).toEqual([
+        'Shot 1, par 1.5 seconds, took 1.62 seconds, 0.12 seconds over par',
+        'Shot 2, par 0.25 seconds, took 0.24 seconds, 0.01 seconds under par',
+      ]);
+    });
+
+    it('keeps the par a run was timed against when the drill’s par has changed since', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(
+        drill,
+        '2026-10-10T12:00:00Z',
+        [1.62, 0.24],
+        [2, undefined],
+      );
+      await setPars(drill, [1.5, undefined, 0.25]);
+
+      const { tree } = await renderScreen(drill);
+
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '2.00s', 'ACTUAL', '1.62s', 'Δ', '-0.38s'],
+        ...['Shot 2', 'PAR', '0.25s', 'ACTUAL', '0.24s', 'Δ', '-0.01s'],
+      ]);
+    });
+
+    it('picks up a par added while the screen was in the background', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
+      const { tree, goTo } = await renderScreen(drill);
+
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
+        ...['Shot 2', 'PAR', '—', 'ACTUAL', '0.24s', 'Δ', '—'],
+      ]);
+
+      await goTo('Elsewhere');
+      await setPars(drill, [undefined, undefined, 0.25]);
+      await goTo('HistoryDetail');
+
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
+        ...['Shot 2', 'PAR', '0.25s', 'ACTUAL', '0.24s', 'Δ', '-0.01s'],
+      ]);
+    });
+
+    it('takes the filled par away again when the par is removed', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
+      await setPars(drill, [undefined, undefined, 0.25]);
+      const { tree, goTo } = await renderScreen(drill);
+
+      await goTo('Elsewhere');
+      await setPars(drill, [undefined, undefined, undefined]);
+      await goTo('HistoryDetail');
+
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
+        ...['Shot 2', 'PAR', '—', 'ACTUAL', '0.24s', 'Δ', '—'],
+      ]);
+    });
+
+    it('gives no par to a step since removed from the drill', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
+      const [draw, , shot2] = drill.steps;
+      await updateDrill(drill.id, {
+        steps: [
+          { id: draw.id, type: draw.type, par: 1.5 },
+          { id: shot2.id, type: shot2.type, par: 0.25 },
+        ],
+      });
+
+      const { tree } = await renderScreen(drill);
+
+      // Shot 2 is now the first heard step, so the draw's par is its own.
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
+        ...['Shot 2', 'PAR', '1.75s', 'ACTUAL', '0.24s', 'Δ', '-1.51s'],
+      ]);
+    });
+
+    it('fills no par on the runs left by a deleted drill', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
+      await setPars(drill, [1.5, undefined, 0.25]);
+      await deleteDrillById(drill.id);
+
+      const { tree } = await renderScreen(drill);
+
+      expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
+        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
+        ...['Shot 2', 'PAR', '—', 'ACTUAL', '0.24s', 'Δ', '—'],
+      ]);
+    });
+
+    it('leaves the stored run as it was saved', async () => {
+      const drill = await seedUntimedDrill();
+      const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
+      await setPars(drill, [1.5, undefined, 0.25]);
+
+      await renderScreen(drill);
+
+      await expect(SessionStorageService.loadById(run.id)).resolves.toEqual(
+        run,
+      );
+    });
+  });
+
   describe('the name of the drill', () => {
     it('shows the name the drill has now, not the one it was opened with', async () => {
       const drill = await seedDrill('Bill Drill at 7 yards');
