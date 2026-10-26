@@ -1,5 +1,7 @@
 import type { Drill } from '@/types/drill';
-import type { Session } from '@/types/session';
+import type { Session, SessionSplit } from '@/types/session';
+import { planRun } from '@utils/runDetection';
+import { splitDelta } from '@utils/session';
 
 /**
  * How the History tab rolls stored runs up by drill. Pure functions, no
@@ -89,6 +91,52 @@ export const summarizeDrillHistory = (
   }
 
   return [...summaries.values()].sort(byLatestRun);
+};
+
+/**
+ * A drill's runs as History shows them: a step that had no par when it was
+ * run is judged against the par the drill gives it now, so a par added
+ * after the first runs reaches those runs too.
+ *
+ * The stored runs are never changed, only what is shown. Each step's par
+ * comes from `planRun`, the way a run made now would be judged, so a
+ * silent step's par counts towards the next heard step. Only a missing par
+ * is filled: a step that had one keeps it, since that is what the shooter
+ * was timed against, and a filled par goes again once the drill drops it.
+ * A step no longer in the drill, or no longer heard, keeps no par, and the
+ * runs of a deleted drill (`drill` is `null`) are returned as they were.
+ * Steps are matched by id, so a step whose kind was changed in the editor
+ * but is still heard takes its new par.
+ */
+export const fillMissingPars = (
+  sessions: readonly Session[],
+  drill: Pick<Drill, 'steps'> | null,
+): Session[] => {
+  if (drill === null) {
+    return [...sessions];
+  }
+
+  const pars = new Map<string, number>();
+  for (const { stepId, par } of planRun(drill.steps)) {
+    if (par !== undefined) {
+      pars.set(stepId, par);
+    }
+  }
+
+  const fill = (split: SessionSplit): SessionSplit => {
+    const par = split.par === undefined ? pars.get(split.stepId) : undefined;
+    return par === undefined
+      ? split
+      : { ...split, par, delta: splitDelta(split.actual, par) };
+  };
+
+  return sessions.map(session => {
+    const splits = session.splits.map(fill);
+    // A run with nothing to fill is passed on as it is.
+    return splits.every((split, index) => split === session.splits[index])
+      ? session
+      : { ...session, splits };
+  });
 };
 
 /** Run times are measured to the millisecond. */

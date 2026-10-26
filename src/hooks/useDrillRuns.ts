@@ -7,6 +7,7 @@ import { SessionStorageService } from '@services/sessionStorage';
 import {
   DELETED_DRILL_NAME,
   describeRuns,
+  fillMissingPars,
   summarizeRuns,
   type RunSummary,
   type RunTotals,
@@ -47,7 +48,8 @@ const LOADING: DrillRunsState = { status: 'loading' };
  * other tabs, where runs are saved and the drill renamed or deleted.
  *
  * The drill is read alongside its sessions because a session only holds
- * the drill's id; the name comes from the drill as it is now.
+ * the drill's id; the name comes from the drill as it is now, and so does
+ * the par of a step that had none when it was run (`fillMissingPars`).
  *
  * A refresh keeps the current runs on screen until the new ones arrive, so
  * coming back does not flash a loading state — and keeps them if the read
@@ -76,7 +78,7 @@ export const useDrillRuns = (drillId: string): UseDrillRunsResult => {
         state: {
           status: 'ready',
           drillName: drill?.name ?? DELETED_DRILL_NAME,
-          runs: describeRuns(sessions),
+          runs: describeRuns(fillMissingPars(sessions, drill)),
           totals: summarizeRuns(sessions),
           refreshFailed: false,
         },

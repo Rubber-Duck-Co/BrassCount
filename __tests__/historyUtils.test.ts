@@ -4,6 +4,7 @@ import {
   compareRuns,
   DELETED_DRILL_NAME,
   describeRuns,
+  fillMissingPars,
   findPersonalBest,
   shownDeltaSign,
   summarizeDrillHistory,
@@ -665,5 +666,209 @@ describe('compareRuns', () => {
     compareRuns(older, newer);
 
     expect(JSON.stringify([older, newer])).toBe(before);
+  });
+});
+
+describe('fillMissingPars', () => {
+  const drillWith = (steps: Drill['steps']): Drill => ({
+    ...drill('a', 'Bill Drill'),
+    steps,
+  });
+
+  const runWith = (splits: Session['splits']): Session => ({
+    id: 'run-1',
+    drillId: 'a',
+    createdAt: '2026-10-01T10:00:00.000Z',
+    totalTime: splits.reduce((sum, split) => sum + split.actual, 0),
+    completed: true,
+    splits,
+  });
+
+  it('gives a step that had no par the par the drill has now, and its difference', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot 1', actual: 0.31, delta: null },
+      { stepId: 's2', label: 'Shot 2', actual: 0.2, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([
+        { id: 's1', type: 'shot', par: 0.25 },
+        { id: 's2', type: 'shot', par: 0.25 },
+      ]),
+    );
+
+    expect(filled.splits).toEqual([
+      { stepId: 's1', label: 'Shot 1', par: 0.25, actual: 0.31, delta: 0.06 },
+      { stepId: 's2', label: 'Shot 2', par: 0.25, actual: 0.2, delta: -0.05 },
+    ]);
+  });
+
+  it('keeps the par a step was judged against when the drill’s par has changed since', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot', par: 0.5, actual: 0.4, delta: -0.1 },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([{ id: 's1', type: 'shot', par: 0.25 }]),
+    );
+
+    expect(filled.splits).toEqual(run.splits);
+  });
+
+  it('fills only the steps that had no par, leaving the others as run', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot 1', par: 0.5, actual: 0.4, delta: -0.1 },
+      { stepId: 's2', label: 'Shot 2', actual: 0.3, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([
+        { id: 's1', type: 'shot', par: 0.25 },
+        { id: 's2', type: 'shot', par: 0.25 },
+      ]),
+    );
+
+    expect(filled.splits).toEqual([
+      { stepId: 's1', label: 'Shot 1', par: 0.5, actual: 0.4, delta: -0.1 },
+      { stepId: 's2', label: 'Shot 2', par: 0.25, actual: 0.3, delta: 0.05 },
+    ]);
+  });
+
+  it('counts a silent step’s par added later towards the next heard step, as a run would', () => {
+    const run = runWith([
+      { stepId: 's2', label: 'Shot 1', actual: 1.62, delta: null },
+      { stepId: 's3', label: 'Shot 2', actual: 0.24, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([
+        { id: 's1', type: 'draw', par: 1.5 },
+        { id: 's2', type: 'shot' },
+        { id: 's3', type: 'shot', par: 0.25 },
+      ]),
+    );
+
+    expect(filled.splits).toEqual([
+      { stepId: 's2', label: 'Shot 1', par: 1.5, actual: 1.62, delta: 0.12 },
+      { stepId: 's3', label: 'Shot 2', par: 0.25, actual: 0.24, delta: -0.01 },
+    ]);
+  });
+
+  it('adds a silent step’s par to the heard step’s own, rounded to the hundredth', () => {
+    const run = runWith([
+      { stepId: 's2', label: 'Shot', actual: 1.8, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([
+        { id: 's1', type: 'draw', par: 1.5 },
+        { id: 's2', type: 'shot', par: 0.25 },
+      ]),
+    );
+
+    expect(filled.splits).toEqual([
+      { stepId: 's2', label: 'Shot', par: 1.75, actual: 1.8, delta: 0.05 },
+    ]);
+  });
+
+  it('leaves a step with no par when the drill still has none for it', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([{ id: 's1', type: 'shot' }]),
+    );
+
+    expect(filled).toBe(run);
+  });
+
+  it('takes a filled par away again once the drill’s par is removed', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+    const timed = drillWith([{ id: 's1', type: 'shot', par: 0.25 }]);
+
+    const [withPar] = fillMissingPars([run], timed);
+    const [withoutPar] = fillMissingPars(
+      [run],
+      drillWith([{ id: 's1', type: 'shot' }]),
+    );
+
+    expect(withPar.splits[0].par).toBe(0.25);
+    expect(withoutPar.splits).toEqual(run.splits);
+  });
+
+  it('leaves a step removed from the drill as it was run', () => {
+    const run = runWith([
+      { stepId: 'gone', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([{ id: 's1', type: 'shot', par: 0.25 }]),
+    );
+
+    expect(filled).toBe(run);
+  });
+
+  it('leaves a step that has since become silent as it was run', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([
+        { id: 's1', type: 'transition', par: 1 },
+        { id: 's2', type: 'shot', par: 0.25 },
+      ]),
+    );
+
+    expect(filled).toBe(run);
+  });
+
+  it('leaves the runs of a deleted drill as they were run', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+
+    expect(fillMissingPars([run], null)).toEqual([run]);
+  });
+
+  it('fills every run of the drill, stopped early or not', () => {
+    const complete = runWith([
+      { stepId: 's1', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+    const stopped = {
+      ...runWith([{ stepId: 's1', label: 'Shot', actual: 0.2, delta: null }]),
+      id: 'run-2',
+      completed: false,
+    };
+
+    const filled = fillMissingPars(
+      [complete, stopped],
+      drillWith([{ id: 's1', type: 'shot', par: 0.25 }]),
+    );
+
+    expect(filled.map(run => run.splits[0].delta)).toEqual([0.15, -0.05]);
+    expect(filled.map(run => run.id)).toEqual(['run-1', 'run-2']);
+  });
+
+  it('leaves the runs it is given untouched', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot', actual: 0.4, delta: null },
+    ]);
+    const before = JSON.stringify(run);
+
+    fillMissingPars([run], drillWith([{ id: 's1', type: 'shot', par: 0.25 }]));
+
+    expect(JSON.stringify(run)).toBe(before);
   });
 });
