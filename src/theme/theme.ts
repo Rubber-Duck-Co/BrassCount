@@ -138,6 +138,13 @@ export const typography = {
     fontFamily: fontFamilies.stencil,
     letterSpacing: 1.5,
   },
+  /** The BRASSCOUNT wordmark on a tab screen's header. */
+  wordmark: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontFamily: fontFamilies.stencil,
+    letterSpacing: 3,
+  },
   /** Drill names and sheet titles. */
   stencilName: {
     fontSize: 28,
@@ -174,6 +181,13 @@ export const typography = {
   sectionLabel: {
     fontSize: 11,
     lineHeight: 14,
+    fontFamily: fontFamilies.sansBold,
+    letterSpacing: 2,
+  },
+  /** Text actions: the header's back link and action, and tab labels. */
+  actionLabel: {
+    fontSize: 14,
+    lineHeight: 18,
     fontFamily: fontFamilies.sansBold,
     letterSpacing: 2,
   },
@@ -221,8 +235,12 @@ export type SemanticColors = {
   border: string;
   /** A card's outer edge; the same as `outline`. */
   borderStrong: string;
-  /** 2px box outlines and the active tab. */
+  /** 2px box outlines. */
   outline: string;
+  /** Ink fill of an inverted element, such as the active tab. */
+  inverse: string;
+  /** Text on an `inverse` fill. */
+  textOnInverse: string;
   textPrimary: string;
   textSecondary: string;
   /** De-emphasised meta: timestamps, row indices, units. */
@@ -251,6 +269,8 @@ const lightColors: SemanticColors = {
   border: palette.rule,
   borderStrong: palette.ink,
   outline: palette.ink,
+  inverse: palette.ink,
+  textOnInverse: palette.paper,
   textPrimary: palette.ink,
   textSecondary: palette.pencil,
   textTertiary: palette.pencil,
@@ -274,6 +294,8 @@ const darkColors: SemanticColors = {
   border: palette.ruleDark,
   borderStrong: palette.outlineDark,
   outline: palette.outlineDark,
+  inverse: palette.inkDark,
+  textOnInverse: palette.paperDark,
   textPrimary: palette.inkDark,
   textSecondary: palette.pencilDark,
   textTertiary: palette.pencilDark,

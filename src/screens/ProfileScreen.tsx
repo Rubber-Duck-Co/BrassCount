@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 
-import { Keyboard, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Keyboard, StyleSheet, View } from 'react-native';
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -18,8 +18,7 @@ import { Avatar } from '@components/Avatar';
 import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { EmptyState } from '@components/EmptyState';
-import { Icon } from '@components/Icon';
-import { Screen } from '@components/Screen';
+import { Screen, type ScreenAction } from '@components/Screen';
 import { TextField } from '@components/TextField';
 import { Typography } from '@components/Typography';
 import { useProfileOverview } from '@hooks/useProfileOverview';
@@ -29,14 +28,6 @@ import { pluralize } from '@utils/format';
 import { profileHandleError, profileNameError } from '@utils/profile';
 
 const AVATAR_SIZE = 84;
-
-/**
- * The Settings button matches `Screen`'s back button: 40dp, taken up to
- * the 48dp minimum touch target by its hit slop.
- */
-const SETTINGS_BUTTON_SIZE = 40;
-const SETTINGS_ICON_SIZE = 20;
-const SETTINGS_HIT_SLOP = 4;
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -80,36 +71,7 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       paddingVertical: theme.spacing.xxl,
     },
-    settingsButton: {
-      width: SETTINGS_BUTTON_SIZE,
-      height: SETTINGS_BUTTON_SIZE,
-      borderRadius: theme.radius.pill,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
-    },
   });
-
-/** Gear in the Profile header that opens Settings. */
-const SettingsButton = () => {
-  const styles = useThemedStyles(createStyles);
-  const navigation = useNavigation<Nav>();
-
-  return (
-    <TouchableOpacity
-      onPress={() => navigation.navigate('Settings')}
-      accessibilityRole="button"
-      accessibilityLabel="Settings"
-      hitSlop={SETTINGS_HIT_SLOP}
-      style={styles.settingsButton}
-      testID="btn-open-settings"
-    >
-      <Icon name="settings" size={SETTINGS_ICON_SIZE} color="textPrimary" />
-    </TouchableOpacity>
-  );
-};
 
 /**
  * Words for a failed save. The service's own message is written for a
@@ -251,6 +213,7 @@ const ProfileEditor = ({ profile, onSave, onCancel }: ProfileEditorProps) => {
  */
 export const ProfileScreen = () => {
   const styles = useThemedStyles(createStyles);
+  const navigation = useNavigation<Nav>();
   const { state, reload, saveProfile } = useProfileOverview();
   const [editing, setEditing] = useState(false);
 
@@ -267,11 +230,18 @@ export const ProfileScreen = () => {
     [saveProfile, closeEditor],
   );
 
+  // Temporary: the Setup screen redesign replaces this with its own entry.
+  const settingsAction: ScreenAction = {
+    label: 'Settings',
+    onPress: () => navigation.navigate('Settings'),
+    testID: 'btn-open-settings',
+  };
+
   if (state.status === 'loading') {
     return (
       <Screen
         title="Profile"
-        headerRight={<SettingsButton />}
+        action={settingsAction}
         scrollable
         testID="screen-profile"
       >
@@ -294,7 +264,7 @@ export const ProfileScreen = () => {
     return (
       <Screen
         title="Profile"
-        headerRight={<SettingsButton />}
+        action={settingsAction}
         scrollable
         testID="screen-profile"
       >
@@ -317,7 +287,7 @@ export const ProfileScreen = () => {
   return (
     <Screen
       title="Profile"
-      headerRight={<SettingsButton />}
+      action={settingsAction}
       scrollable
       testID="screen-profile"
     >

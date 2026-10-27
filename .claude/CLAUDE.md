@@ -38,7 +38,7 @@ Every screen reads real data through a service. There are no display fixtures (`
 - `src/types/` — stored models (`Drill`, `Session`, `Profile`), run types, and all navigation param lists (`navigation.ts`).
 - `src/screens/`, `src/components/` — screens compose the primitives in `components/`.
 
-Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial, History, Profile) plus `SequenceEditor` and `Settings` (opened from Profile's header) pushed over the tabs. History is a nested stack (`HistoryList` → `HistoryDetail` → `RunComparison`) so the tab bar stays visible. Navigator headers are off: each screen renders its own through `Screen`, and the bottom chrome is the custom `TabBar` (a new tab needs an entry in `tabIcons`).
+Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial, History, Profile) plus `SequenceEditor` and `Settings` (opened from Profile's header) pushed over the tabs. History is a nested stack (`HistoryList` → `HistoryDetail` → `RunComparison`) so the tab bar stays visible. Navigator headers are off: each screen renders its own through `Screen` (wordmark or back link, one text `action`, title, subtitle), and the bottom chrome is the custom text-only `TabBar`.
 
 ### Invariants
 
