@@ -7,7 +7,7 @@ import {
 } from '@react-navigation/native';
 
 import type { Theme } from '@/theme/theme';
-import type { HistoryStackParamList } from '@/types/navigation';
+import type { LogStackParamList } from '@/types/navigation';
 import type { Session } from '@/types/session';
 import { Card } from '@components/Card';
 import { Chip } from '@components/Chip';
@@ -34,7 +34,7 @@ import {
 } from '@utils/format';
 import { shownDeltaSign, type RunComparison } from '@utils/history';
 
-type RunComparisonRoute = RouteProp<HistoryStackParamList, 'RunComparison'>;
+type RunComparisonRoute = RouteProp<LogStackParamList, 'RunComparison'>;
 
 /** Stands in for the difference when the totals are not compared. */
 const NO_VALUE = '—';

@@ -63,7 +63,7 @@ import { planRun } from '@utils/runDetection';
 const CLOCK_TICK_MS = 50;
 const NO_VALUE = '—';
 
-/** The Timer tab, which also pushes the editor over the tabs. */
+/** The Timer tab, which also jumps into the Drills and Setup tabs. */
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Timer'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -299,7 +299,7 @@ type FailureActionProps = {
 /**
  * The way out of a failure the header names, when there is one the
  * shooter can take from here: the app's settings for a microphone that has
- * been turned off, the Calibration tab for a sound that has no threshold.
+ * been turned off, Calibration in Setup for a sound that has no threshold.
  */
 const FailureAction = ({ failure, onCalibrate }: FailureActionProps) => {
   switch (failure?.kind) {
@@ -564,13 +564,21 @@ export const TimerScreen = () => {
     [reset, selectedDrill],
   );
 
+  // Each jump opens the screen over its tab's own first screen, not in
+  // place of it, so going back lands on the Drills list or on Setup.
   const createDrill = useCallback(
-    () => navigation.navigate('SequenceEditor', {}),
+    () =>
+      navigation.navigate('Drills', {
+        screen: 'SequenceEditor',
+        params: {},
+        initial: false,
+      }),
     [navigation],
   );
 
   const goToCalibration = useCallback(
-    () => navigation.navigate('Calibration'),
+    () =>
+      navigation.navigate('Setup', { screen: 'Calibration', initial: false }),
     [navigation],
   );
 

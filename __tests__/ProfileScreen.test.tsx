@@ -32,10 +32,16 @@ import {
   type Profile,
 } from '../src/types/profile';
 
+/**
+ * The Profile screen is the Setup tab's root in the app, with Settings and
+ * Calibration pushed over it. Here they are sibling tabs: the screen only
+ * needs a route of each name to navigate to.
+ */
 type TestTabParamList = {
   Profile: undefined;
   Elsewhere: undefined;
   Settings: undefined;
+  Calibration: undefined;
 };
 
 const metrics = {
@@ -114,6 +120,7 @@ const mountScreen = (storage = preferencesStorage): Harness => {
               <Tab.Screen name="Profile" component={ProfileScreen} />
               <Tab.Screen name="Elsewhere" component={Elsewhere} />
               <Tab.Screen name="Settings" component={Elsewhere} />
+              <Tab.Screen name="Calibration" component={Elsewhere} />
             </Tab.Navigator>
           </NavigationContainer>
         </PreferencesProvider>
@@ -353,6 +360,57 @@ describe('ProfileScreen', () => {
       const { tree } = await renderScreen();
 
       expect(tree.root.findAllByProps({ title: 'Sign out' })).toHaveLength(0);
+    });
+  });
+
+  describe('calibration', () => {
+    it('offers Calibration as a row, named for a screen reader', async () => {
+      const { tree } = await renderScreen();
+
+      // The row component carries the testID too; the pressable is inside.
+      const row = byTestId(tree, 'row-calibration').find(
+        node => node.props.accessibilityRole !== undefined,
+      );
+      if (row === undefined) {
+        throw new Error('no pressable Calibration row is rendered');
+      }
+      expect(row.props.accessibilityRole).toBe('button');
+      expect(
+        row.findAll(node => node.props.children === 'Calibration'),
+      ).not.toHaveLength(0);
+    });
+
+    it('opens Calibration from its row', async () => {
+      const { tree, currentRoute } = await renderScreen();
+
+      await press(tree, 'row-calibration');
+
+      expect(currentRoute()).toBe('Calibration');
+    });
+
+    it('offers Calibration while the profile is still loading', async () => {
+      jest
+        .spyOn(SessionStorageService, 'count')
+        .mockImplementationOnce(() => new Promise(() => {}));
+
+      const { tree } = mountScreen();
+      await settle();
+
+      expect(has(tree, 'text-profile-loading')).toBe(true);
+      expect(has(tree, 'row-calibration')).toBe(true);
+    });
+
+    it('offers Calibration when the profile cannot be read', async () => {
+      jest
+        .spyOn(ProfileStorageService, 'load')
+        .mockRejectedValue(
+          new ProfileStorageError('unreadable', 'STORAGE_FAILURE'),
+        );
+
+      const { tree } = await renderScreen();
+
+      expect(has(tree, 'state-profile-error')).toBe(true);
+      expect(has(tree, 'row-calibration')).toBe(true);
     });
   });
 

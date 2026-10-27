@@ -190,6 +190,14 @@ describe('SettingsScreen', () => {
     expect(has(tree, 'row-level-unit')).toBe(true);
   });
 
+  it('names its back link for Setup, where it is opened from', async () => {
+    const { tree } = await renderScreen();
+
+    expect(byTestId(tree, 'btn-back')[0].props.accessibilityLabel).toBe(
+      'Back to Setup',
+    );
+  });
+
   it('goes back to where it was opened from', async () => {
     const { tree, currentRoute } = await renderScreen();
 

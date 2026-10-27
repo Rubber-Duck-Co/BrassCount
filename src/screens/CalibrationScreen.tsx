@@ -9,8 +9,12 @@ import {
   type ViewStyle,
 } from 'react-native';
 
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
 import type { Theme } from '@/theme/theme';
 import type { CalibrationSound, SoundCalibration } from '@/types/calibration';
+import type { SetupStackParamList } from '@/types/navigation';
 import type { LevelUnit } from '@/types/profile';
 import { Button } from '@components/Button';
 import { Card } from '@components/Card';
@@ -36,6 +40,8 @@ import { formatLevel, spokenLevel } from '@utils/format';
  */
 const DBFS_METER_FLOOR = MIN_SAMPLE_DBFS;
 const DBFS_METER_CEILING = 0;
+
+type Nav = NativeStackNavigationProp<SetupStackParamList, 'Calibration'>;
 
 /**
  * The label under the meter's left end. Only the right end carries the
@@ -579,8 +585,10 @@ const CalibrationCard = memo((props: CalibrationCardProps) => {
   );
 });
 
+/** Pushed inside the Setup tab, so its back link returns to Setup. */
 export const CalibrationScreen = () => {
   const styles = useThemedStyles(createStyles);
+  const navigation = useNavigation<Nav>();
   const { state } = useCalibration();
   const { active, notice, recalibrate, test, cancel } = useCalibrationCapture();
 
@@ -588,6 +596,8 @@ export const CalibrationScreen = () => {
     <Screen
       title="Calibration"
       subtitle="Tune sound detection for this session"
+      onBack={navigation.goBack}
+      backLabel="Setup"
       scrollable
       testID="screen-calibration"
     >

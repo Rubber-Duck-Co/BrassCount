@@ -16,7 +16,7 @@ import {
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { Theme } from '@/theme/theme';
-import type { HistoryStackParamList } from '@/types/navigation';
+import type { LogStackParamList } from '@/types/navigation';
 import { Card } from '@components/Card';
 import { EmptyState } from '@components/EmptyState';
 import { RefreshFailedNotice } from '@components/RefreshFailedNotice';
@@ -31,9 +31,9 @@ import { useThemedStyles } from '@hooks/useTheme';
 import { formatSeconds, pluralize, spokenSeconds } from '@utils/format';
 import type { RunSummary, RunTotals } from '@utils/history';
 
-type HistoryDetailRoute = RouteProp<HistoryStackParamList, 'HistoryDetail'>;
+type HistoryDetailRoute = RouteProp<LogStackParamList, 'HistoryDetail'>;
 type HistoryDetailNavigation = NativeStackNavigationProp<
-  HistoryStackParamList,
+  LogStackParamList,
   'HistoryDetail'
 >;
 

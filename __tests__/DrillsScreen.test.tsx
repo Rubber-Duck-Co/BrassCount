@@ -35,7 +35,8 @@ import type { Drill, DrillInput } from '../src/types/drill';
 import type { SessionInput } from '../src/types/session';
 
 /**
- * The editor sits on the root stack in the app. Here it is a sibling tab:
+ * The editor is pushed over the list in the Drills tab's stack in the app.
+ * Here it is a sibling tab:
  * the screen only needs a route of that name to navigate to, and a tab
  * keeps the Drills screen mounted behind it the way the stack does.
  */

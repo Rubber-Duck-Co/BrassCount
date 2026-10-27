@@ -111,7 +111,7 @@ const failureFor = (err: unknown): DrillRunFailure => {
 
 /**
  * A refusal to start for want of calibration, as it stands now: a sound
- * calibrated since (on the Calibration tab) is no longer named, and once
+ * calibrated since (on the Calibration screen) is no longer named, and once
  * none is left there is nothing to say.
  */
 const outstanding = (

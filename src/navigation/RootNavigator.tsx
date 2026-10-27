@@ -8,7 +8,6 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { SequenceEditorScreen, SettingsScreen } from '@/screens';
 import type { Theme } from '@/theme/theme';
 import type { RootStackParamList } from '@/types/navigation';
 import { useTheme } from '@hooks/useTheme';
@@ -39,6 +38,10 @@ const toNavigationTheme = (theme: Theme): NavigationTheme => {
   };
 };
 
+/**
+ * The root stack holds only the tabs: every screen is pushed inside a
+ * tab's own stack, so the tab bar never gets covered.
+ */
 export const RootNavigator = () => {
   const theme = useTheme();
   const navigationTheme = useMemo(() => toNavigationTheme(theme), [theme]);
@@ -58,16 +61,6 @@ export const RootNavigator = () => {
         <Stack.Screen
           name="Tabs"
           component={MainTabs}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="SequenceEditor"
-          component={SequenceEditorScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Settings"
-          component={SettingsScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

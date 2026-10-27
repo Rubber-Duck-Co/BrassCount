@@ -498,7 +498,7 @@ const TimerSettings = () => {
 };
 
 /**
- * App preferences, pushed over the tabs from the Profile header. Grouped
+ * App preferences, pushed inside the Setup tab from the Profile header. Grouped
  * into sections: Display, Timer, Detection, Data and About.
  */
 export const SettingsScreen = () => {
@@ -509,6 +509,7 @@ export const SettingsScreen = () => {
     <Screen
       title="Settings"
       onBack={navigation.goBack}
+      backLabel="Setup"
       scrollable
       testID="screen-settings"
     >

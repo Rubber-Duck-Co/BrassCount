@@ -29,7 +29,7 @@ import {
   MAX_DRILL_STEPS,
   type DrillStep,
 } from '@/types/drill';
-import type { RootStackParamList } from '@/types/navigation';
+import type { DrillsStackParamList } from '@/types/navigation';
 import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { DrillStepRow } from '@components/DrillStepRow';
@@ -55,8 +55,8 @@ import {
 } from '@utils/drillDraft';
 import { formatSeconds, pluralize, spokenSeconds } from '@utils/format';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
-type EditorRoute = RouteProp<RootStackParamList, 'SequenceEditor'>;
+type Nav = NativeStackNavigationProp<DrillsStackParamList, 'SequenceEditor'>;
+type EditorRoute = RouteProp<DrillsStackParamList, 'SequenceEditor'>;
 
 /**
  * Narrowest the step-type dropdown may get, at the default text size,
@@ -489,6 +489,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
       <Screen
         title={title}
         onBack={leave}
+        backLabel="Drills"
         scrollable
         testID="screen-drill-editor"
       >
@@ -506,6 +507,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
     <Screen
       title={title}
       onBack={leave}
+      backLabel="Drills"
       subtitle={
         steps.length > 0
           ? describeSteps(steps)

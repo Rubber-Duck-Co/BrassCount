@@ -32,7 +32,7 @@ import { formatDateTime, spokenDateTime } from '../src/utils/format';
 
 /**
  * In the app the comparison is pushed over the detail screen inside the
- * History tab. Here it is a tab of its own, next to a blank one to leave
+ * Log tab. Here it is a tab of its own, next to a blank one to leave
  * it for, so it stays mounted while it is out of sight.
  */
 type TestTabParamList = {

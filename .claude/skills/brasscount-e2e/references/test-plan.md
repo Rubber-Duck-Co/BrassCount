@@ -25,7 +25,7 @@ What the app is supposed to do is in `.claude/CLAUDE.md`. When a check below and
 ## 1. Launch and navigation
 
 1.1 Cold launch lands on the Timer tab (`screen-timer`), with no red box, no LogBox toast and nothing in `d crashes`.
-1.2 Each tab opens its screen: `tab-Calibration` → `screen-calibration`, `tab-Drills` → `screen-drills`, `tab-Timer` → `screen-timer`, `tab-History` → `screen-history`, `tab-Profile` → `screen-profile`. The tab bar stays visible.
+1.2 The tab bar reads TIMER · DRILLS · LOG · SETUP, and each tab opens its screen: `tab-Timer` → `screen-timer`, `tab-Drills` → `screen-drills`, `tab-Log` → `screen-history`, `tab-Setup` → `screen-profile` (the Setup root, for now). Calibration opens from Setup's `row-calibration` (`screen-calibration`) and `btn-back` returns to Setup. The tab bar stays visible on every pushed screen: the editor, Calibration, Settings, a drill's runs and Compare.
 1.3 Screenshot each tab once (light theme) and look at it: nothing clipped, overlapping, or unthemed.
 
 ## 2. Drills: create, edit, reorder, limits
@@ -72,7 +72,7 @@ Leave all three sounds calibrated with `clicks -3 500` for the Timer areas, then
 ## 5. Timer: refusals and permissions
 
 5.1 Picker: `select-drill` lists the stored drills; the timer shows the most recently changed drill until one is picked.
-5.2 Uncalibrated refusal: force-stop and relaunch (calibration resets), pick a drill with shot and reload steps, Start: refused before the microphone opens, the header names the uncalibrated sounds, and `btn-go-calibration` is offered and opens the Calibration tab.
+5.2 Uncalibrated refusal: force-stop and relaunch (calibration resets), pick a drill with shot and reload steps, Start: refused before the microphone opens, the header names the uncalibrated sounds, and `btn-go-calibration` is offered and opens Calibration in the Setup tab; `btn-back` returns to the Setup root.
 5.3 Calibrate one of the named sounds and come back: the refusal now names only the sounds still missing; calibrate the rest and it goes away. (This is the behaviour on the `feat/timer-run-shortcuts` branch; check CLAUDE.md for whether it is in this build.)
 5.4 and 5.5 cannot be set up on the Timer: Start needs calibrated sounds, calibrating needs the microphone, and `d mic revoke` (`pm revoke`) kills the app, which clears calibration. Test denial and blocking on the Calibration screen instead, where Recalibrate asks for the microphone, and note in the report that the Timer's own permission path was not exercised.
 
@@ -124,7 +124,7 @@ Write down the profile's name, handle, and Settings' Appearance and Level units 
 9.1 The Runs and Drills counters match History's Runs and the Drills tab's count (Profile counts the whole library).
 9.2 Edit (`btn-edit-profile`): change the name and handle (`input-profile-name`, `input-profile-handle`; type `e2ehandle` without the @). Save: the handle shows as `@e2ehandle`. Cancel (`btn-cancel-profile`) on a second edit discards it.
 9.3 Clearing the name or handle (empty field) and saving clears it.
-9.4 Profile has no Preferences section. The gear (`btn-open-settings`, top right) opens Settings (`screen-settings`) over the tabs; `btn-back` returns to Profile. Settings → Display → Appearance (`row-appearance`) → Light / Dark / System (`opt-appearance-*`) applies at once (screenshot each); choosing an option closes the sheet, and `btn-appearance-close` (the backdrop) closes it without a change. The choice survives a force-stop and relaunch.
+9.4 Profile has no Preferences section. The gear (`btn-open-settings`, top right) opens Settings (`screen-settings`) in the Setup tab; `btn-back` returns to Profile. Settings → Display → Appearance (`row-appearance`) → Light / Dark / System (`opt-appearance-*`) applies at once (screenshot each); choosing an option closes the sheet, and `btn-appearance-close` (the backdrop) closes it without a change. The choice survives a force-stop and relaunch.
 9.5 Settings → Display → Level units (`row-level-unit`) → Level / dBFS (`opt-level-unit-*`); `btn-level-unit-close` closes without a change. With a sound calibrated, the Calibration readouts, scale labels and "Threshold set to …" line switch unit at once (Level `85` ↔ `-9 dBFS` for 4.4's threshold). The unit survives a force-stop and relaunch (calibration itself does not).
 9.6 Restore the original name, handle, appearance and level unit, and check them on screen.
 
