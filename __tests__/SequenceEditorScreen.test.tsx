@@ -32,7 +32,7 @@ import {
 import { isStepPar } from '../src/utils/drill';
 
 /**
- * The editor is pushed over the tabs on the root stack in the app. Here it
+ * The editor is pushed over the list in the Drills tab's stack in the app. Here it
  * is a tab beside a stand-in for the Drills list: the screen only needs a
  * route to read its params from and something to go back to.
  */
@@ -1383,6 +1383,14 @@ describe('SequenceEditorScreen', () => {
     expect(currentRoute()?.name).toBe('Drills');
     expect(error).not.toHaveBeenCalled();
     error.mockRestore();
+  });
+
+  it('names its back link for the Drills list', async () => {
+    const { tree } = await renderEditor();
+
+    expect(withProp(tree, 'btn-back', 'onPress').props.accessibilityLabel).toBe(
+      'Back to Drills',
+    );
   });
 
   it('goes back from the header', async () => {

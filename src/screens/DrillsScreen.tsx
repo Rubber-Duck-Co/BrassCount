@@ -14,7 +14,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { Theme } from '@/theme/theme';
 import type { Drill } from '@/types/drill';
-import type { RootStackParamList } from '@/types/navigation';
+import type { DrillsStackParamList } from '@/types/navigation';
 import { Card } from '@components/Card';
 import { ConfirmSheet } from '@components/ConfirmSheet';
 import { EmptyState } from '@components/EmptyState';
@@ -30,7 +30,7 @@ import { useDrills, type DrillsState } from '@hooks/useDrills';
 import { useThemedStyles } from '@hooks/useTheme';
 import { describeDrill } from '@utils/drill';
 
-type Nav = NativeStackNavigationProp<RootStackParamList>;
+type Nav = NativeStackNavigationProp<DrillsStackParamList, 'DrillList'>;
 
 const ERROR_TITLE = 'Could not load your drills';
 

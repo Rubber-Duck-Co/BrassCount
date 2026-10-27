@@ -11,7 +11,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   NavigationContainer,
   createNavigationContainerRef,
+  type NavigatorScreenParams,
 } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   act,
@@ -52,6 +54,10 @@ import {
   type PreferencesContextValue,
 } from '../src/store/PreferencesContext';
 import type { DrillInput } from '../src/types/drill';
+import type {
+  DrillsStackParamList,
+  SetupStackParamList,
+} from '../src/types/navigation';
 import { DEFAULT_PROFILE } from '../src/types/profile';
 import { formatElapsed } from '../src/utils/format';
 
@@ -76,10 +82,10 @@ const mockedNativeAudioCapture = jest.mocked(NativeAudioCapture);
 type TestTabParamList = {
   Timer: undefined;
   Elsewhere: undefined;
-  /** Stands in for the tab a refusal to start sends the shooter to. */
-  Calibration: undefined;
-  /** Stands in for the editor the empty library sends the shooter to. */
-  SequenceEditor: { id?: string };
+  /** The tab whose editor the empty library sends the shooter to. */
+  Drills: NavigatorScreenParams<DrillsStackParamList> | undefined;
+  /** The tab whose Calibration a refusal to start sends the shooter to. */
+  Setup: NavigatorScreenParams<SetupStackParamList> | undefined;
 };
 
 /** The drills the tests run, oldest first: the last is on the timer first. */
@@ -150,9 +156,28 @@ const metrics = {
 };
 
 const Tab = createBottomTabNavigator<TestTabParamList>();
+const DrillsStack = createNativeStackNavigator<DrillsStackParamList>();
+const SetupStack = createNativeStackNavigator<SetupStackParamList>();
 
-/** Stands in for the other tabs. */
+/** Stands in for the other tabs and the screens inside them. */
 const Blank = () => null;
+
+/** The Drills tab's stack with blank screens: only its routes matter here. */
+const StubDrills = () => (
+  <DrillsStack.Navigator screenOptions={{ headerShown: false }}>
+    <DrillsStack.Screen name="DrillList" component={Blank} />
+    <DrillsStack.Screen name="SequenceEditor" component={Blank} />
+  </DrillsStack.Navigator>
+);
+
+/** The Setup tab's stack with blank screens. */
+const StubSetup = () => (
+  <SetupStack.Navigator screenOptions={{ headerShown: false }}>
+    <SetupStack.Screen name="SetupHome" component={Blank} />
+    <SetupStack.Screen name="Calibration" component={Blank} />
+    <SetupStack.Screen name="Settings" component={Blank} />
+  </SetupStack.Navigator>
+);
 
 /** Sits beside the screen so a test can calibrate the sounds it listens for. */
 const StoreHandle = ({
@@ -225,8 +250,8 @@ const renderScreen = async ({
                 <Tab.Navigator screenOptions={{ headerShown: false }}>
                   <Tab.Screen name="Timer" component={TimerScreen} />
                   <Tab.Screen name="Elsewhere" component={Blank} />
-                  <Tab.Screen name="Calibration" component={Blank} />
-                  <Tab.Screen name="SequenceEditor" component={Blank} />
+                  <Tab.Screen name="Drills" component={StubDrills} />
+                  <Tab.Screen name="Setup" component={StubSetup} />
                 </Tab.Navigator>
               </NavigationContainer>
             </PreferencesProvider>
@@ -254,6 +279,12 @@ const renderScreen = async ({
   return {
     tree,
     navigationRef,
+    /** The routes stacked in one tab, bottom first. */
+    stackIn: (tab: keyof TestTabParamList): string[] | undefined =>
+      navigationRef
+        .getRootState()
+        ?.routes.find(route => route.name === tab)
+        ?.state?.routes.map(route => route.name),
     setSample: (...args: Parameters<typeof setSample>): void => {
       act(() => setSample(...args));
     },
@@ -601,8 +632,10 @@ describe('TimerScreen', () => {
       expect(subtitle(tree)).toBe('Calibrate Shot and Rack first');
     });
 
-    it('sends the shooter to Calibration from a refusal to start', async () => {
-      const { tree, navigationRef } = await renderScreen({ calibrate: false });
+    it('sends the shooter to Calibration in Setup from a refusal to start', async () => {
+      const { tree, navigationRef, stackIn } = await renderScreen({
+        calibrate: false,
+      });
       expect(has(tree, 'btn-go-calibration')).toBe(false);
       await press(tree, 'btn-start');
 
@@ -612,6 +645,8 @@ describe('TimerScreen', () => {
       });
 
       expect(navigationRef.getCurrentRoute()?.name).toBe('Calibration');
+      // Setup's own screen sits underneath, so back lands on Setup.
+      expect(stackIn('Setup')).toEqual(['SetupHome', 'Calibration']);
     });
 
     it('stops asking for calibration once the sounds it named are calibrated', async () => {
@@ -1263,9 +1298,9 @@ describe('TimerScreen', () => {
       getAll.mockRestore();
     });
 
-    it('sends the shooter to create a drill when there is none', async () => {
+    it('sends the shooter to create a drill in Drills when there is none', async () => {
       await AsyncStorage.clear();
-      const { tree, navigationRef } = await renderScreen();
+      const { tree, navigationRef, stackIn } = await renderScreen();
 
       expect(has(tree, 'state-timer-drills-empty')).toBe(true);
       expect(has(tree, 'btn-start')).toBe(false);
@@ -1277,7 +1312,12 @@ describe('TimerScreen', () => {
           .props.onPress();
         await jest.advanceTimersByTimeAsync(0);
       });
-      expect(navigationRef.getCurrentRoute()?.name).toBe('SequenceEditor');
+      expect(navigationRef.getCurrentRoute()).toMatchObject({
+        name: 'SequenceEditor',
+        params: {},
+      });
+      // The drill list sits underneath, so back lands on Drills.
+      expect(stackIn('Drills')).toEqual(['DrillList', 'SequenceEditor']);
     });
 
     it('offers to read the drills again when they cannot be read', async () => {

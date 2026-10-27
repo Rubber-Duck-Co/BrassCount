@@ -32,7 +32,7 @@ import type { Session } from '../src/types/session';
 
 /**
  * In the app the list and the detail screen share a stack inside the
- * History tab. Here they are sibling tabs: the list only needs a route of
+ * Log tab. Here they are sibling tabs: the list only needs a route of
  * that name to navigate to, and a tab keeps it mounted behind the detail
  * the way the stack does.
  */

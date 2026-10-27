@@ -14,7 +14,9 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   NavigationContainer,
   createNavigationContainerRef,
+  type NavigatorScreenParams,
 } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   act,
@@ -40,6 +42,7 @@ import {
 } from '../src/store/PreferencesContext';
 import { CALIBRATION_SOUNDS } from '../src/types/calibration';
 import type { CalibrationSound } from '../src/types/calibration';
+import type { SetupStackParamList } from '../src/types/navigation';
 import {
   DEFAULT_PROFILE,
   type DetectionSensitivity,
@@ -51,7 +54,7 @@ import { CALIBRATION_LISTEN_MS } from '../src/utils/calibration';
 const mockedNativeAudioCapture = jest.mocked(NativeAudioCapture);
 
 type TestTabParamList = {
-  Calibration: undefined;
+  Setup: NavigatorScreenParams<SetupStackParamList> | undefined;
   Elsewhere: undefined;
 };
 
@@ -61,9 +64,37 @@ const metrics = {
 };
 
 const Tab = createBottomTabNavigator<TestTabParamList>();
+const SetupStack = createNativeStackNavigator<SetupStackParamList>();
 
-/** Stands in for the other tabs. */
+/** Stands in for the other tabs and the other Setup screens. */
 const Blank = () => null;
+
+/** The Setup tab, as the app has it, with blank screens beside Calibration. */
+const Setup = () => (
+  <SetupStack.Navigator screenOptions={{ headerShown: false }}>
+    <SetupStack.Screen name="SetupHome" component={Blank} />
+    <SetupStack.Screen name="Calibration" component={CalibrationScreen} />
+    <SetupStack.Screen name="Settings" component={Blank} />
+  </SetupStack.Navigator>
+);
+
+/** Calibration open over the Setup tab's own screen, as Setup opens it. */
+const CALIBRATION_OPEN = {
+  index: 0,
+  routes: [
+    {
+      name: 'Setup' as const,
+      state: {
+        index: 1,
+        routes: [
+          { name: 'SetupHome' as const },
+          { name: 'Calibration' as const },
+        ],
+      },
+    },
+    { name: 'Elsewhere' as const },
+  ],
+};
 
 /** Sits beside the screen so a test can drive the store it reads from. */
 const StoreHandle = ({
@@ -122,8 +153,8 @@ const LevelUnitHolder = ({
 const mounted: ReactTestRenderer[] = [];
 
 /**
- * Mount the screen as a tab, the way the app does: it stops listening when
- * its tab loses focus, so it needs a navigator to tell it. Levels are shown
+ * Mount the screen inside the Setup tab, the way the app does: it stops
+ * listening when its tab loses focus, so it needs a navigator to tell it. Levels are shown
  * in raw dBFS unless `levelUnit` says otherwise, so the readings asserted
  * on are the ones the store holds.
  */
@@ -153,9 +184,12 @@ const renderScreen = ({
                 store = value;
               }}
             />
-            <NavigationContainer ref={navigationRef}>
+            <NavigationContainer
+              ref={navigationRef}
+              initialState={CALIBRATION_OPEN}
+            >
               <Tab.Navigator screenOptions={{ headerShown: false }}>
-                <Tab.Screen name="Calibration" component={CalibrationScreen} />
+                <Tab.Screen name="Setup" component={Setup} />
                 <Tab.Screen name="Elsewhere" component={Blank} />
               </Tab.Navigator>
             </NavigationContainer>
@@ -176,12 +210,13 @@ const renderScreen = ({
       }
       return store;
     },
-    /** Switch to another tab, or back to Calibration. */
+    /** Switch to another tab, or back to Setup. */
     goTo: (tab: keyof TestTabParamList): void => {
       act(() => {
         navigationRef.navigate(tab);
       });
     },
+    currentRoute: () => navigationRef.getCurrentRoute()?.name,
     /** Change the detection sensitivity, as choosing one in Settings does. */
     chooseSensitivity: (sensitivity: DetectionSensitivity): void => {
       act(() => {
@@ -383,6 +418,26 @@ describe('CalibrationScreen', () => {
       mounted.splice(0).forEach(tree => tree.unmount());
     });
     setFontScale(initialWindow.fontScale);
+  });
+
+  describe('going back', () => {
+    it('offers a back link named for Setup', () => {
+      const { tree } = renderScreen();
+
+      const back = tree.root.findAllByProps({ testID: 'btn-back' })[0];
+      expect(back.props.accessibilityLabel).toBe('Back to Setup');
+      expect(back.props.accessibilityRole).toBe('button');
+    });
+
+    it('returns to the Setup screen it was opened from', () => {
+      const { tree, currentRoute } = renderScreen();
+
+      act(() => {
+        tree.root.findAllByProps({ testID: 'btn-back' })[0].props.onPress();
+      });
+
+      expect(currentRoute()).toBe('SetupHome');
+    });
   });
 
   it('gives each wrapping piece of a card more room as the system font grows', () => {
@@ -1174,7 +1229,7 @@ describe('CalibrationScreen', () => {
 
         goTo('Elsewhere');
         await finishListening();
-        goTo('Calibration');
+        goTo('Setup');
 
         expect(mockedNativeAudioCapture.stop).toHaveBeenCalledTimes(1);
         expect(chipLabel(tree, 'shot')).toBe('Not calibrated');

@@ -4,7 +4,7 @@ import { planRun } from '@utils/runDetection';
 import { splitDelta } from '@utils/session';
 
 /**
- * How the History tab rolls stored runs up by drill. Pure functions, no
+ * How the Log tab rolls stored runs up by drill. Pure functions, no
  * side effects.
  */
 

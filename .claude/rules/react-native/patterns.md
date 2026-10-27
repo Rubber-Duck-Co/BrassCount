@@ -11,15 +11,15 @@ paths:
 
 ## Navigation (React Navigation 7)
 
-- The tree is a root native stack containing the bottom tabs plus full-screen routes pushed over them; the History tab is a nested stack so the tab bar stays visible on its detail screen.
+- The tree is a root native stack holding only the bottom tabs. Timer is a single screen; Drills, Log and Setup are each a nested native stack, so the tab bar stays visible at every depth.
 - Every route and its params are declared in `src/types/navigation.ts`. Add the route there first, then register the screen in the navigator, then export it from `src/screens/index.ts`.
-- A screen that should keep the tab bar goes in a stack nested inside the tab; a screen that should cover it goes on the root stack.
+- A new screen goes in the stack of the tab it belongs to. A jump from another tab names the tab and screen with `initial: false` (`navigate('Setup', { screen: 'Calibration', initial: false })`), so back lands on that tab's root. Only a screen that must cover the tab bar would go on the root stack; there is none today.
 - Screens take no props: read navigation and params with typed `useNavigation<Nav>()` / `useRoute<…>()`.
 - Navigator headers are off. Each screen renders its header through `Screen` (`title`, `subtitle`, `onBack={navigation.goBack}` with an optional `backLabel`, and one text `action` with `actionDisabled`).
 - Pass ids through params and load the record in the destination screen; do not pass whole objects.
 
 ```tsx
-type HistoryDetailRoute = RouteProp<HistoryStackParamList, 'HistoryDetail'>;
+type HistoryDetailRoute = RouteProp<LogStackParamList, 'HistoryDetail'>;
 
 export const HistoryDetailScreen = () => {
   const navigation = useNavigation();

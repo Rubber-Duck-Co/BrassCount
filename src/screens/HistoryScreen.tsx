@@ -11,7 +11,7 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { Theme } from '@/theme/theme';
-import type { HistoryStackParamList } from '@/types/navigation';
+import type { LogStackParamList } from '@/types/navigation';
 import { Card } from '@components/Card';
 import { EmptyState } from '@components/EmptyState';
 import { ListRow } from '@components/ListRow';
@@ -34,7 +34,7 @@ import {
 } from '@utils/format';
 import type { DrillHistorySummary } from '@utils/history';
 
-type Nav = NativeStackNavigationProp<HistoryStackParamList, 'HistoryList'>;
+type Nav = NativeStackNavigationProp<LogStackParamList, 'HistoryList'>;
 
 /** Stands in for a counter until the history has been read. */
 const NO_COUNT = '—';
