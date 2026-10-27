@@ -3,17 +3,18 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 /**
- * Read the app version from the repo-root version.txt so that the
- * auto-version-bump action keeps Android in sync with package.json.
- * versionCode is derived from versionName (major*10000 + minor*100 + patch)
- * to stay monotonically increasing across bumps.
+ * The app version comes from the repo-root VERSION.txt; version.gradle holds
+ * the versionCode formula and its limits. The name's case matters: CI builds
+ * on Linux, where `version.txt` is a different file.
  */
-def versionFile = rootProject.file('../version.txt')
-def appVersionName = versionFile.exists() ? versionFile.text.trim() : '1.0.0'
-def (vMajor, vMinor, vPatch) = (appVersionName.tokenize('.') + ['0', '0', '0'])
-    .take(3)
-    .collect { it.toInteger() }
-def appVersionCode = vMajor * 10000 + vMinor * 100 + vPatch
+apply from: 'version.gradle'
+def versionFile = rootProject.file('../VERSION.txt')
+if (!versionFile.isFile()) {
+    throw new GradleException("Missing ${versionFile.canonicalPath}: the app version is read from it.")
+}
+def appVersion = parseAppVersion(versionFile.getText('UTF-8'), 'VERSION.txt')
+def appVersionName = appVersion.name
+def appVersionCode = appVersion.code
 
 /**
  * This is the configuration block to customize your React Native Android app.
