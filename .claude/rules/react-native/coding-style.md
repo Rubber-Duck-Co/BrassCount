@@ -45,7 +45,7 @@ const styles = useThemedStyles(createStyles);
 
 ## Platform
 
-- Android only: do not add iOS-specific files or branches. Use `Platform.select` only where an existing token already does (e.g. `fontFamilies.mono`).
+- Android only: do not add iOS-specific files or branches, and no `Platform.select` for iOS values.
 - Account for safe areas through the `Screen` shell and `react-native-safe-area-context`; never hardcode status-bar or navigation-bar offsets.
 
 ## Imports & Project Layout

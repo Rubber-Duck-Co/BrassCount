@@ -54,7 +54,7 @@ Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial
 
 ### Theming
 
-`src/theme/theme.ts` holds the palette and semantic tokens for light and dark (identical shape). Components never import it, only type-only `Theme`. Use `useTheme()` and module-scope `createStyles = (theme: Theme) => StyleSheet.create(...)` with `useThemedStyles`. Use spacing/radius tokens and `Typography` variants, and the mono variants (`timer`, `metric`, `metricSmall`) for readouts. A new semantic colour goes in `SemanticColors` and both palettes.
+`src/theme/theme.ts` holds the palette and semantic tokens for light and dark (identical shape). Components never import it, only type-only `Theme`. Use `useTheme()` and module-scope `createStyles = (theme: Theme) => StyleSheet.create(...)` with `useThemedStyles`. Use spacing/radius tokens and `Typography` variants, and the mono variants (`timer`, `metric`, `metricSmall`) for readouts. Fonts are bundled TTFs in `android/app/src/main/assets/fonts`, one `fontFamily` (the file's basename) per weight: never set `fontWeight` with them, and a new font needs a native rebuild. A new semantic colour goes in `SemanticColors` and both palettes.
 
 ## Conventions
 
