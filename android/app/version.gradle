@@ -1,0 +1,49 @@
+/**
+ * Turns the text of the repo-root VERSION.txt into Android's versionName and
+ * versionCode. The auto-version-bump action rewrites that file on every merge
+ * to main, so Android follows the same bump as package.json.
+ *
+ * versionCode = major * 10,000,000 + minor * 10,000 + patch. Each field has
+ * room to grow (minor up to 999, patch up to 9,999; the bot raises the patch
+ * on every merge and never caps it), so the code only increases across bumps.
+ * Play rejects a versionCode above 2,100,000,000, which allows major up to 210.
+ *
+ * Nothing has been uploaded to Play yet. After the first upload the formula
+ * may only change in ways that keep every new code above the published ones.
+ *
+ * Anything that is not plain `major.minor.patch`, or a field past its width,
+ * fails the build: a guessed version would ship silently.
+ */
+
+ext.MAX_MINOR = 999
+ext.MAX_PATCH = 9_999
+ext.MAX_VERSION_CODE = 2_100_000_000L
+
+/**
+ * `text` is the file's contents; `source` names it in error messages.
+ * Returns `[name: '0.32.0', code: 320000]`.
+ */
+ext.parseAppVersion = { String text, String source ->
+    def name = text.trim()
+    // Nine digits at most per field, so the arithmetic below cannot overflow a long.
+    def match = name =~ /^(\d{1,9})\.(\d{1,9})\.(\d{1,9})$/
+    if (!match.matches()) {
+        throw new GradleException(
+            "${source} must hold a version like 1.2.3, but holds '${name}'.")
+    }
+    def (major, minor, patch) = (1..3).collect { match.group(it).toLong() }
+    if (minor > MAX_MINOR) {
+        throw new GradleException(
+            "${source}: minor version ${minor} is over ${MAX_MINOR}, so versionCode would collide. Widen the formula in android/app/version.gradle.")
+    }
+    if (patch > MAX_PATCH) {
+        throw new GradleException(
+            "${source}: patch version ${patch} is over ${MAX_PATCH}, so versionCode would collide. Widen the formula in android/app/version.gradle.")
+    }
+    long code = major * 10_000_000L + minor * 10_000L + patch
+    if (code > MAX_VERSION_CODE) {
+        throw new GradleException(
+            "${source}: version ${name} gives versionCode ${code}, over Play's limit of ${MAX_VERSION_CODE}.")
+    }
+    return [name: name, code: (int) code]
+}
