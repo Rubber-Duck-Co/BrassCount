@@ -15,8 +15,7 @@ paths:
 - Every route and its params are declared in `src/types/navigation.ts`. Add the route there first, then register the screen in the navigator, then export it from `src/screens/index.ts`.
 - A screen that should keep the tab bar goes in a stack nested inside the tab; a screen that should cover it goes on the root stack.
 - Screens take no props: read navigation and params with typed `useNavigation<Nav>()` / `useRoute<…>()`.
-- Navigator headers are off. Each screen renders its header through `Screen` (`title`, `subtitle`, `onBack={navigation.goBack}`).
-- A new tab also needs an icon entry in `tabIcons` in `TabBar.tsx`.
+- Navigator headers are off. Each screen renders its header through `Screen` (`title`, `subtitle`, `onBack={navigation.goBack}` with an optional `backLabel`, and one text `action` with `actionDisabled`).
 - Pass ids through params and load the record in the destination screen; do not pass whole objects.
 
 ```tsx

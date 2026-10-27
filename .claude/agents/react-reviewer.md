@@ -70,7 +70,7 @@ The app's purpose is accurate timing. Treat these as blocking:
 - **Route not declared** in `src/types/navigation.ts`, or params typed loosely / cast.
 - **Untyped hooks**: `useNavigation()` / `useRoute()` used for navigation or params without the typed generic.
 - **Wrong navigator**: a screen that should keep the tab bar placed on the root stack, or the reverse.
-- **Navigator header turned on** instead of using the `Screen` header; a new tab without a `tabIcons` entry in `TabBar.tsx`.
+- **Navigator header turned on** instead of using the `Screen` header.
 - **Whole objects passed as params** instead of ids.
 
 ### HIGH -- Theming and Design System
