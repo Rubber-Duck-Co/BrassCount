@@ -229,6 +229,9 @@ const stepTypes = (tree: ReactTestRenderer): string[] =>
     textOf(tree, `select-step-${i}`),
   );
 
+/** Rendering a full drill takes ~2s alone, more with every worker busy. */
+const FULL_DRILL_TIMEOUT_MS = 15_000;
+
 /** What each step's par control shows, top to bottom. */
 const stepPars = (tree: ReactTestRenderer): string[] =>
   Array.from({ length: stepCount(tree) }, (_, i) =>
@@ -413,27 +416,31 @@ describe('SequenceEditorScreen', () => {
       ]);
     });
 
-    it('stops at the most steps a drill may have', async () => {
-      const full = await saveDrill({
-        name: 'Endurance',
-        steps: Array.from({ length: MAX_DRILL_STEPS }, () => ({
-          type: 'shot' as const,
-        })),
-      });
-      const { tree } = await renderEditor(full.id);
-      expect(stepCount(tree)).toBe(MAX_DRILL_STEPS);
+    it(
+      'stops at the most steps a drill may have',
+      async () => {
+        const full = await saveDrill({
+          name: 'Endurance',
+          steps: Array.from({ length: MAX_DRILL_STEPS }, () => ({
+            type: 'shot' as const,
+          })),
+        });
+        const { tree } = await renderEditor(full.id);
+        expect(stepCount(tree)).toBe(MAX_DRILL_STEPS);
 
-      expect(isDisabled(tree, 'btn-add-step')).toBe(true);
-      expect(first(tree, 'btn-add-step').props.disabled).toBe(true);
-      expect(textOf(tree, 'text-step-limit')).toBe(
-        `A drill can have at most ${MAX_DRILL_STEPS} steps.`,
-      );
+        expect(isDisabled(tree, 'btn-add-step')).toBe(true);
+        expect(first(tree, 'btn-add-step').props.disabled).toBe(true);
+        expect(textOf(tree, 'text-step-limit')).toBe(
+          `A drill can have at most ${MAX_DRILL_STEPS} steps.`,
+        );
 
-      await press(tree, 'btn-remove-step-0');
+        await press(tree, 'btn-remove-step-0');
 
-      expect(isDisabled(tree, 'btn-add-step')).toBe(false);
-      expect(has(tree, 'text-step-limit')).toBe(false);
-    });
+        expect(isDisabled(tree, 'btn-add-step')).toBe(false);
+        expect(has(tree, 'text-step-limit')).toBe(false);
+      },
+      FULL_DRILL_TIMEOUT_MS,
+    );
   });
 
   describe('changing a step type', () => {

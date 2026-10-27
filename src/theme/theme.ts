@@ -1,42 +1,47 @@
-import { Platform, type TextStyle, type ViewStyle } from 'react-native';
+import type { TextStyle, ViewStyle } from 'react-native';
 
 import type { AppearancePreference } from '@/types/profile';
 
 /**
- * Raw palette. Never reference these directly from components — always go
- * through the semantic `colors` on the active theme so dark mode, rebranding
- * and accessibility overrides stay a single-file change.
+ * Range Card palette (the RC boards of the redesign canvas).
+ *
+ * Roles: Paper is the screen ground, Card the inside of every ruled box,
+ * Ink the text and the 2px outlines (dark mode draws outlines in a softer
+ * grey), Pencil labels and captions, Rule the 1px row dividers only.
+ * Signal orange means "act or look" and is used only for `primary` and
+ * `warning` (an over-par split, a sound still to calibrate).
+ *
+ * The boards have no green and no red, so `danger` and `success` are Ink:
+ * a destructive action takes the Ink-filled Stop style with Paper text, and
+ * success needs no colour. Over-par moves from `danger` to `warning` in the
+ * screen redesigns.
+ *
+ * Signal on light Paper is 4.15:1: fine for large text and marks, not for
+ * body text. Orange body text belongs on Card (4.58:1).
+ *
+ * Never reference these directly from components — always go through the
+ * semantic `colors` on the active theme.
  */
 const palette = {
-  white: '#ffffff',
+  white: '#FFFFFF',
   black: '#000000',
 
-  grey50: '#f5f5f7',
-  grey100: '#e1e1e6',
-  grey200: '#c9c9d1',
-  grey400: '#8a8a95',
-  grey500: '#666672',
-  grey700: '#3a3a44',
-  grey900: '#1c1c21',
-  grey950: '#0b0b0f',
+  paper: '#ECE6D4',
+  card: '#F5F1E4',
+  ink: '#1B1B17',
+  pencil: '#5A574C',
+  rule: '#BDB5A0',
+  signal: '#C2410C',
+  disabled: '#8C8778',
 
-  grey850: '#26262e',
-
-  brass300: '#d9a866',
-  brass400: '#c08a3e',
-  brass500: '#a87226',
-  brass700: '#8b6128',
-  // Low-alpha brass washes for chip/badge fills that must sit on either
-  // background without a second opaque tone per theme.
-  brassWash: 'rgba(192, 138, 62, 0.14)',
-  brassWashDark: 'rgba(217, 168, 102, 0.16)',
-
-  green400: '#4a9d6b',
-  green300: '#6fc48d',
-  red400: '#c0503e',
-  red300: '#e0705e',
-  amber400: '#c9922e',
-  amber300: '#e0ad4d',
+  paperDark: '#1F1E1B',
+  cardDark: '#292824',
+  inkDark: '#E6E0CE',
+  outlineDark: '#858070',
+  pencilDark: '#A8A291',
+  ruleDark: '#3B3A34',
+  signalDark: '#E8692F',
+  disabledDark: '#6B675B',
 
   scrim: 'rgba(0, 0, 0, 0.45)',
 } as const;
@@ -49,25 +54,35 @@ export const spacing = {
   xs: 4,
   sm: 8,
   md: 16,
+  /** Side gutter and the gap between blocks. */
+  gutter: 20,
   lg: 24,
   xl: 32,
   xxl: 48,
 } as const;
 
+// Range Card is square-cornered. The keys stay so existing call sites
+// compile until the component redesigns drop them.
 export const radius = {
   none: 0,
-  sm: 4,
-  // Step-number badges: a little rounder than `sm`, still not a pill.
-  badge: 6,
-  md: 8,
-  lg: 16,
-  pill: 999,
+  sm: 0,
+  badge: 0,
+  md: 0,
+  lg: 0,
+  pill: 0,
 } as const;
 
-// Fixed dimensions in dp: the smallest comfortable touch target on
-// Android, the drill editor's row controls, and the icon sizes inside them.
+// Fixed dimensions in dp. The header and main-action heights are minimums,
+// never fixed heights, so large system fonts grow them instead of clipping.
 export const sizes = {
   touchTarget: 48,
+  headerMin: 124,
+  tabBar: 64,
+  mainActionMin: 72,
+  /** Box outline width. */
+  border: 2,
+  /** Divider between rows. */
+  rule: 1,
   badge: 26,
   removeButton: 32,
   moveButton: 40,
@@ -80,78 +95,112 @@ export type Spacing = typeof spacing;
 export type Sizes = typeof sizes;
 export type Radius = typeof radius;
 
-// Typography — variants bundle size + weight + lineHeight so callers pick a
-// role ("title") instead of hand-mixing size/weight everywhere.
-type FontWeight = TextStyle['fontWeight'];
-
-export const fontWeights = {
-  light: '300',
-  regular: '400',
-  medium: '500',
-  semibold: '600',
-  bold: '700',
-} as const satisfies Record<string, FontWeight>;
-
-export type FontWeights = typeof fontWeights;
-export type FontWeightKey = keyof FontWeights;
-
 /**
- * Timers and dB readings change digit-by-digit, so they must be tabular —
+ * One `fontFamily` per weight, each the basename of a TTF in
+ * `android/app/src/main/assets/fonts`. Android resolves a custom family by
+ * file name; adding a `fontWeight` makes it look for another file or
+ * synthesise the weight, so variants never set one.
+ *
+ * Timers and dB readings change digit-by-digit, so they use Plex Mono —
  * a proportional font makes the numbers jitter horizontally as they tick.
  */
 export const fontFamilies = {
-  mono: Platform.select({ ios: 'Menlo', default: 'monospace' }),
+  stencil: 'BigShouldersStencilDisplay-ExtraBold',
+  sansMedium: 'IBMPlexSansCondensed-Medium',
+  sansSemibold: 'IBMPlexSansCondensed-SemiBold',
+  sansBold: 'IBMPlexSansCondensed-Bold',
+  mono: 'IBMPlexMono-Regular',
+  monoMedium: 'IBMPlexMono-Medium',
+  monoSemibold: 'IBMPlexMono-SemiBold',
 } as const;
 
 export type FontFamilies = typeof fontFamilies;
+export type FontFamily = FontFamilies[keyof FontFamilies];
 
 type TypographyStyle = Pick<
   TextStyle,
-  'fontSize' | 'lineHeight' | 'fontWeight' | 'letterSpacing' | 'fontFamily'
->;
+  'fontSize' | 'lineHeight' | 'letterSpacing'
+> & { fontFamily: FontFamily };
 
+// Typography — variants bundle family + size + lineHeight so callers pick a
+// role ("title") instead of hand-mixing fonts and sizes everywhere.
 export const typography = {
-  display: { fontSize: 64, lineHeight: 72, fontWeight: fontWeights.light },
-  title: { fontSize: 28, lineHeight: 34, fontWeight: fontWeights.bold },
-  subtitle: { fontSize: 20, lineHeight: 26, fontWeight: fontWeights.semibold },
-  body: { fontSize: 16, lineHeight: 22, fontWeight: fontWeights.regular },
+  display: {
+    fontSize: 64,
+    lineHeight: 72,
+    fontFamily: fontFamilies.stencil,
+    letterSpacing: 2,
+  },
+  /** Screen title in the header. */
+  stencilTitle: {
+    fontSize: 36,
+    lineHeight: 40,
+    fontFamily: fontFamilies.stencil,
+    letterSpacing: 1.5,
+  },
+  /** Drill names and sheet titles. */
+  stencilName: {
+    fontSize: 28,
+    lineHeight: 32,
+    fontFamily: fontFamilies.stencil,
+    letterSpacing: 1,
+  },
+  title: { fontSize: 28, lineHeight: 34, fontFamily: fontFamilies.sansBold },
+  subtitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontFamily: fontFamilies.sansBold,
+  },
+  body: { fontSize: 16, lineHeight: 22, fontFamily: fontFamilies.sansMedium },
   bodyStrong: {
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: fontWeights.semibold,
+    fontFamily: fontFamilies.sansBold,
   },
-  caption: { fontSize: 12, lineHeight: 16, fontWeight: fontWeights.regular },
+  caption: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: fontFamilies.sansMedium,
+  },
 
   /** Small all-caps section heading. Pair with `textSecondary`. */
   overline: {
     fontSize: 11,
     lineHeight: 14,
-    fontWeight: fontWeights.semibold,
+    fontFamily: fontFamilies.sansSemibold,
     letterSpacing: 1.2,
   },
+  /** Range Card section label: 11 bold, 2px tracking, `textSecondary`. */
+  sectionLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontFamily: fontFamilies.sansBold,
+    letterSpacing: 2,
+  },
   /** Field labels and dense table headers. */
-  label: { fontSize: 13, lineHeight: 18, fontWeight: fontWeights.medium },
+  label: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontFamily: fontFamilies.sansMedium,
+  },
 
   /** Running shot timer. Mono so digits never shift as they tick. */
   timer: {
     fontSize: 68,
     lineHeight: 78,
-    fontWeight: fontWeights.light,
-    fontFamily: fontFamilies.mono,
+    fontFamily: fontFamilies.monoMedium,
     letterSpacing: -1,
   },
   /** Split times, dB values, card stats. */
   metric: {
     fontSize: 26,
     lineHeight: 32,
-    fontWeight: fontWeights.semibold,
-    fontFamily: fontFamilies.mono,
+    fontFamily: fontFamilies.monoSemibold,
   },
   metricSmall: {
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: fontWeights.medium,
-    fontFamily: fontFamilies.mono,
+    fontFamily: fontFamilies.monoMedium,
   },
 } as const satisfies Record<string, TypographyStyle>;
 
@@ -162,14 +211,18 @@ export type TypographyVariant = keyof Typography;
 // the palette. Both themes MUST have the same shape (SemanticColors) so
 // adding a token forces you to define it for both modes.
 export type SemanticColors = {
+  /** Paper: the screen ground. */
   background: string;
-  /** Cards and rows sitting directly on `background`. */
+  /** Card: inside every ruled box. */
   surface: string;
   /** A second stacked level — rows *inside* a card. */
   surfaceElevated: string;
+  /** Rule: 1px row dividers only. */
   border: string;
-  /** Higher-contrast divider for a card's outer edge. */
+  /** A card's outer edge; the same as `outline`. */
   borderStrong: string;
+  /** 2px box outlines and the active tab. */
+  outline: string;
   textPrimary: string;
   textSecondary: string;
   /** De-emphasised meta: timestamps, row indices, units. */
@@ -180,8 +233,10 @@ export type SemanticColors = {
   textOnDanger: string;
   primary: string;
   primaryMuted: string;
-  /** Tinted fill for chips/badges that carry `primary` text. */
+  /** Fill for chips/badges that carry `primary` text. */
   primarySoft: string;
+  /** Disabled text and controls; exempt from the contrast minimum. */
+  disabled: string;
   success: string;
   danger: string;
   warning: string;
@@ -190,44 +245,48 @@ export type SemanticColors = {
 };
 
 const lightColors: SemanticColors = {
-  background: palette.white,
-  surface: palette.grey50,
-  surfaceElevated: palette.white,
-  border: palette.grey100,
-  borderStrong: palette.grey200,
-  textPrimary: palette.grey900,
-  textSecondary: palette.grey500,
-  textTertiary: palette.grey400,
+  background: palette.paper,
+  surface: palette.card,
+  surfaceElevated: palette.card,
+  border: palette.rule,
+  borderStrong: palette.ink,
+  outline: palette.ink,
+  textPrimary: palette.ink,
+  textSecondary: palette.pencil,
+  textTertiary: palette.pencil,
   textOnPrimary: palette.white,
-  textOnWarning: palette.grey900,
-  textOnDanger: palette.white,
-  primary: palette.brass400,
-  primaryMuted: palette.brass700,
-  primarySoft: palette.brassWash,
-  success: palette.green400,
-  danger: palette.red400,
-  warning: palette.amber400,
+  textOnWarning: palette.white,
+  textOnDanger: palette.paper,
+  primary: palette.signal,
+  primaryMuted: palette.signal,
+  primarySoft: palette.card,
+  disabled: palette.disabled,
+  success: palette.ink,
+  danger: palette.ink,
+  warning: palette.signal,
   overlay: palette.scrim,
 };
 
 const darkColors: SemanticColors = {
-  background: palette.grey950,
-  surface: palette.grey900,
-  surfaceElevated: palette.grey850,
-  border: palette.grey700,
-  borderStrong: palette.grey700,
-  textPrimary: palette.grey50,
-  textSecondary: palette.grey400,
-  textTertiary: palette.grey500,
-  textOnPrimary: palette.grey950,
-  textOnWarning: palette.grey950,
-  textOnDanger: palette.grey950,
-  primary: palette.brass300,
-  primaryMuted: palette.brass500,
-  primarySoft: palette.brassWashDark,
-  success: palette.green300,
-  danger: palette.red300,
-  warning: palette.amber300,
+  background: palette.paperDark,
+  surface: palette.cardDark,
+  surfaceElevated: palette.cardDark,
+  border: palette.ruleDark,
+  borderStrong: palette.outlineDark,
+  outline: palette.outlineDark,
+  textPrimary: palette.inkDark,
+  textSecondary: palette.pencilDark,
+  textTertiary: palette.pencilDark,
+  textOnPrimary: palette.paperDark,
+  textOnWarning: palette.paperDark,
+  textOnDanger: palette.paperDark,
+  primary: palette.signalDark,
+  primaryMuted: palette.signalDark,
+  primarySoft: palette.cardDark,
+  disabled: palette.disabledDark,
+  success: palette.inkDark,
+  danger: palette.inkDark,
+  warning: palette.signalDark,
   overlay: palette.scrim,
 };
 
@@ -278,7 +337,6 @@ export type Theme = {
   radius: Radius;
   sizes: Sizes;
   typography: Typography;
-  fontWeights: FontWeights;
   fontFamilies: FontFamilies;
   elevation: Elevations;
 };
@@ -290,7 +348,6 @@ export const lightTheme: Theme = {
   radius,
   sizes,
   typography,
-  fontWeights,
   fontFamilies,
   elevation: buildElevation('light'),
 };
@@ -302,7 +359,6 @@ export const darkTheme: Theme = {
   radius,
   sizes,
   typography,
-  fontWeights,
   fontFamilies,
   elevation: buildElevation('dark'),
 };
