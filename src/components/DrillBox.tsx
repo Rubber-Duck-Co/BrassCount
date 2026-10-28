@@ -104,6 +104,7 @@ export const DrillBox = ({
         options={options}
         onChoose={choose}
         title="Drill"
+        figureDescriptions
         testID="select-drill"
       />
     </>

@@ -104,6 +104,16 @@ export const sizes = {
   sheetHandleHeight: 4,
   /** A sheet's Cancel and confirm buttons; a minimum, like the others. */
   sheetActionMin: 56,
+  /** A row of options in a sheet; a minimum. */
+  sheetRowMin: 56,
+  /** The most a sheet's options take before they scroll. */
+  sheetListMax: 380,
+  /** The splits table's header and rows; minimums. */
+  splitHeaderMin: 24,
+  splitRowMin: 28,
+  /** The splits table's PAR and TIME columns, and its Δ column. */
+  splitFigureColumn: 52,
+  splitDeltaColumn: 76,
 } as const;
 
 export type Spacing = typeof spacing;
@@ -250,6 +260,12 @@ export const typography = {
     fontSize: 15,
     lineHeight: 20,
     fontFamily: fontFamilies.monoMedium,
+  },
+  /** A figure in the Timer's splits table. */
+  splitFigure: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: fontFamilies.mono,
   },
   /** Small figures beside a readout, e.g. the clock's `SHOT 5 OF 6`. */
   metricCaption: {

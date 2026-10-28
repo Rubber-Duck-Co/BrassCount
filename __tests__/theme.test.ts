@@ -170,6 +170,8 @@ describe('Range Card tokens', () => {
       sheetHandleWidth: 40,
       sheetHandleHeight: 4,
       sheetActionMin: 56,
+      sheetRowMin: 56,
+      splitRowMin: 28,
     });
   });
 
@@ -192,6 +194,7 @@ describe('Range Card tokens', () => {
       typography.metric,
       typography.metricSmall,
       typography.metricCaption,
+      typography.splitFigure,
     ].forEach(variant => expect(variant.fontFamily).toMatch(/^IBMPlexMono-/));
   });
 

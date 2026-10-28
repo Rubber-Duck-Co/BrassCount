@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 
 import type { Theme } from '@/theme/theme';
-import { useThemedStyles } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
 import { BottomSheet } from './BottomSheet';
 import { Icon } from './Icon';
@@ -48,24 +48,29 @@ const createStyles = (theme: Theme) =>
     // Points the chevron down without a second glyph.
     triggerChevron: { transform: [{ rotate: '90deg' }] },
 
-    sheetTitle: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingBottom: theme.spacing.sm,
+    // An untitled sheet pads its own options; a titled one's frame does.
+    untitled: { paddingHorizontal: theme.spacing.gutter },
+    // The options in a ruled box on the sheet's Paper.
+    optionBox: {
+      maxHeight: theme.sizes.sheetListMax,
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
     },
     option: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
-      paddingVertical: theme.spacing.md - theme.spacing.xs,
-      paddingHorizontal: theme.spacing.lg,
-      minHeight: 56,
+      gap: theme.spacing.sm,
+      minHeight: theme.sizes.sheetRowMin,
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.inset,
     },
     optionDivider: {
-      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopWidth: theme.sizes.rule,
       borderTopColor: theme.colors.border,
     },
-    optionBody: { flex: 1, gap: 2 },
-    optionList: { maxHeight: 380 },
+    optionBody: { flex: 1, gap: theme.spacing.xxs },
   });
 
 type SelectSheetProps<T extends string> = {
@@ -74,15 +79,24 @@ type SelectSheetProps<T extends string> = {
   value: T;
   options: SelectOption<T>[];
   onChoose: (next: T) => void;
-  /** Heading over the options. */
+  /**
+   * Written as a sentence ("Drill"): the sheet's title row shows it in
+   * stencil capitals beside a close button.
+   */
   title?: string;
-  /** Each option is `<testID>-option-<value>`, the backdrop `<testID>-backdrop`. */
+  /** The descriptions are figures (shots and par), set in Plex Mono. */
+  figureDescriptions?: boolean;
+  /**
+   * Each option is `<testID>-option-<value>`, the box `<testID>-options`,
+   * the backdrop `<testID>-backdrop` and the close button `<testID>-close`.
+   */
   testID?: string;
 };
 
 /**
- * The options of a `Select` in a bottom sheet, the chosen one ticked. For a
- * screen that draws its own trigger, such as the Timer's drill box.
+ * The options of a `Select` in a bottom sheet: a ruled box of rows on the
+ * Range Card sheet frame, the chosen one ticked in Signal. For a screen
+ * that draws its own trigger, such as the Timer's drill box.
  */
 export function SelectSheet<T extends string>({
   visible,
@@ -91,59 +105,59 @@ export function SelectSheet<T extends string>({
   options,
   onChoose,
   title,
+  figureDescriptions = false,
   testID,
 }: Readonly<SelectSheetProps<T>>) {
   const styles = useThemedStyles(createStyles);
+  const { sizes } = useTheme();
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
       closeLabel="Close"
+      title={title || undefined}
       backdropTestID={testID ? `${testID}-backdrop` : undefined}
+      closeTestID={testID ? `${testID}-close` : undefined}
     >
-      {title ? (
-        <View style={styles.sheetTitle}>
-          <Typography variant="overline" color="textSecondary">
-            {title.toUpperCase()}
-          </Typography>
-        </View>
-      ) : null}
+      <View style={title ? undefined : styles.untitled}>
+        <ScrollView
+          style={styles.optionBox}
+          bounces={false}
+          testID={testID ? `${testID}-options` : undefined}
+        >
+          {options.map((option, i) => {
+            const isSelected = option.value === value;
 
-      <ScrollView style={styles.optionList} bounces={false}>
-        {options.map((option, i) => {
-          const isSelected = option.value === value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => onChoose(option.value)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                style={[styles.option, i > 0 && styles.optionDivider]}
+                testID={testID ? `${testID}-option-${option.value}` : undefined}
+              >
+                <View style={styles.optionBody}>
+                  <Typography variant="bodyStrong">{option.label}</Typography>
+                  {option.description ? (
+                    <Typography
+                      variant={figureDescriptions ? 'metricCaption' : 'caption'}
+                      color="textSecondary"
+                    >
+                      {option.description}
+                    </Typography>
+                  ) : null}
+                </View>
 
-          return (
-            <Pressable
-              key={option.value}
-              onPress={() => onChoose(option.value)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              style={[styles.option, i > 0 && styles.optionDivider]}
-              testID={testID ? `${testID}-option-${option.value}` : undefined}
-            >
-              <View style={styles.optionBody}>
-                <Typography
-                  variant="bodyStrong"
-                  color={isSelected ? 'primary' : 'textPrimary'}
-                >
-                  {option.label}
-                </Typography>
-                {option.description ? (
-                  <Typography variant="caption" color="textTertiary">
-                    {option.description}
-                  </Typography>
+                {isSelected ? (
+                  <Icon name="check" size={sizes.iconLg} color="primary" />
                 ) : null}
-              </View>
-
-              {isSelected ? (
-                <Icon name="check" size={18} color="primary" />
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
     </BottomSheet>
   );
 }
