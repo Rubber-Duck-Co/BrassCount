@@ -187,9 +187,12 @@ describe('Range Card tokens', () => {
   });
 
   it('sets the readouts in Plex Mono', () => {
-    [typography.timer, typography.metric, typography.metricSmall].forEach(
-      variant => expect(variant.fontFamily).toMatch(/^IBMPlexMono-/),
-    );
+    [
+      typography.timer,
+      typography.metric,
+      typography.metricSmall,
+      typography.metricCaption,
+    ].forEach(variant => expect(variant.fontFamily).toMatch(/^IBMPlexMono-/));
   });
 
   it('has a bundled .ttf for every font family name', () => {

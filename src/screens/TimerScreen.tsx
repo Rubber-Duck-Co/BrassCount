@@ -10,8 +10,8 @@ import {
 import {
   AccessibilityInfo,
   Linking,
+  ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -30,8 +30,8 @@ import type { RunResult, RunStep, StepResult } from '@/types/run';
 import type { SessionInput } from '@/types/session';
 import { Button } from '@components/Button';
 import { Card } from '@components/Card';
+import { ClockBox } from '@components/ClockBox';
 import { DrillPicker } from '@components/DrillPicker';
-import { Icon } from '@components/Icon';
 import { ListRow } from '@components/ListRow';
 import { SaveRunPrompt } from '@components/SaveRunPrompt';
 import { Screen } from '@components/Screen';
@@ -48,19 +48,14 @@ import {
   type RunSaveFailure,
   type RunSaveStatus,
 } from '@hooks/useRunSave';
-import { useTheme, useThemedStyles } from '@hooks/useTheme';
+import { useThemedStyles } from '@hooks/useTheme';
+import { useTimerSettings } from '@hooks/useTimerSettings';
 import { countShots, stepLabel, stepTypeLabel, totalPar } from '@utils/drill';
-import {
-  formatElapsed,
-  formatSeconds,
-  pluralize,
-  spokenSeconds,
-} from '@utils/format';
+import { formatSeconds, pluralize, spokenSeconds } from '@utils/format';
 import { shownDeltaSign } from '@utils/history';
 import { planRun } from '@utils/runDetection';
+import { clockCaption, clockMeta, type ClockPhase } from '@utils/timerReadout';
 
-/** How often the running clock is redrawn. */
-const CLOCK_TICK_MS = 50;
 const NO_VALUE = '—';
 
 /** The Timer tab, which also jumps into the Drills and Setup tabs. */
@@ -244,47 +239,23 @@ const describeHeardStep = (
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    readout: {
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.lg,
+    // Not padded itself: the scrolling content and the main action under
+    // it each take the gutter, so the content scrolls edge to edge.
+    content: { padding: theme.spacing.none, gap: theme.spacing.none },
+    scroll: { flex: 1 },
+    // No bottom padding: the main action's own gap separates the two.
+    scrollContent: {
+      flexGrow: 1,
+      paddingTop: theme.spacing.gutter,
+      paddingHorizontal: theme.spacing.gutter,
+      gap: theme.spacing.gutter,
     },
-    metaRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignSelf: 'stretch',
-      paddingHorizontal: theme.spacing.xs,
-    },
-    clock: {
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-    },
-    startButton: {
-      width: 132,
-      height: 132,
-      borderRadius: 66,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: theme.spacing.xs,
-      marginTop: theme.spacing.md,
-    },
+    // Pinned under the scrolling content, so it never moves between states.
+    mainAction: { padding: theme.spacing.gutter },
     stopGlyph: {
-      width: 26,
-      height: 26,
-      borderRadius: theme.radius.sm,
-      backgroundColor: theme.colors.textOnPrimary,
-    },
-    cancelGlyph: {
-      // On an inner view: a touchable that is rotated stops taking presses.
-      transform: [{ rotate: '45deg' }],
-    },
-    resetButton: {
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
-      marginTop: theme.spacing.xs,
-    },
-    locked: {
-      opacity: 0.5,
+      width: theme.sizes.iconLg,
+      height: theme.sizes.iconLg,
+      backgroundColor: theme.colors.textOnInverse,
     },
     timingNote: {
       paddingHorizontal: theme.spacing.xs,
@@ -383,70 +354,6 @@ const RunOutcome = ({
   );
 };
 
-type RunClockProps = {
-  running: boolean;
-  /** The run's time once it has ended. `null` while there is none. */
-  finalSeconds: number | null;
-  /** The drill's total par. `null` when a step is untimed. */
-  parSeconds: number | null;
-  readElapsed: () => number;
-};
-
-/**
- * The big readout. It owns the tick, so the clock redraws many times a
- * second without the rest of the screen redrawing with it: the JS thread
- * is left free for the microphone readings during a run.
- */
-const RunClock = ({
-  running,
-  finalSeconds,
-  parSeconds,
-  readElapsed,
-}: RunClockProps) => {
-  const styles = useThemedStyles(createStyles);
-  const [ticked, setTicked] = useState(0);
-
-  useEffect(() => {
-    if (!running) {
-      return;
-    }
-    const id = setInterval(() => setTicked(readElapsed()), CLOCK_TICK_MS);
-    return () => {
-      clearInterval(id);
-      // The next run starts from zero, not from where this one got to.
-      setTicked(0);
-    };
-  }, [running, readElapsed]);
-
-  const elapsed = finalSeconds ?? (running ? ticked : 0);
-  // Judged as the time reads to the hundredth, like the rows under it: a
-  // run shown as 2.50 against a par of 2.50 is not over it.
-  const overPar =
-    parSeconds !== null && shownDeltaSign(elapsed - parSeconds) > 0;
-
-  return (
-    <View style={styles.clock}>
-      <Typography
-        variant="timer"
-        color={overPar ? 'danger' : running ? 'primary' : 'textPrimary'}
-        align="center"
-        testID="text-elapsed"
-      >
-        {formatElapsed(elapsed)}
-      </Typography>
-
-      <Typography
-        variant="overline"
-        color="textTertiary"
-        align="center"
-        testID="text-elapsed-caption"
-      >
-        {overPar ? 'OVER PAR' : 'SECONDS'}
-      </Typography>
-    </View>
-  );
-};
-
 /**
  * The shot timer. Times a run of a stored drill from the microphone, then
  * asks whether the run goes into History: nothing is saved until the
@@ -454,8 +361,8 @@ const RunClock = ({
  */
 export const TimerScreen = () => {
   const styles = useThemedStyles(createStyles);
-  const theme = useTheme();
   const navigation = useNavigation<Nav>();
+  const { startDelay } = useTimerSettings();
 
   const { state: drillsState, reload: reloadDrills } = useDrills();
   const drills =
@@ -585,7 +492,7 @@ export const TimerScreen = () => {
   // The prompt's buttons go once it is answered, and a screen reader's
   // focus with them: it is put on the Start button, where the next run
   // begins, rather than back at the top of the screen.
-  const startButtonRef = useRef<ComponentRef<typeof TouchableOpacity>>(null);
+  const startButtonRef = useRef<ComponentRef<typeof View>>(null);
   const focusStartButton = useCallback(() => {
     const button = startButtonRef.current;
     if (button !== null) {
@@ -613,177 +520,154 @@ export const TimerScreen = () => {
     focusStartButton();
   }, [focusStartButton, reset]);
 
-  const shotCount = countShots(steps);
-  const drillPar = totalPar(plan);
-  const onButtonColor = pending ? 'textOnWarning' : 'textOnPrimary';
   const noDrill = drillsState.status === 'ready' && drill === null;
-  // Reset sits under the Stop button: while a run is on it would throw
-  // the run away at a stray touch, and Stop already ends it. Nor while a
-  // run is being saved, which it would replace.
+  // Reset is the header's action: while a run is on it would throw the run
+  // away at a stray touch, and Stop already ends it. Nor while a run is
+  // being saved, which it would replace.
   const resetLocked = running || pending || saving;
+
+  const drillPar = totalPar(plan);
+  const finished = phase === 'finished' && result !== null;
+  const clockPhase: ClockPhase = pending
+    ? 'pending'
+    : running
+      ? 'running'
+      : finished
+        ? 'finished'
+        : 'ready';
+  const readout = {
+    phase: clockPhase,
+    shotCount: countShots(steps),
+    plannedCount: plan.length,
+    heardCount: results.length,
+    drillPar,
+    completed: result?.completed === true,
+    totalTime: result?.totalTime ?? null,
+    startDelay,
+  };
 
   return (
     <Screen
-      title="Shot Timer"
+      title="Timer"
       subtitle={
         failureText ??
         (noDrill ? 'Create a drill to start' : phaseMessage(phase, result))
       }
-      scrollable
+      action={{ label: 'Reset', onPress: reset, testID: 'btn-reset' }}
+      actionDisabled={resetLocked}
+      contentStyle={styles.content}
       testID="screen-timer"
     >
-      <FailureAction failure={failure} onCalibrate={goToCalibration} />
-
-      <View>
-        <SectionHeader title="Drill" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        testID="scroll-timer-content"
+      >
         <DrillPicker
           state={drillsState}
           drill={drill}
-          locked={running || pending || saving}
+          locked={resetLocked}
           onSelect={selectDrill}
           onCreate={createDrill}
           onRetry={reloadDrills}
         />
-      </View>
 
-      {drill === null ? null : (
-        <>
-          <Card style={styles.readout} testID="card-readout">
-            <View style={styles.metaRow}>
-              <Typography variant="overline" color="textSecondary">
-                {pluralize(shotCount, 'shot').toUpperCase()}
-              </Typography>
-              {drillPar !== null ? (
-                <Typography variant="overline" color="textSecondary">
-                  {`PAR ${drillPar.toFixed(2)}S`}
-                </Typography>
-              ) : null}
-            </View>
+        <FailureAction failure={failure} onCalibrate={goToCalibration} />
 
-            <RunClock
+        {drill === null ? null : (
+          <>
+            <ClockBox
               running={running}
               finalSeconds={result === null ? null : result.totalTime}
               parSeconds={drillPar}
               readElapsed={readElapsed}
+              meta={clockMeta(readout)}
+              caption={clockCaption(readout)}
+              dimmed={pending}
             />
 
-            <TouchableOpacity
-              ref={startButtonRef}
-              onPress={onPressStart}
-              // Not while a run is being saved: it would replace the run.
-              disabled={saving}
-              accessibilityRole="button"
-              accessibilityLabel={
-                pending
-                  ? 'Cancel start'
-                  : running
-                    ? 'Stop timer'
-                    : 'Start timer'
-              }
-              accessibilityState={{ disabled: saving }}
-              activeOpacity={0.85}
-              style={[
-                styles.startButton,
-                theme.elevation.raised,
-                {
-                  backgroundColor: pending
-                    ? theme.colors.warning
-                    : running
-                      ? theme.colors.danger
-                      : theme.colors.primary,
-                },
-              ]}
-              testID="btn-start"
-            >
-              {pending ? (
-                <View style={styles.cancelGlyph}>
-                  <Icon name="plus" size={34} color={onButtonColor} />
-                </View>
-              ) : running ? (
-                <View style={styles.stopGlyph} />
-              ) : (
-                <Icon name="play" size={34} color="textOnPrimary" />
-              )}
-              <Typography variant="overline" color={onButtonColor}>
-                {pending ? 'CANCEL' : running ? 'STOP' : 'START'}
-              </Typography>
-            </TouchableOpacity>
+            <RunOutcome
+              show={finished}
+              session={session}
+              plannedCount={plan.length}
+              saveStatus={saveStatus}
+              saveFailure={saveFailure}
+              onSave={saveRun}
+              onDiscard={discardRun}
+            />
 
-            <TouchableOpacity
-              onPress={reset}
-              disabled={resetLocked}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: resetLocked }}
-              style={[styles.resetButton, resetLocked && styles.locked]}
-              testID="btn-reset"
-            >
-              <Typography variant="label" color="textSecondary">
-                Reset
-              </Typography>
-            </TouchableOpacity>
-          </Card>
+            <View>
+              <SectionHeader title="Splits" />
+              <Card flush>
+                {steps.map((step, i) => {
+                  const title = stepLabel(steps, i);
+                  const planned = plan.find(item => item.stepId === step.id);
+                  const row =
+                    planned === undefined
+                      ? describeSilentStep(
+                          title,
+                          step,
+                          steps
+                            .slice(i + 1)
+                            .some(later =>
+                              plan.some(item => item.stepId === later.id),
+                            ),
+                        )
+                      : describeHeardStep(
+                          title,
+                          planned,
+                          results.find(item => item.stepId === step.id),
+                        );
+                  return (
+                    <ListRow
+                      key={step.id}
+                      index={i + 1}
+                      title={title}
+                      subtitle={row.subtitle}
+                      value={row.value}
+                      valueColor={toneColor[row.tone]}
+                      accessibilityLabel={row.spoken}
+                      divided={i < steps.length - 1}
+                      testID={`row-split-${i}`}
+                    />
+                  );
+                })}
+              </Card>
+            </View>
 
-          <RunOutcome
-            show={phase === 'finished' && result !== null}
-            session={session}
-            plannedCount={plan.length}
-            saveStatus={saveStatus}
-            saveFailure={saveFailure}
-            onSave={saveRun}
-            onDiscard={discardRun}
+            {/* A run in which nothing was heard has no timing to describe. */}
+            {result !== null && result.results.length > 0 ? (
+              <Typography
+                variant="caption"
+                color="textTertiary"
+                style={styles.timingNote}
+                testID="text-run-timing"
+              >
+                {timingNote(result)}
+              </Typography>
+            ) : null}
+          </>
+        )}
+      </ScrollView>
+
+      {drill === null ? null : (
+        <View style={styles.mainAction}>
+          <Button
+            ref={startButtonRef}
+            label={pending ? 'Cancel' : running ? 'Stop' : 'Start'}
+            accessibilityLabel={
+              pending ? 'Cancel start' : running ? 'Stop timer' : 'Start timer'
+            }
+            variant={pending ? 'secondary' : running ? 'stop' : 'primary'}
+            size="main"
+            leading={running ? <View style={styles.stopGlyph} /> : undefined}
+            onPress={onPressStart}
+            // Not while a run is being saved: it would replace the run.
+            disabled={saving}
+            testID="btn-start"
           />
-
-          <View>
-            <SectionHeader title="Splits" />
-            <Card flush>
-              {steps.map((step, i) => {
-                const title = stepLabel(steps, i);
-                const planned = plan.find(item => item.stepId === step.id);
-                const row =
-                  planned === undefined
-                    ? describeSilentStep(
-                        title,
-                        step,
-                        steps
-                          .slice(i + 1)
-                          .some(later =>
-                            plan.some(item => item.stepId === later.id),
-                          ),
-                      )
-                    : describeHeardStep(
-                        title,
-                        planned,
-                        results.find(item => item.stepId === step.id),
-                      );
-                return (
-                  <ListRow
-                    key={step.id}
-                    index={i + 1}
-                    title={title}
-                    subtitle={row.subtitle}
-                    value={row.value}
-                    valueColor={toneColor[row.tone]}
-                    accessibilityLabel={row.spoken}
-                    divided={i < steps.length - 1}
-                    testID={`row-split-${i}`}
-                  />
-                );
-              })}
-            </Card>
-          </View>
-
-          {/* A run in which nothing was heard has no timing to describe. */}
-          {result !== null && result.results.length > 0 ? (
-            <Typography
-              variant="caption"
-              color="textTertiary"
-              style={styles.timingNote}
-              testID="text-run-timing"
-            >
-              {timingNote(result)}
-            </Typography>
-          ) : null}
-        </>
+        </View>
       )}
     </Screen>
   );

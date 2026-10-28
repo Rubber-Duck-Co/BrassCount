@@ -68,6 +68,86 @@ const createStyles = (theme: Theme) =>
     optionList: { maxHeight: 380 },
   });
 
+type SelectSheetProps<T extends string> = {
+  visible: boolean;
+  onClose: () => void;
+  value: T;
+  options: SelectOption<T>[];
+  onChoose: (next: T) => void;
+  /** Heading over the options. */
+  title?: string;
+  /** Each option is `<testID>-option-<value>`, the backdrop `<testID>-backdrop`. */
+  testID?: string;
+};
+
+/**
+ * The options of a `Select` in a bottom sheet, the chosen one ticked. For a
+ * screen that draws its own trigger, such as the Timer's drill box.
+ */
+export function SelectSheet<T extends string>({
+  visible,
+  onClose,
+  value,
+  options,
+  onChoose,
+  title,
+  testID,
+}: Readonly<SelectSheetProps<T>>) {
+  const styles = useThemedStyles(createStyles);
+
+  return (
+    <BottomSheet
+      visible={visible}
+      onClose={onClose}
+      closeLabel="Close"
+      backdropTestID={testID ? `${testID}-backdrop` : undefined}
+    >
+      {title ? (
+        <View style={styles.sheetTitle}>
+          <Typography variant="overline" color="textSecondary">
+            {title.toUpperCase()}
+          </Typography>
+        </View>
+      ) : null}
+
+      <ScrollView style={styles.optionList} bounces={false}>
+        {options.map((option, i) => {
+          const isSelected = option.value === value;
+
+          return (
+            <Pressable
+              key={option.value}
+              onPress={() => onChoose(option.value)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              style={[styles.option, i > 0 && styles.optionDivider]}
+              testID={testID ? `${testID}-option-${option.value}` : undefined}
+            >
+              <View style={styles.optionBody}>
+                <Typography
+                  variant="bodyStrong"
+                  color={isSelected ? 'primary' : 'textPrimary'}
+                >
+                  {option.label}
+                </Typography>
+                {option.description ? (
+                  <Typography variant="caption" color="textTertiary">
+                    {option.description}
+                  </Typography>
+                ) : null}
+              </View>
+
+              {isSelected ? (
+                <Icon name="check" size={18} color="primary" />
+              ) : null}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </BottomSheet>
+  );
+}
+
 /**
  * Dropdown built on React Native's core `Modal`.
  *
@@ -126,55 +206,15 @@ export function Select<T extends string>({
         </View>
       </Pressable>
 
-      <BottomSheet
+      <SelectSheet
         visible={open}
         onClose={() => setOpen(false)}
-        closeLabel="Close"
-        backdropTestID={testID ? `${testID}-backdrop` : undefined}
-      >
-        {sheetTitle ? (
-          <View style={styles.sheetTitle}>
-            <Typography variant="overline" color="textSecondary">
-              {sheetTitle.toUpperCase()}
-            </Typography>
-          </View>
-        ) : null}
-
-        <ScrollView style={styles.optionList} bounces={false}>
-          {options.map((option, i) => {
-            const isSelected = option.value === value;
-
-            return (
-              <Pressable
-                key={option.value}
-                onPress={() => choose(option.value)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-                style={[styles.option, i > 0 && styles.optionDivider]}
-                testID={`${testID}-option-${option.value}`}
-              >
-                <View style={styles.optionBody}>
-                  <Typography
-                    variant="bodyStrong"
-                    color={isSelected ? 'primary' : 'textPrimary'}
-                  >
-                    {option.label}
-                  </Typography>
-                  {option.description ? (
-                    <Typography variant="caption" color="textTertiary">
-                      {option.description}
-                    </Typography>
-                  ) : null}
-                </View>
-
-                {isSelected ? (
-                  <Icon name="check" size={18} color="primary" />
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      </BottomSheet>
+        value={value}
+        options={options}
+        onChoose={choose}
+        title={sheetTitle}
+        testID={testID}
+      />
     </View>
   );
 }

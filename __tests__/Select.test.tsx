@@ -1,7 +1,7 @@
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
-import { Select } from '../src/components/Select';
+import { Select, SelectSheet } from '../src/components/Select';
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -75,5 +75,50 @@ describe('Select', () => {
     expect(
       tree.root.findAll(node => node.props.testID === 'pick-option-b'),
     ).toHaveLength(0);
+  });
+});
+
+describe('SelectSheet', () => {
+  const renderSheet = (onChoose: (next: string) => void) => {
+    let tree: ReactTestRenderer | undefined;
+    act(() => {
+      tree = create(
+        <SafeAreaProvider initialMetrics={metrics}>
+          <SelectSheet
+            visible
+            onClose={jest.fn()}
+            value="a"
+            options={[...options]}
+            onChoose={onChoose}
+            title="Drill"
+            testID="sheet"
+          />
+        </SafeAreaProvider>,
+      );
+    });
+    if (tree === undefined) {
+      throw new Error('render failed');
+    }
+    return tree;
+  };
+
+  it('marks the chosen option as selected', () => {
+    const tree = renderSheet(jest.fn());
+
+    expect(announced(tree, 'sheet-option-a').props.accessibilityState).toEqual({
+      selected: true,
+    });
+    expect(announced(tree, 'sheet-option-b').props.accessibilityState).toEqual({
+      selected: false,
+    });
+  });
+
+  it('reports the option pressed', () => {
+    const onChoose = jest.fn();
+    const tree = renderSheet(onChoose);
+
+    act(() => first(tree, 'sheet-option-b').props.onPress());
+
+    expect(onChoose).toHaveBeenCalledWith('b');
   });
 });

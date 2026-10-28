@@ -1,4 +1,6 @@
-import { StyleSheet } from 'react-native';
+import { createRef } from 'react';
+
+import { StyleSheet, View } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
@@ -260,6 +262,38 @@ describe('Button', () => {
     expect(host(tree).props.accessibilityState).toEqual({
       disabled: false,
       busy: false,
+    });
+  });
+
+  it('draws a leading mark beside its label', () => {
+    const tree = render(
+      <Button
+        label="Stop"
+        variant="stop"
+        size="main"
+        leading={<View testID="mark" />}
+        onPress={jest.fn()}
+        testID="btn"
+      />,
+    );
+
+    expect(tree.root.findAllByProps({ testID: 'mark' })).not.toHaveLength(0);
+    expect(tree.root.findAllByType(Typography)[0].props.children).toBe('Stop');
+  });
+
+  it('hands its ref to the touchable, so focus can be moved to it', () => {
+    const ref = createRef<View>();
+    const tree = render(
+      <Button label="Start" ref={ref} onPress={jest.fn()} testID="btn" />,
+    );
+
+    const [held] = tree.root.findAll(
+      node => ref.current !== null && node.instance === ref.current,
+    );
+
+    expect(held.props).toMatchObject({
+      testID: 'btn',
+      accessibilityRole: 'button',
     });
   });
 });

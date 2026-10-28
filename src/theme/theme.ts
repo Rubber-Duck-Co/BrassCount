@@ -85,6 +85,8 @@ export const sizes = {
   headerMin: 124,
   tabBar: 64,
   mainActionMin: 72,
+  /** The Timer's clock box. */
+  clockBoxMin: 160,
   /** Box outline width. */
   border: 2,
   /** Divider between rows. */
@@ -231,12 +233,12 @@ export const typography = {
     fontFamily: fontFamilies.sansMedium,
   },
 
-  /** Running shot timer. Mono so digits never shift as they tick. */
+  /** The Timer's clock. Mono so digits never shift as they tick. */
   timer: {
-    fontSize: 68,
-    lineHeight: 78,
+    fontSize: 88,
+    lineHeight: 92,
     fontFamily: fontFamilies.monoMedium,
-    letterSpacing: -1,
+    letterSpacing: -4,
   },
   /** Split times, dB values, card stats. */
   metric: {
@@ -248,6 +250,12 @@ export const typography = {
     fontSize: 15,
     lineHeight: 20,
     fontFamily: fontFamilies.monoMedium,
+  },
+  /** Small figures beside a readout, e.g. the clock's `SHOT 5 OF 6`. */
+  metricCaption: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontFamily: fontFamilies.mono,
   },
 } as const satisfies Record<string, TypographyStyle>;
 
