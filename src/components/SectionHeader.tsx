@@ -19,6 +19,12 @@ type SectionHeaderProps = {
    */
   actionAccessibilityLabel?: string;
   actionTestID?: string;
+  /**
+   * Muted directions opposite the title ("Swipe left to delete"), shown in
+   * capitals. Hidden from a screen reader, and left out when there is an
+   * action.
+   */
+  hint?: string;
   testID?: string;
 };
 
@@ -41,6 +47,10 @@ const createStyles = (theme: Theme) =>
     // Capitals come from the style, not the string, so TalkBack reads the
     // title as words instead of spelling out the letters.
     title: { flexShrink: 1, textTransform: 'uppercase' },
+    // With a hint the title keeps its width and the hint wraps beside it:
+    // at a large font a short title such as a count must not break.
+    titleBesideHint: { flexShrink: 0 },
+    hint: { flexShrink: 1 },
     action: {
       paddingVertical: theme.spacing.xs,
       paddingLeft: theme.spacing.xs,
@@ -62,9 +72,12 @@ export const SectionHeader = ({
   onActionPress,
   actionAccessibilityLabel,
   actionTestID,
+  hint,
   testID,
 }: SectionHeaderProps) => {
   const styles = useThemedStyles(createStyles);
+  const hasAction = Boolean(actionLabel && onActionPress);
+  const showHint = !hasAction && Boolean(hint);
 
   return (
     <View style={styles.row} testID={testID}>
@@ -72,12 +85,12 @@ export const SectionHeader = ({
         variant="sectionLabel"
         color="textSecondary"
         accessibilityRole="header"
-        style={styles.title}
+        style={[styles.title, showHint && styles.titleBesideHint]}
       >
         {title}
       </Typography>
 
-      {actionLabel && onActionPress ? (
+      {hasAction ? (
         <TouchableOpacity
           onPress={onActionPress}
           accessibilityRole="button"
@@ -94,6 +107,24 @@ export const SectionHeader = ({
             {actionLabel}
           </Typography>
         </TouchableOpacity>
+      ) : showHint ? (
+        // Directions for a gesture, which a screen reader does not use: the
+        // rows offer the same thing as an accessibility action.
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.hint}
+          testID={testID ? `${testID}-hint` : undefined}
+        >
+          <Typography
+            variant="sectionLabel"
+            color="textSecondary"
+            align="right"
+            style={styles.title}
+          >
+            {hint}
+          </Typography>
+        </View>
       ) : null}
     </View>
   );

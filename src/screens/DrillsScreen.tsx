@@ -4,67 +4,88 @@ import {
   AccessibilityInfo,
   FlatList,
   StyleSheet,
+  TouchableOpacity,
   View,
   type AccessibilityActionEvent,
   type ListRenderItemInfo,
 } from 'react-native';
 
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import {
+  useFocusEffect,
+  useNavigation,
+  type CompositeNavigationProp,
+} from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import type { Theme } from '@/theme/theme';
 import type { Drill } from '@/types/drill';
-import type { DrillsStackParamList } from '@/types/navigation';
+import type {
+  DrillsStackParamList,
+  MainTabParamList,
+} from '@/types/navigation';
+import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { ConfirmSheet } from '@components/ConfirmSheet';
 import { EmptyState } from '@components/EmptyState';
-import { Icon } from '@components/Icon';
-import { ListRow } from '@components/ListRow';
 import { RefreshFailedNotice } from '@components/RefreshFailedNotice';
 import { Screen } from '@components/Screen';
 import { SectionHeader } from '@components/SectionHeader';
 import { SwipeableRow } from '@components/SwipeableRow';
 import { Typography } from '@components/Typography';
 import { useAnnounce } from '@hooks/useAnnounce';
-import { useDrills, type DrillsState } from '@hooks/useDrills';
+import { useDrills } from '@hooks/useDrills';
 import { useThemedStyles } from '@hooks/useTheme';
 import { describeDrill } from '@utils/drill';
 
-type Nav = NativeStackNavigationProp<DrillsStackParamList, 'DrillList'>;
+/** The Drills tab's list, which also loads a drill onto the Timer tab. */
+type Nav = CompositeNavigationProp<
+  NativeStackNavigationProp<DrillsStackParamList, 'DrillList'>,
+  BottomTabNavigationProp<MainTabParamList>
+>;
 
 const ERROR_TITLE = 'Could not load your drills';
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    // The list runs to the bottom edge, under the floating tab bar.
-    screenContent: { paddingBottom: 0 },
-    // Pulled out to the screen's edges and padded back in, so the cards'
-    // shadows are not cut off at the sides of the list.
-    list: {
-      flex: 1,
-      marginHorizontal: -theme.spacing.lg,
+    // The list scrolls to the tab bar; its own padding ends it.
+    screenContent: { paddingBottom: theme.spacing.none },
+    list: { flex: 1 },
+    listContent: { paddingBottom: theme.spacing.gutter },
+    listHeader: { gap: theme.spacing.gutter },
+    // The rows draw the ruled box between them: Ink down both sides, a 2px
+    // rule above the first and below the last, 1px Rule lines between.
+    rowFrame: {
+      backgroundColor: theme.colors.surface,
+      borderLeftWidth: theme.sizes.border,
+      borderRightWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
     },
-    listContent: {
-      paddingHorizontal: theme.spacing.lg,
-      // Clears the floating tab bar so the last card is never trapped.
-      paddingBottom: theme.spacing.xxl * 2,
+    firstRow: { borderTopWidth: theme.sizes.border },
+    lastRow: { borderBottomWidth: theme.sizes.border },
+    // Inside the rules, so a row swiped open slides under them, not over.
+    rowClip: { overflow: 'hidden' },
+    dividedRow: {
+      borderBottomWidth: theme.sizes.rule,
+      borderBottomColor: theme.colors.border,
     },
-    listHeader: { gap: theme.spacing.md },
-    separator: { height: theme.spacing.md },
-    createCard: {
+    // A minimum, so a large system font grows the row instead of clipping.
+    row: {
+      minHeight: theme.sizes.drillRowMin,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
+      gap: theme.spacing.inset,
+      paddingHorizontal: theme.spacing.inset,
+      paddingVertical: theme.spacing.sm,
     },
-    createIcon: {
-      width: 44,
-      height: 44,
-      borderRadius: theme.radius.md,
-      alignItems: 'center',
+    rowBody: {
+      flex: 1,
+      minHeight: theme.sizes.touchTarget,
       justifyContent: 'center',
-      backgroundColor: theme.colors.primarySoft,
+      gap: theme.spacing.xxs,
     },
-    createText: { flex: 1, gap: 2 },
+    // Capitals from the style, so a screen reader reads the name as words.
+    name: { textTransform: 'uppercase' },
     loading: {
       alignItems: 'center',
       paddingVertical: theme.spacing.xxl,
@@ -83,6 +104,8 @@ const DRILL_ROW_ACTIONS = [
 type DrillRowHandlers = {
   /** Open the editor on the saved drill with this id. */
   onEdit: (id: string) => void;
+  /** Put the drill with this id on the Timer. */
+  onLoad: (id: string) => void;
   /** A swipe left the row with this id open, or closed. */
   onOpenChange: (id: string, open: boolean) => void;
   /** Ask whether this drill should be deleted. */
@@ -93,16 +116,25 @@ type DrillRowProps = DrillRowHandlers & {
   drill: Drill;
   /** Whether the row is swiped open, showing its Delete action. */
   open: boolean;
+  /** Where the row sits in the ruled box, which it draws its part of. */
+  first: boolean;
+  last: boolean;
 };
 
-/** One saved drill: tap to edit, swipe left for Delete. */
+/** One saved drill: tap to edit, Load to time it, swipe left for Delete. */
 const DrillRow = ({
   drill,
   open,
+  first,
+  last,
   onEdit,
+  onLoad,
   onOpenChange,
   onRequestDelete,
 }: DrillRowProps) => {
+  const styles = useThemedStyles(createStyles);
+  const meta = describeDrill(drill, { markUntimed: true });
+
   const handleAccessibilityAction = (event: AccessibilityActionEvent) => {
     if (event.nativeEvent.actionName === DELETE_ACTION) {
       onRequestDelete(drill);
@@ -110,30 +142,61 @@ const DrillRow = ({
   };
 
   return (
-    <Card flush>
-      <SwipeableRow
-        actionLabel="Delete"
-        actionAccessibilityLabel={`Delete ${drill.name}`}
-        onAction={() => onRequestDelete(drill)}
-        open={open}
-        onOpenChange={next => onOpenChange(drill.id, next)}
-        actionTestID={`btn-delete-drill-${drill.id}`}
-        gestureTestID={`swipe-drill-${drill.id}`}
-      >
-        <ListRow
-          title={drill.name}
-          subtitle={describeDrill(drill)}
-          // A row showing its Delete action is put away by a tap, the same
-          // as swiping it back, rather than opened in the editor.
-          onPress={() =>
-            open ? onOpenChange(drill.id, false) : onEdit(drill.id)
-          }
-          accessibilityActions={DRILL_ROW_ACTIONS}
-          onAccessibilityAction={handleAccessibilityAction}
-          testID={`row-drill-${drill.id}`}
-        />
-      </SwipeableRow>
-    </Card>
+    <View
+      style={[
+        styles.rowFrame,
+        first && styles.firstRow,
+        last ? styles.lastRow : styles.dividedRow,
+      ]}
+    >
+      <View style={styles.rowClip}>
+        <SwipeableRow
+          actionLabel="Delete"
+          actionAccessibilityLabel={`Delete ${drill.name}`}
+          onAction={() => onRequestDelete(drill)}
+          open={open}
+          onOpenChange={next => onOpenChange(drill.id, next)}
+          actionTestID={`btn-delete-drill-${drill.id}`}
+          gestureTestID={`swipe-drill-${drill.id}`}
+        >
+          <View style={styles.row}>
+            <TouchableOpacity
+              // A row showing its Delete action is put away by a tap, the
+              // same as swiping it back, rather than opened in the editor.
+              onPress={() =>
+                open ? onOpenChange(drill.id, false) : onEdit(drill.id)
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${drill.name}, ${meta}`}
+              accessibilityActions={DRILL_ROW_ACTIONS}
+              onAccessibilityAction={handleAccessibilityAction}
+              activeOpacity={0.7}
+              style={styles.rowBody}
+              testID={`row-drill-${drill.id}`}
+            >
+              <Typography
+                variant="stencilSmall"
+                numberOfLines={2}
+                style={styles.name}
+              >
+                {drill.name}
+              </Typography>
+              <Typography variant="metricCaption" color="textSecondary">
+                {meta}
+              </Typography>
+            </TouchableOpacity>
+
+            <Button
+              label="Load"
+              variant="secondary"
+              accessibilityLabel={`Load ${drill.name} on the timer`}
+              onPress={() => onLoad(drill.id)}
+              testID={`btn-load-drill-${drill.id}`}
+            />
+          </View>
+        </SwipeableRow>
+      </View>
+    </View>
   );
 };
 
@@ -141,10 +204,11 @@ type DrillsStatusProps = {
   /** Why there is no drill to list. */
   status: 'loading' | 'error' | 'empty';
   onRetry: () => void;
+  onCreate: () => void;
 };
 
-/** What sits under the "Saved" header when there is no drill to list. */
-const DrillsStatus = ({ status, onRetry }: DrillsStatusProps) => {
+/** What sits under the "Saved" label when there is no drill to list. */
+const DrillsStatus = ({ status, onRetry, onCreate }: DrillsStatusProps) => {
   const styles = useThemedStyles(createStyles);
 
   if (status === 'loading') {
@@ -180,14 +244,15 @@ const DrillsStatus = ({ status, onRetry }: DrillsStatusProps) => {
     );
   }
 
-  // No button of its own: the Create Drill card sits right above, and a
-  // second control with the same job would give a screen reader two.
   return (
     <Card>
       <EmptyState
         mark="new"
         title="No drills yet"
-        message="Tap Create Drill above to build your first. It will show up here and on the timer."
+        message="Create a drill and it will show up here, ready to time."
+        actionLabel="New drill"
+        actionVariant="primary"
+        onActionPress={onCreate}
         testID="state-drills-empty"
       />
     </Card>
@@ -198,15 +263,11 @@ const NO_DRILLS: Drill[] = [];
 
 const keyOfDrill = (drill: Drill): string => drill.id;
 
-const DrillSeparator = () => {
-  const styles = useThemedStyles(createStyles);
-  return <View style={styles.separator} />;
-};
-
 /**
  * Library of saved drills, read from `DrillStorageService` — the same
- * drills the shot timer runs. This screen is where they are viewed and
- * deleted, and the way into the editor to create one or change one.
+ * drills the shot timer runs. Each row opens the drill in the editor, and
+ * its Load button switches to the Timer with that drill on it; the
+ * header's + New starts a new one.
  *
  * A drill is deleted by swiping its row left for the Delete action, then
  * confirming in a sheet. The runs recorded with it are deleted too, and the
@@ -238,6 +299,12 @@ export const DrillsScreen = () => {
 
   const editDrill = useCallback(
     (id: string) => navigation.navigate('SequenceEditor', { id }),
+    [navigation],
+  );
+
+  // The Timer takes the id, then clears it from its params.
+  const loadDrill = useCallback(
+    (id: string) => navigation.navigate('Timer', { drillId: id }),
     [navigation],
   );
 
@@ -293,23 +360,33 @@ export const DrillsScreen = () => {
     setOpenRowId(null);
   };
 
+  const lastIndex = drills.length - 1;
   const renderDrill = useCallback(
-    ({ item }: ListRenderItemInfo<Drill>) => (
+    ({ item, index }: ListRenderItemInfo<Drill>) => (
       <DrillRow
         drill={item}
         open={item.id === openRowId}
+        first={index === 0}
+        last={index === lastIndex}
         onEdit={editDrill}
+        onLoad={loadDrill}
         onOpenChange={changeOpenRow}
         onRequestDelete={requestDelete}
       />
     ),
-    [openRowId, editDrill, changeOpenRow, requestDelete],
+    [openRowId, lastIndex, editDrill, loadDrill, changeOpenRow, requestDelete],
   );
 
   return (
     <Screen
       title="Drills"
       subtitle="Your library of runnable drills"
+      action={{
+        label: '+ New',
+        accessibilityLabel: 'New drill',
+        onPress: createDrill,
+        testID: 'btn-create-drill',
+      }}
       contentStyle={styles.screenContent}
       testID="screen-drills"
     >
@@ -317,44 +394,32 @@ export const DrillsScreen = () => {
         data={drills}
         keyExtractor={keyOfDrill}
         renderItem={renderDrill}
-        // The rows know which one is open only through `renderItem`.
+        // Which row is open reaches the rows only through `renderItem`.
+        // Which is last needs nothing here: it can only change with `data`.
         extraData={openRowId}
         ListHeaderComponent={
           <View style={styles.listHeader}>
-            <Card
-              onPress={createDrill}
-              style={styles.createCard}
-              testID="btn-create-drill"
-            >
-              <View style={styles.createIcon}>
-                <Icon name="plus" size={22} color="primary" />
-              </View>
-              <View style={styles.createText}>
-                <Typography variant="bodyStrong">Create Drill</Typography>
-                <Typography variant="caption" color="textTertiary">
-                  Name it, then chain the actions in order
-                </Typography>
-              </View>
-              <Icon name="chevron" size={16} color="textTertiary" />
-            </Card>
-
+            {state.status === 'ready' && state.refreshFailed ? (
+              <RefreshFailedNotice testID="text-drills-refresh-failed" />
+            ) : null}
             <SectionHeader
               title={
                 state.status === 'ready'
                   ? `Saved · ${state.drills.length}`
                   : 'Saved'
               }
+              hint={drills.length > 0 ? 'Swipe left to delete' : undefined}
               testID="header-saved-drills"
             />
-            {state.status === 'ready' && state.refreshFailed ? (
-              <RefreshFailedNotice testID="text-drills-refresh-failed" />
-            ) : null}
           </View>
         }
         ListEmptyComponent={
-          <DrillsStatus status={listStatus} onRetry={reload} />
+          <DrillsStatus
+            status={listStatus}
+            onRetry={reload}
+            onCreate={createDrill}
+          />
         }
-        ItemSeparatorComponent={DrillSeparator}
         style={styles.list}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}

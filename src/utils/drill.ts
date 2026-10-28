@@ -119,13 +119,16 @@ export const stepLabel = (
 /**
  * A drill in one line, under its name: its shot count, then its total par
  * (`3 shots · Par 2.50s`). A drill with an untimed step has no total par,
- * so the par is left out.
+ * so the par is left out, or with `markUntimed` replaced by the word
+ * (`2 shots · untimed`), as the Drills library shows it.
  */
 export const describeDrill = (
   drill: Pick<Drill, 'shotCount' | 'totalPar'>,
+  { markUntimed = false }: { markUntimed?: boolean } = {},
 ): string => {
   const shots = pluralize(drill.shotCount, 'shot');
-  return drill.totalPar === null
-    ? shots
-    : `${shots} · Par ${formatSeconds(drill.totalPar)}`;
+  if (drill.totalPar !== null) {
+    return `${shots} · Par ${formatSeconds(drill.totalPar)}`;
+  }
+  return markUntimed ? `${shots} · untimed` : shots;
 };

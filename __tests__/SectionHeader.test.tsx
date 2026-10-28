@@ -119,4 +119,50 @@ describe('SectionHeader', () => {
     expect(host(tree, 'a')).toBeUndefined();
     expect(text(tree, 'Reorder')).toBeUndefined();
   });
+
+  it('shows a hint opposite the title, hidden from a screen reader', () => {
+    const tree = render(
+      <SectionHeader
+        title="Saved · 2"
+        hint="Swipe left to delete"
+        testID="header"
+      />,
+    );
+    const hint = text(tree, 'Swipe left to delete');
+
+    expect(hint?.props).toMatchObject({
+      variant: 'sectionLabel',
+      color: 'textSecondary',
+    });
+    expect(StyleSheet.flatten(hint?.props.style).textTransform).toBe(
+      'uppercase',
+    );
+    expect(host(tree, 'header-hint').props.importantForAccessibility).toBe(
+      'no-hide-descendants',
+    );
+  });
+
+  it('keeps the title whole beside a hint, leaving the hint to wrap', () => {
+    const tree = render(
+      <SectionHeader title="Saved · 3" hint="Swipe left to delete" />,
+    );
+
+    expect(
+      StyleSheet.flatten(text(tree, 'Saved · 3')?.props.style).flexShrink,
+    ).toBe(0);
+  });
+
+  it('leaves the hint out when there is an action', () => {
+    const tree = render(
+      <SectionHeader
+        title="Steps"
+        hint="Swipe left to delete"
+        actionLabel="Reorder"
+        onActionPress={jest.fn()}
+      />,
+    );
+
+    expect(text(tree, 'Swipe left to delete')).toBeUndefined();
+    expect(text(tree, 'Reorder')).toBeDefined();
+  });
 });
