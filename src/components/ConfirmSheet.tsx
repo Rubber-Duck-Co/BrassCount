@@ -1,10 +1,9 @@
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
-
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StyleSheet, View } from 'react-native';
 
 import type { Theme } from '@/theme/theme';
-import { useTheme, useThemedStyles } from '@hooks/useTheme';
+import { useThemedStyles } from '@hooks/useTheme';
 
+import { BottomSheet } from './BottomSheet';
 import { Button } from './Button';
 import { Typography } from './Typography';
 
@@ -14,7 +13,7 @@ type ConfirmSheetProps = {
   title: string;
   /** What confirming does, in a sentence. */
   message: string;
-  /** Label of the button that goes ahead. It is styled as destructive. */
+  /** Label of the button that goes ahead. */
   confirmLabel: string;
   /** Shown on the confirm button while `busy`, e.g. "Deleting…". */
   busyLabel: string;
@@ -34,36 +33,21 @@ type ConfirmSheetProps = {
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    // Mirrors the appearance and par picker sheets so the three feel like
-    // the same primitive.
-    backdrop: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: theme.colors.overlay,
-    },
-    sheet: {
-      backgroundColor: theme.colors.background,
-      borderTopLeftRadius: theme.radius.lg,
-      borderTopRightRadius: theme.radius.lg,
-      paddingTop: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.lg,
-      gap: theme.spacing.md,
-    },
-    grabber: {
-      alignSelf: 'center',
-      width: 36,
-      height: 4,
-      borderRadius: theme.radius.pill,
-      backgroundColor: theme.colors.borderStrong,
-    },
     text: { gap: theme.spacing.xs },
-    actions: { gap: theme.spacing.sm },
+    actions: {
+      flexDirection: 'row',
+      gap: theme.spacing.inset,
+      marginTop: theme.spacing.sm,
+    },
+    action: { flex: 1, minHeight: theme.sizes.sheetActionMin },
   });
 
 /**
- * Bottom sheet that asks before something destructive happens. Confirming
- * calls `onConfirm`; closing the sheet is left to the caller, through
- * `visible`, so it can stay up while the action runs and when it fails.
+ * Bottom sheet that asks before something destructive happens: the title
+ * row, what confirming does, then Cancel and the confirm button side by
+ * side. Confirming calls `onConfirm`; closing the sheet is left to the
+ * caller, through `visible`, so it can stay up while the action runs and
+ * when it fails.
  */
 export const ConfirmSheet = ({
   visible,
@@ -78,79 +62,55 @@ export const ConfirmSheet = ({
   testID,
 }: ConfirmSheetProps) => {
   const styles = useThemedStyles(createStyles);
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
-
-  // While the action runs there is nothing to go back to: the backdrop
-  // and the system back button wait for it to settle.
-  const dismiss = busy ? undefined : onCancel;
 
   return (
-    <Modal
+    <BottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={() => dismiss?.()}
+      onClose={onCancel}
+      closeLabel="Close"
+      title={title}
+      dismissDisabled={busy}
+      backdropTestID={`${testID}-backdrop`}
+      closeTestID={`${testID}-close`}
+      testID={testID}
     >
-      <Pressable
-        style={styles.backdrop}
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-        accessibilityState={{ disabled: busy }}
-        disabled={busy}
-        onPress={dismiss}
-        testID={`${testID}-backdrop`}
-      >
-        {/* Claims touches inside the sheet so they don't reach the backdrop
-            and dismiss it. */}
-        <View
-          onStartShouldSetResponder={() => true}
-          style={[
-            styles.sheet,
-            { paddingBottom: insets.bottom + theme.spacing.md },
-          ]}
-          testID={testID}
-        >
-          <View style={styles.grabber} />
-          <View style={styles.text}>
-            <Typography variant="subtitle" accessibilityRole="header">
-              {title}
+      {/* One block, so the empty live region adds no gap of its own. */}
+      <View style={styles.text}>
+        <Typography variant="body" color="textSecondary">
+          {message}
+        </Typography>
+        {/* Always mounted, so a reader hears the error when it appears. */}
+        <View accessibilityLiveRegion="polite">
+          {error ? (
+            <Typography
+              variant="label"
+              color="danger"
+              testID={`${testID}-error`}
+            >
+              {error}
             </Typography>
-            <Typography variant="body" color="textSecondary">
-              {message}
-            </Typography>
-            {/* Always mounted, so a reader hears the error when it appears. */}
-            <View accessibilityLiveRegion="polite">
-              {error ? (
-                <Typography
-                  variant="label"
-                  color="danger"
-                  testID={`${testID}-error`}
-                >
-                  {error}
-                </Typography>
-              ) : null}
-            </View>
-          </View>
-
-          <View style={styles.actions}>
-            <Button
-              label={busy ? busyLabel : confirmLabel}
-              variant="stop"
-              busy={busy}
-              onPress={onConfirm}
-              testID={`${testID}-confirm`}
-            />
-            <Button
-              label="Cancel"
-              variant="secondary"
-              disabled={busy}
-              onPress={onCancel}
-              testID={`${testID}-cancel`}
-            />
-          </View>
+          ) : null}
         </View>
-      </Pressable>
-    </Modal>
+      </View>
+
+      <View style={styles.actions}>
+        <Button
+          label="Cancel"
+          variant="secondary"
+          disabled={busy}
+          onPress={onCancel}
+          style={styles.action}
+          testID={`${testID}-cancel`}
+        />
+        <Button
+          label={busy ? busyLabel : confirmLabel}
+          variant="primary"
+          busy={busy}
+          onPress={onConfirm}
+          style={styles.action}
+          testID={`${testID}-confirm`}
+        />
+      </View>
+    </BottomSheet>
   );
 };

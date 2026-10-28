@@ -10,6 +10,7 @@ export type IconName =
   | 'target'
   | 'user'
   | 'plus'
+  | 'close'
   | 'play'
   | 'chevron'
   | 'check'
@@ -171,6 +172,26 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
         <View key={name} style={box}>
           <View style={bar({ width: size * 0.72, height: stroke })} />
           <View style={bar({ width: stroke, height: size * 0.72 })} />
+        </View>
+      );
+
+    case 'close':
+      return (
+        <View key={name} style={box}>
+          <View
+            style={bar({
+              width: size * 0.9,
+              height: stroke,
+              transform: [{ rotate: '45deg' }],
+            })}
+          />
+          <View
+            style={bar({
+              width: size * 0.9,
+              height: stroke,
+              transform: [{ rotate: '-45deg' }],
+            })}
+          />
         </View>
       );
 

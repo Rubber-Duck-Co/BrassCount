@@ -53,6 +53,7 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     primary: '#C2410C',
     primaryBorder: '#1B1B17',
     disabled: '#8C8778',
+    overlay: 'rgba(27, 27, 23, 0.55)',
   },
   dark: {
     background: '#1F1E1B',
@@ -67,6 +68,7 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     primaryBorder: '#E8692F',
     textOnPrimary: '#1F1E1B',
     disabled: '#6B675B',
+    overlay: 'rgba(0, 0, 0, 0.6)',
   },
 };
 
@@ -165,6 +167,9 @@ describe('Range Card tokens', () => {
       border: 2,
       rule: 1,
       touchTarget: 48,
+      sheetHandleWidth: 40,
+      sheetHandleHeight: 4,
+      sheetActionMin: 56,
     });
   });
 
