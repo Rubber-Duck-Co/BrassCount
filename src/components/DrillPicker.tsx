@@ -79,7 +79,7 @@ export const DrillPicker = ({
         {/* Announced: it takes the place of the loading line on its own. */}
         <View accessibilityLiveRegion="polite">
           <EmptyState
-            icon="list"
+            mark="error"
             title="Could not load your drills"
             message="Something went wrong reading them from this device."
             actionLabel="Try again"
@@ -95,10 +95,11 @@ export const DrillPicker = ({
     return (
       <Card>
         <EmptyState
-          icon="list"
+          mark="new"
           title="No drills yet"
           message="Create a drill and it will show up here, ready to time."
           actionLabel="Create drill"
+          actionVariant="primary"
           onActionPress={onCreate}
           testID="state-timer-drills-empty"
         />

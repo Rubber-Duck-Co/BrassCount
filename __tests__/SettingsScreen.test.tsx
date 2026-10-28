@@ -1103,9 +1103,7 @@ describe('SettingsScreen', () => {
         'Every saved run is removed from this phone. Your drills and profile are kept. This cannot be undone.',
       );
       expect(texts).toContain('Delete runs');
-      expect(byTestId(tree, `${SHEET}-confirm`)[0].props.variant).toBe(
-        'danger',
-      );
+      expect(byTestId(tree, `${SHEET}-confirm`)[0].props.variant).toBe('stop');
       expect(await countSessions()).toBe(37);
     });
 

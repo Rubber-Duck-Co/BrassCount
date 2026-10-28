@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 import type { SemanticColors, Theme } from '@/theme/theme';
-import { useThemedStyles } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
 import { Icon } from './Icon';
 import { Typography } from './Typography';
@@ -37,7 +37,7 @@ type ListRowProps = {
   destructive?: boolean;
   /** Show a trailing chevron. Implied when `onPress` is set and no `right`. */
   chevron?: boolean;
-  /** Hairline separator below the row. Omit on the last row of a group. */
+  /** 1px Rule line below the row. Omit on the last row of a group. */
   divided?: boolean;
   /**
    * What a screen reader says for the row, in place of its title, subtitle
@@ -60,26 +60,27 @@ const createStyles = (theme: Theme) =>
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
-      paddingVertical: theme.spacing.md - theme.spacing.xs,
-      paddingHorizontal: theme.spacing.md,
-      minHeight: 56,
+      gap: theme.spacing.inset,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.inset,
+      minHeight: theme.sizes.touchTarget,
     },
     divided: {
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: theme.sizes.rule,
       borderBottomColor: theme.colors.border,
     },
     badge: {
-      width: 26,
-      height: 26,
-      borderRadius: theme.radius.sm + 2,
+      minWidth: theme.sizes.badge,
+      minHeight: theme.sizes.badge,
+      borderRadius: theme.radius.none,
+      borderWidth: theme.sizes.rule,
+      borderColor: theme.colors.outline,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.primarySoft,
     },
     body: {
       flex: 1,
-      gap: 2,
+      gap: theme.spacing.xxs,
     },
   });
 
@@ -94,7 +95,10 @@ const titleColor = (
   return destructive ? 'danger' : 'textPrimary';
 };
 
-/** One line in a grouped list. Sits inside a `flush` Card. */
+/**
+ * One line in a grouped list. Sits inside a `flush` Card, split from the
+ * next row by a 1px Rule line (`divided`).
+ */
 export const ListRow = ({
   title,
   subtitle,
@@ -114,14 +118,18 @@ export const ListRow = ({
   testID,
 }: ListRowProps) => {
   const styles = useThemedStyles(createStyles);
+  const theme = useTheme();
   const showChevron =
     chevron ?? (Boolean(onPress) && !disabled && !right && !value);
 
   const content = (
     <>
       {index !== undefined ? (
-        <View style={styles.badge}>
-          <Typography variant="overline" color="primary">
+        <View
+          style={styles.badge}
+          testID={testID ? `${testID}-index` : undefined}
+        >
+          <Typography variant="overline" color="textSecondary">
             {index}
           </Typography>
         </View>
@@ -130,7 +138,7 @@ export const ListRow = ({
 
       <View style={styles.body}>
         <Typography
-          variant="bodyStrong"
+          variant="rowLabel"
           color={titleColor(disabled, destructive)}
           numberOfLines={1}
         >
@@ -152,7 +160,7 @@ export const ListRow = ({
       ) : null}
       {right}
       {showChevron ? (
-        <Icon name="chevron" size={16} color="textTertiary" />
+        <Icon name="chevron" size={theme.sizes.iconSm} color="textPrimary" />
       ) : null}
     </>
   );

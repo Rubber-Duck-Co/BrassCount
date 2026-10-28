@@ -2,31 +2,59 @@ import {
   StyleSheet,
   TouchableOpacity,
   type StyleProp,
+  type TextStyle,
   type ViewStyle,
 } from 'react-native';
 
-import type { SemanticColors } from '@/theme/theme';
+import type { SemanticColors, Theme } from '@/theme/theme';
 import { Typography } from '@components/Typography';
-import { useTheme } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
-/** `danger` is for an action that destroys something, such as a delete. */
-type ButtonVariant = 'primary' | 'secondary' | 'danger';
+/**
+ * The Range Card buttons. `primary` is the one main action on a screen;
+ * `secondary` is Cancel, Load, Try again; `stop` (Ink fill) is Stop and any
+ * action that destroys something; `text` is an underlined word with no box.
+ */
+type ButtonVariant = 'primary' | 'secondary' | 'stop' | 'text';
+
+/**
+ * `main` is the main action at the bottom of a screen (Start, Stop, Save
+ * run): taller, with a stencil label.
+ */
+type ButtonSize = 'default' | 'main';
+
+type ColorKey = keyof SemanticColors;
 
 type VariantColors = {
-  fill: keyof SemanticColors;
-  text: keyof SemanticColors;
+  /** `null` draws no fill. */
+  fill: ColorKey | null;
+  /** `null` draws no outline. */
+  border: ColorKey | null;
+  text: ColorKey;
 };
 
 const VARIANT_COLORS: Record<ButtonVariant, VariantColors> = {
-  primary: { fill: 'primary', text: 'textOnPrimary' },
-  secondary: { fill: 'surface', text: 'textPrimary' },
-  danger: { fill: 'danger', text: 'textOnDanger' },
+  primary: { fill: 'primary', border: 'primaryBorder', text: 'textOnPrimary' },
+  secondary: { fill: null, border: 'outline', text: 'textPrimary' },
+  stop: { fill: 'inverse', border: 'inverse', text: 'textOnInverse' },
+  text: { fill: null, border: null, text: 'textPrimary' },
 };
 
+/** A disabled or busy button: no fill, greyed outline and label. */
+const INERT_COLORS: VariantColors = {
+  fill: null,
+  border: 'disabled',
+  text: 'disabled',
+};
+
+const TRANSPARENT = 'transparent';
+
 type ButtonProps = {
+  /** Written as a sentence ("Try again"); the button shows it in capitals. */
   label: string;
   onPress: () => void;
   variant?: ButtonVariant;
+  size?: ButtonSize;
   disabled?: boolean;
   /** The button's work is under way: announced as busy, and not pressable. */
   busy?: boolean;
@@ -41,10 +69,32 @@ type ButtonProps = {
   testID?: string;
 };
 
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    box: {
+      borderWidth: theme.sizes.border,
+      borderRadius: theme.radius.none,
+      paddingVertical: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Heights are minimums, so a large system font grows the button
+    // instead of clipping its label.
+    default: { minHeight: theme.sizes.touchTarget },
+    main: { minHeight: theme.sizes.mainActionMin },
+    label: { textTransform: 'uppercase' },
+    underline: { textDecorationLine: 'underline' },
+  });
+
+const colorOf = (theme: Theme, key: ColorKey | null): string =>
+  key === null ? TRANSPARENT : theme.colors[key];
+
 export const Button = ({
   label,
   onPress,
   variant = 'primary',
+  size = 'default',
   disabled = false,
   busy = false,
   accessibilityLabel,
@@ -53,21 +103,20 @@ export const Button = ({
   testID,
 }: ButtonProps) => {
   const theme = useTheme();
-  const colors = VARIANT_COLORS[variant];
+  const styles = useThemedStyles(createStyles);
   const inert = disabled || busy;
+  const colors = inert ? INERT_COLORS : VARIANT_COLORS[variant];
+  // A text button stays a bare word when disabled: no outline appears.
+  const border = variant === 'text' ? null : colors.border;
 
-  const containerStyle: ViewStyle = {
-    backgroundColor: theme.colors[colors.fill],
-    borderColor: theme.colors.border,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: theme.radius.md,
-    minHeight: theme.sizes.touchTarget,
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    opacity: inert ? 0.5 : 1,
-    alignItems: 'center',
-    justifyContent: 'center',
+  const colorStyle: ViewStyle = {
+    backgroundColor: colorOf(theme, colors.fill),
+    borderColor: colorOf(theme, border),
   };
+  const labelStyle: StyleProp<TextStyle> = [
+    styles.label,
+    variant === 'text' && !inert && styles.underline,
+  ];
 
   return (
     <TouchableOpacity
@@ -75,13 +124,20 @@ export const Button = ({
       onPress={onPress}
       disabled={inert}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      // Announced as written: TalkBack spells out some words in capitals.
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: inert, busy }}
-      style={style ? [containerStyle, style] : containerStyle}
+      activeOpacity={0.7}
+      style={[styles.box, styles[size], colorStyle, style]}
     >
       {/* Centred, so a label that wraps stays in the middle of the button. */}
-      <Typography variant="bodyStrong" color={colors.text} align="center">
+      <Typography
+        variant={size === 'main' ? 'mainAction' : 'actionLabel'}
+        color={colors.text}
+        align="center"
+        style={labelStyle}
+      >
         {label}
       </Typography>
     </TouchableOpacity>

@@ -215,7 +215,7 @@ const RunListStatus = ({ status, onRetry }: RunListStatusProps) => {
     return (
       <Card>
         <EmptyState
-          icon="chart"
+          mark="error"
           title={ERROR_TITLE}
           message="Something went wrong reading them from this device."
           actionLabel="Try again"
@@ -229,7 +229,7 @@ const RunListStatus = ({ status, onRetry }: RunListStatusProps) => {
   return (
     <Card>
       <EmptyState
-        icon="chart"
+        mark="empty"
         title="No runs yet"
         message="Runs of this drill will show up here once you have logged some."
         testID="state-history-detail-empty"

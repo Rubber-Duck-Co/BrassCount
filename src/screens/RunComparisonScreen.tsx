@@ -239,7 +239,7 @@ const ComparisonStatus = ({ status, onRetry }: ComparisonStatusProps) => {
       <View accessibilityLiveRegion="polite">
         {status === 'error' ? (
           <EmptyState
-            icon="chart"
+            mark="error"
             title="Could not load the runs"
             message="Something went wrong reading them from this device."
             actionLabel="Try again"
@@ -248,7 +248,7 @@ const ComparisonStatus = ({ status, onRetry }: ComparisonStatusProps) => {
           />
         ) : (
           <EmptyState
-            icon="chart"
+            mark="empty"
             title="These runs are not here"
             message="One of the runs could not be found for this drill."
             testID="state-comparison-missing"
