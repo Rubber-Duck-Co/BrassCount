@@ -1,6 +1,9 @@
+import type { ReactNode, Ref } from 'react';
+
 import {
   StyleSheet,
   TouchableOpacity,
+  View,
   type StyleProp,
   type TextStyle,
   type ViewStyle,
@@ -66,6 +69,10 @@ type ButtonProps = {
   accessibilityLabel?: string;
   /** Read after the label; use it to say why the button is disabled. */
   accessibilityHint?: string;
+  /** A mark drawn before the label, such as Stop's square. */
+  leading?: ReactNode;
+  /** The touchable, so a screen can move a screen reader's focus to it. */
+  ref?: Ref<View>;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -84,6 +91,12 @@ const createStyles = (theme: Theme) =>
     // instead of clipping its label.
     default: { minHeight: theme.sizes.touchTarget },
     main: { minHeight: theme.sizes.mainActionMin },
+    // A leading mark sits beside the label, the pair centred together.
+    withLeading: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+    },
     label: { textTransform: 'uppercase' },
     underline: { textDecorationLine: 'underline' },
   });
@@ -100,6 +113,8 @@ export const Button = ({
   busy = false,
   accessibilityLabel,
   accessibilityHint,
+  leading,
+  ref,
   style,
   testID,
 }: ButtonProps) => {
@@ -119,8 +134,21 @@ export const Button = ({
     variant === 'text' && !inert && styles.underline,
   ];
 
+  // Centred, so a label that wraps stays in the middle of the button.
+  const text = (
+    <Typography
+      variant={size === 'main' ? 'mainAction' : 'actionLabel'}
+      color={colors.text}
+      align="center"
+      style={labelStyle}
+    >
+      {label}
+    </Typography>
+  );
+
   return (
     <TouchableOpacity
+      ref={ref}
       testID={testID}
       onPress={onPress}
       disabled={inert}
@@ -132,15 +160,14 @@ export const Button = ({
       activeOpacity={0.7}
       style={[styles.box, styles[size], colorStyle, style]}
     >
-      {/* Centred, so a label that wraps stays in the middle of the button. */}
-      <Typography
-        variant={size === 'main' ? 'mainAction' : 'actionLabel'}
-        color={colors.text}
-        align="center"
-        style={labelStyle}
-      >
-        {label}
-      </Typography>
+      {leading === undefined ? (
+        text
+      ) : (
+        <View style={styles.withLeading}>
+          {leading}
+          {text}
+        </View>
+      )}
     </TouchableOpacity>
   );
 };

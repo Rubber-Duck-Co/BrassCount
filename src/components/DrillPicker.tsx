@@ -9,8 +9,8 @@ import { useThemedStyles } from '@hooks/useTheme';
 import { describeDrill } from '@utils/drill';
 
 import { Card } from './Card';
+import { DrillBox } from './DrillBox';
 import { EmptyState } from './EmptyState';
-import { Select } from './Select';
 import { Typography } from './Typography';
 
 const createStyles = (theme: Theme) =>
@@ -108,14 +108,11 @@ export const DrillPicker = ({
   }
 
   return (
-    <Select
-      value={drill.id}
+    <DrillBox
+      drill={drill}
       options={options}
-      onChange={onSelect}
-      sheetTitle="Drill"
-      // Not while a run is on: a stray touch would throw it away.
-      disabled={locked}
-      testID="select-drill"
+      locked={locked}
+      onSelect={onSelect}
     />
   );
 };

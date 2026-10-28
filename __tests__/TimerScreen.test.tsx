@@ -313,16 +313,19 @@ const textsUnder = (node: ReactTestInstance): string[] =>
 const textsOf = (tree: ReactTestRenderer, testID: string): string[] =>
   textsUnder(first(tree, testID));
 
-/** Put the drill with this name on the timer, through the picker. */
+/** Put the drill with this name on the timer: open the drill box, pick it. */
 const pick = async (tree: ReactTestRenderer, name: string): Promise<void> => {
-  await act(async () => {
-    first(tree, 'select-drill').props.onChange(drillIds[name]);
-  });
-  await settle();
+  await press(tree, 'btn-drill-box');
+  await press(tree, `select-drill-option-${drillIds[name]}`);
 };
 
-const pickerLocked = (tree: ReactTestRenderer): boolean =>
-  first(tree, 'select-drill').props.disabled === true;
+const pickerLocked = (tree: ReactTestRenderer): boolean => {
+  const box = first(tree, 'btn-drill-box');
+  return (
+    box.props.disabled === true &&
+    box.props.accessibilityState?.disabled === true
+  );
+};
 
 const buttonLabel = (tree: ReactTestRenderer): string =>
   first(tree, 'btn-start').props.accessibilityLabel;
@@ -335,6 +338,23 @@ const elapsedText = (tree: ReactTestRenderer): string =>
 
 const clockCaption = (tree: ReactTestRenderer): string =>
   first(tree, 'text-elapsed-caption').props.children;
+
+const clockMeta = (tree: ReactTestRenderer): string =>
+  first(tree, 'text-clock-meta').props.children;
+
+/** The theme colour the clock's figure is drawn in. */
+const clockColor = (tree: ReactTestRenderer): string =>
+  first(tree, 'text-elapsed').props.color;
+
+/**
+ * The main action is pinned under the scrolling content, so it is in the
+ * same place whatever the run is doing.
+ */
+const mainActionPinned = (tree: ReactTestRenderer): boolean =>
+  has(tree, 'btn-start') &&
+  first(tree, 'scroll-timer-content').findAll(
+    node => node.props.testID === 'btn-start',
+  ).length === 0;
 
 /** One row of the Splits card, as the screen hands it to `ListRow`. */
 const split = (tree: ReactTestRenderer, index: number) => {
@@ -503,6 +523,32 @@ describe('TimerScreen', () => {
       expect(timingNote(tree)).toBeNull();
     });
 
+    it('shows the TIMER header with Reset as its action', async () => {
+      const { tree } = await renderScreen();
+
+      expect(first(tree, 'screen-timer').props.title).toBe('Timer');
+      expect(textsOf(tree, 'btn-reset')).toEqual(['RESET']);
+      expect(first(tree, 'btn-reset').props.accessibilityLabel).toBe('Reset');
+    });
+
+    it('shows the drill in the drill box, ready to be changed', async () => {
+      const { tree } = await renderScreen();
+
+      expect(textsOf(tree, 'btn-drill-box')).toEqual(['DRILL', 'Bill Drill']);
+      expect(first(tree, 'btn-drill-box').props).toMatchObject({
+        accessibilityRole: 'button',
+        accessibilityLabel: 'Drill: Bill Drill. Change drill',
+      });
+    });
+
+    it('shows the shots and par of the drill on the clock', async () => {
+      const { tree } = await renderScreen();
+
+      // Bill Drill: six shots, 1.50 + 0.25 + 0.20 × 5.
+      expect(clockMeta(tree)).toBe('6 SHOTS · PAR 2.75');
+      expect(clockCaption(tree)).toBe('SECONDS');
+    });
+
     it('shows a silent step as counting towards the step after it', async () => {
       const { tree } = await renderScreen();
 
@@ -601,12 +647,54 @@ describe('TimerScreen', () => {
       });
     });
 
-    it('reads Cancel during the wait, since pressing it cancels the start', async () => {
+    it('labels the main action Start, Cancel and Stop as the run moves on', async () => {
+      const mainAction = (tree: ReactTestRenderer) => {
+        const { label, variant, size, accessibilityLabel } = first(
+          tree,
+          'btn-start',
+        ).props;
+        return { label, variant, size, accessibilityLabel };
+      };
+      const { tree } = await renderScreen();
+      expect(mainAction(tree)).toEqual({
+        label: 'Start',
+        variant: 'primary',
+        size: 'main',
+        accessibilityLabel: 'Start timer',
+      });
+
+      await press(tree, 'btn-start');
+      expect(mainAction(tree)).toEqual({
+        label: 'Cancel',
+        variant: 'secondary',
+        size: 'main',
+        accessibilityLabel: 'Cancel start',
+      });
+
+      hear(REQUESTED_AT - 40, ROOM_DB);
+      await beep();
+      expect(mainAction(tree)).toEqual({
+        label: 'Stop',
+        variant: 'stop',
+        size: 'main',
+        accessibilityLabel: 'Stop timer',
+      });
+      expect(
+        first(tree, 'btn-start').findAll(
+          node => node.props.accessibilityRole === 'button',
+        ),
+      ).not.toHaveLength(0);
+    });
+
+    it('says how long the wait for the beep can be', async () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-start');
 
-      expect(textsOf(tree, 'btn-start')).toEqual(['CANCEL']);
+      const { minMs, maxMs } = DEFAULT_PROFILE.startDelay;
+      expect(clockCaption(tree)).toBe(
+        `WAIT FOR THE BEEP · ${minMs / 1000}–${maxMs / 1000} S`,
+      );
     });
 
     it('names the sounds that still need calibrating and opens nothing', async () => {
@@ -895,9 +983,24 @@ describe('TimerScreen', () => {
 
       await tickAt(ZERO + 2400);
       expect(clockCaption(tree)).toBe('SECONDS');
+      expect(clockColor(tree)).toBe('textPrimary');
 
       await tickAt(ZERO + 2600);
       expect(clockCaption(tree)).toBe('OVER PAR');
+      // Signal, the warning token, and nothing else.
+      expect(clockColor(tree)).toBe('warning');
+      expect(first(tree, 'text-elapsed-caption').props.color).toBe('warning');
+    });
+
+    it('shows which step it is listening for', async () => {
+      const { tree } = await renderScreen();
+      await pick(tree, 'Failure to Stop');
+      await startRun(tree);
+      expect(clockMeta(tree)).toBe('SHOT 1 OF 3');
+
+      shoot(ZERO + 1400);
+
+      expect(clockMeta(tree)).toBe('SHOT 2 OF 3');
     });
   });
 
@@ -920,6 +1023,7 @@ describe('TimerScreen', () => {
       expect(buttonLabel(tree)).toBe('Start timer');
       expect(subtitle(tree)).toBe('Run complete');
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
+      expect(clockMeta(tree)).toBe('0.30 UNDER PAR');
       expect([1, 2, 3].map(index => split(tree, index).value)).toEqual([
         '1.40s',
         '0.30s',
@@ -979,6 +1083,7 @@ describe('TimerScreen', () => {
 
       expect(elapsedText(tree)).toBe(formatElapsed(2.5));
       expect(clockCaption(tree)).toBe('SECONDS');
+      expect(clockMeta(tree)).toBe('ON PAR');
     });
 
     it('calls a run over par once its time reads a hundredth over', async () => {
@@ -993,6 +1098,8 @@ describe('TimerScreen', () => {
 
       expect(elapsedText(tree)).toBe(formatElapsed(2.51));
       expect(clockCaption(tree)).toBe('OVER PAR');
+      expect(clockColor(tree)).toBe('warning');
+      expect(clockMeta(tree)).toBe('0.01 OVER PAR');
     });
 
     it('starts the next run on the clock at zero, not where the last one stopped', async () => {
@@ -1067,6 +1174,8 @@ describe('TimerScreen', () => {
       expect(buttonLabel(tree)).toBe('Start timer');
       expect(subtitle(tree)).toBe('Run stopped early');
       expect(elapsedText(tree)).toBe(formatElapsed(1.4));
+      expect(clockCaption(tree)).toBe('SECONDS · STOPPED EARLY');
+      expect(clockMeta(tree)).toBe('1 OF 6 HEARD');
       expect(split(tree, 1).value).toBe('1.40s');
       expect(mockedNativeAudioCapture.stop).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledTimes(1);
@@ -1114,6 +1223,50 @@ describe('TimerScreen', () => {
 
       await press(tree, 'btn-start');
       expect(pickerLocked(tree)).toBe(false);
+    });
+
+    it('labels the drill box as locked during a run', async () => {
+      const { tree } = await renderScreen();
+
+      await startRun(tree);
+
+      expect(textsOf(tree, 'btn-drill-box')).toEqual([
+        'DRILL · LOCKED DURING A RUN',
+        'Bill Drill',
+      ]);
+      expect(first(tree, 'btn-drill-box').props.accessibilityLabel).toBe(
+        'Drill: Bill Drill, locked during a run',
+      );
+    });
+
+    it('keeps the main action in the same place in every state', async () => {
+      const { tree, setSample } = await renderScreen({ calibrate: false });
+      const states: boolean[] = [];
+
+      // Blocked: a sound still to calibrate.
+      await press(tree, 'btn-start');
+      expect(subtitle(tree)).toBe('Calibrate Shot first');
+      states.push(mainActionPinned(tree));
+
+      setSample('shot', -4);
+      await press(tree, 'btn-reset');
+      // Ready, then standing by, then running.
+      states.push(mainActionPinned(tree));
+      await press(tree, 'btn-start');
+      states.push(mainActionPinned(tree));
+      hear(REQUESTED_AT - 40, ROOM_DB);
+      await beep();
+      hear(ZERO, -20);
+      hear(ZERO + 400, ROOM_DB);
+      states.push(mainActionPinned(tree));
+
+      // Stopped early.
+      shoot(ZERO + 1400);
+      await press(tree, 'btn-start');
+      expect(subtitle(tree)).toBe('Run stopped early');
+      states.push(mainActionPinned(tree));
+
+      expect(states).toEqual([true, true, true, true, true]);
     });
 
     it('clears the finished run when another drill is picked', async () => {
@@ -1271,6 +1424,7 @@ describe('TimerScreen', () => {
       expect(first(tree, 'select-drill').props.value).toBe(
         drillIds['Bill Drill'],
       );
+      expect(textsOf(tree, 'btn-drill-box')).toContain('Bill Drill');
       expect(split(tree, 6).title).toBe('Shot 6');
     });
 
