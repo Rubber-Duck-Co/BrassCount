@@ -43,7 +43,9 @@ const palette = {
   signalDark: '#E8692F',
   disabledDark: '#6B675B',
 
-  scrim: 'rgba(0, 0, 0, 0.45)',
+  /** Behind a sheet: Ink at 55% in light, black at 60% in dark. */
+  scrim: 'rgba(27, 27, 23, 0.55)',
+  scrimDark: 'rgba(0, 0, 0, 0.6)',
 } as const;
 
 export type Palette = typeof palette;
@@ -95,6 +97,9 @@ export const sizes = {
   iconSm: 12,
   iconMd: 16,
   iconLg: 18,
+  /** A bottom sheet's handle. */
+  sheetHandleWidth: 40,
+  sheetHandleHeight: 4,
 } as const;
 
 export type Spacing = typeof spacing;
@@ -339,7 +344,7 @@ const darkColors: SemanticColors = {
   success: palette.inkDark,
   danger: palette.inkDark,
   warning: palette.signalDark,
-  overlay: palette.scrim,
+  overlay: palette.scrimDark,
 };
 
 // Theme objects — one shape, two instances. Consumers get everything from

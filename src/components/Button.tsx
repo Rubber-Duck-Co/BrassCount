@@ -11,9 +11,10 @@ import { Typography } from '@components/Typography';
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
 /**
- * The Range Card buttons. `primary` is the one main action on a screen;
- * `secondary` is Cancel, Load, Try again; `stop` (Ink fill) is Stop and any
- * action that destroys something; `text` is an underlined word with no box.
+ * The Range Card buttons. `primary` is the one main action on a screen,
+ * including the confirm of a destructive sheet (Delete drill); `secondary`
+ * is Cancel, Load, Try again; `stop` (Ink fill) is Stop only; `text` is an
+ * underlined word with no box.
  */
 type ButtonVariant = 'primary' | 'secondary' | 'stop' | 'text';
 
