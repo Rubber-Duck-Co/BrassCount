@@ -136,7 +136,7 @@ export const ConfirmSheet = ({
           <View style={styles.actions}>
             <Button
               label={busy ? busyLabel : confirmLabel}
-              variant="danger"
+              variant="stop"
               busy={busy}
               onPress={onConfirm}
               testID={`${testID}-confirm`}

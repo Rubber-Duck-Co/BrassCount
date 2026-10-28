@@ -260,7 +260,7 @@ const EditorUnavailable = ({
       <View accessibilityLiveRegion="polite">
         {status === 'missing' ? (
           <EmptyState
-            icon="list"
+            mark="empty"
             title="Drill not found"
             message="It is no longer saved on this device."
             actionLabel="Back to drills"
@@ -269,7 +269,7 @@ const EditorUnavailable = ({
           />
         ) : (
           <EmptyState
-            icon="list"
+            mark="error"
             title="Could not load this drill"
             message="Something went wrong reading it from this device."
             actionLabel="Try again"

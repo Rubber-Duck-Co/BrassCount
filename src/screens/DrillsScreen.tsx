@@ -169,7 +169,7 @@ const DrillsStatus = ({ status, onRetry }: DrillsStatusProps) => {
     return (
       <Card>
         <EmptyState
-          icon="list"
+          mark="error"
           title={ERROR_TITLE}
           message="Something went wrong reading them from this device."
           actionLabel="Try again"
@@ -185,7 +185,7 @@ const DrillsStatus = ({ status, onRetry }: DrillsStatusProps) => {
   return (
     <Card>
       <EmptyState
-        icon="list"
+        mark="new"
         title="No drills yet"
         message="Tap Create Drill above to build your first. It will show up here and on the timer."
         testID="state-drills-empty"

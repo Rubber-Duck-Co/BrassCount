@@ -648,7 +648,7 @@ export const TimerScreen = () => {
 
       {drill === null ? null : (
         <>
-          <Card raised style={styles.readout} testID="card-readout">
+          <Card style={styles.readout} testID="card-readout">
             <View style={styles.metaRow}>
               <Typography variant="overline" color="textSecondary">
                 {pluralize(shotCount, 'shot').toUpperCase()}

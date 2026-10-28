@@ -14,6 +14,7 @@ export type IconName =
   | 'chevron'
   | 'check'
   | 'pencil'
+  | 'refresh'
   | 'settings';
 
 /** Angles of the gear's eight teeth, in degrees. */
@@ -252,6 +253,39 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
               height: stroke * 2.4,
               borderRadius: 1,
               transform: [{ rotate: '-45deg' }],
+            })}
+          />
+        </View>
+      );
+
+    case 'refresh':
+      // An open ring, its gap at the top right, with an arrow's corner
+      // at the gap: reload.
+      return (
+        <View key={name} style={box}>
+          <View
+            style={[
+              ring(size * 0.67, stroke),
+              {
+                borderTopColor: 'transparent',
+                transform: [{ rotate: '45deg' }],
+              },
+            ]}
+          />
+          <View
+            style={bar({
+              left: size * 0.83 - stroke / 2,
+              top: size * 0.17,
+              width: stroke,
+              height: size * 0.21 + stroke / 2,
+            })}
+          />
+          <View
+            style={bar({
+              left: size * 0.62,
+              top: size * 0.38 - stroke / 2,
+              width: size * 0.21 + stroke / 2,
+              height: stroke,
             })}
           />
         </View>

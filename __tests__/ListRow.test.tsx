@@ -1,8 +1,11 @@
+import { StyleSheet } from 'react-native';
+
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { Icon } from '../src/components/Icon';
 import { ListRow } from '../src/components/ListRow';
 import { Typography } from '../src/components/Typography';
+import { lightTheme, sizes } from '../src/theme/theme';
 
 const render = (row: React.ReactElement): ReactTestRenderer => {
   let tree: ReactTestRenderer | undefined;
@@ -156,5 +159,68 @@ describe('ListRow', () => {
     const tree = render(<ListRow title="Appearance" />);
 
     expect(textColor(tree, 'Appearance')).toBe('textPrimary');
+  });
+
+  it('draws a 1px Rule divider under a divided row', () => {
+    const tree = render(<ListRow title="Appearance" divided testID="row" />);
+
+    expect(StyleSheet.flatten(host(tree, 'row').props.style)).toMatchObject({
+      borderBottomWidth: sizes.rule,
+      borderBottomColor: lightTheme.colors.border,
+    });
+  });
+
+  it('draws no divider under the last row of a group', () => {
+    const tree = render(<ListRow title="Appearance" testID="row" />);
+
+    expect(
+      StyleSheet.flatten(host(tree, 'row').props.style).borderBottomWidth,
+    ).toBeUndefined();
+  });
+
+  it('is at least the touch-target minimum tall', () => {
+    const tree = render(
+      <ListRow title="Appearance" onPress={() => {}} testID="row" />,
+    );
+
+    expect(StyleSheet.flatten(host(tree, 'row').props.style).minHeight).toBe(
+      sizes.touchTarget,
+    );
+  });
+
+  it('sets its title as a row label', () => {
+    const tree = render(<ListRow title="Appearance" />);
+
+    expect(
+      tree.root
+        .findAllByType(Typography)
+        .find(text => text.props.children === 'Appearance')?.props.variant,
+    ).toBe('rowLabel');
+  });
+
+  it('draws its chevron in Ink', () => {
+    const tree = render(<ListRow title="Appearance" onPress={() => {}} />);
+
+    expect(tree.root.findByType(Icon).props).toMatchObject({
+      name: 'chevron',
+      color: 'textPrimary',
+      size: sizes.iconSm,
+    });
+  });
+
+  it('numbers a step in a square outlined badge, not in orange', () => {
+    const tree = render(<ListRow title="Shot 1" index={1} />);
+    const number = tree.root
+      .findAllByType(Typography)
+      .find(text => text.props.children === 1);
+
+    expect(number?.props.color).toBe('textSecondary');
+    expect(
+      StyleSheet.flatten(host(tree, 'list-row-index').props.style),
+    ).toMatchObject({
+      borderWidth: sizes.rule,
+      borderColor: lightTheme.colors.outline,
+      borderRadius: 0,
+    });
   });
 });

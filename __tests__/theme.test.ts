@@ -51,6 +51,7 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     textSecondary: '#5A574C',
     border: '#BDB5A0',
     primary: '#C2410C',
+    primaryBorder: '#1B1B17',
     disabled: '#8C8778',
   },
   dark: {
@@ -63,6 +64,7 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     textSecondary: '#A8A291',
     border: '#3B3A34',
     primary: '#E8692F',
+    primaryBorder: '#E8692F',
     textOnPrimary: '#1F1E1B',
     disabled: '#6B675B',
   },
@@ -119,15 +121,32 @@ describe('Range Card palettes', () => {
 
   it.each(themesByMode)(
     'uses orange only for primary and warning roles in %s mode',
-    (_mode, { colors }) => {
+    (mode, { colors }) => {
       const orangeRoles = Object.entries(colors)
         .filter(([, value]) => value === colors.primary)
         .map(([key]) => key)
         .sort();
 
-      expect(orangeRoles).toEqual(['primary', 'primaryMuted', 'warning']);
+      // Dark mode outlines the primary button in its own orange.
+      const expected =
+        mode === 'dark'
+          ? ['primary', 'primaryBorder', 'primaryMuted', 'warning']
+          : ['primary', 'primaryMuted', 'warning'];
+      expect(orangeRoles).toEqual(expected);
     },
   );
+
+  it('sets the main action and the small stencil in Big Shoulders Stencil', () => {
+    expect(typography.mainAction).toMatchObject({
+      fontFamily: fontFamilies.stencil,
+      fontSize: 36,
+      letterSpacing: 8,
+    });
+    expect(typography.stencilSmall).toMatchObject({
+      fontFamily: fontFamilies.stencil,
+      fontSize: 22,
+    });
+  });
 });
 
 describe('Range Card tokens', () => {

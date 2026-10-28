@@ -297,7 +297,7 @@ export const ProfileScreen = () => {
       >
         <Card>
           <EmptyState
-            icon="user"
+            mark="error"
             title="Could not load your profile"
             message="Something went wrong reading it from this device."
             actionLabel="Try again"

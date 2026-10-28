@@ -182,7 +182,7 @@ const HistoryStatus = ({ status, onRetry }: HistoryStatusProps) => {
     return (
       <Card>
         <EmptyState
-          icon="chart"
+          mark="error"
           title={ERROR_TITLE}
           message="Something went wrong reading it from this device."
           actionLabel="Try again"
@@ -196,7 +196,7 @@ const HistoryStatus = ({ status, onRetry }: HistoryStatusProps) => {
   return (
     <Card>
       <EmptyState
-        icon="chart"
+        mark="empty"
         title="Nothing here yet"
         message="Run a drill from the timer and it will appear here."
         testID="state-history-empty"

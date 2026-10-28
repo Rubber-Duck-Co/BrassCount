@@ -152,6 +152,20 @@ export const typography = {
     fontFamily: fontFamilies.stencil,
     letterSpacing: 1,
   },
+  /** Drill names in a list row, and an empty state's mark. */
+  stencilSmall: {
+    fontSize: 22,
+    lineHeight: 24,
+    fontFamily: fontFamilies.stencil,
+    letterSpacing: 1,
+  },
+  /** The main action's label: Start, Stop, Save run. */
+  mainAction: {
+    fontSize: 36,
+    lineHeight: 40,
+    fontFamily: fontFamilies.stencil,
+    letterSpacing: 8,
+  },
   title: { fontSize: 28, lineHeight: 34, fontFamily: fontFamilies.sansBold },
   subtitle: {
     fontSize: 20,
@@ -163,6 +177,12 @@ export const typography = {
     fontSize: 16,
     lineHeight: 22,
     fontFamily: fontFamilies.sansBold,
+  },
+  /** A list row's title. */
+  rowLabel: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontFamily: fontFamilies.sansSemibold,
   },
   caption: {
     fontSize: 12,
@@ -250,6 +270,8 @@ export type SemanticColors = {
   /** Text on a `danger` fill, e.g. a destructive button. */
   textOnDanger: string;
   primary: string;
+  /** The primary button's outline: Ink in light, its own Signal in dark. */
+  primaryBorder: string;
   primaryMuted: string;
   /** Fill for chips/badges that carry `primary` text. */
   primarySoft: string;
@@ -278,6 +300,7 @@ const lightColors: SemanticColors = {
   textOnWarning: palette.white,
   textOnDanger: palette.paper,
   primary: palette.signal,
+  primaryBorder: palette.ink,
   primaryMuted: palette.signal,
   primarySoft: palette.card,
   disabled: palette.disabled,
@@ -303,6 +326,7 @@ const darkColors: SemanticColors = {
   textOnWarning: palette.paperDark,
   textOnDanger: palette.paperDark,
   primary: palette.signalDark,
+  primaryBorder: palette.signalDark,
   primaryMuted: palette.signalDark,
   primarySoft: palette.cardDark,
   disabled: palette.disabledDark,
