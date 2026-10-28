@@ -1,5 +1,7 @@
 import type { ComponentProps } from 'react';
 
+import { Dimensions, StyleSheet } from 'react-native';
+
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { SaveRunPrompt } from '../src/components/SaveRunPrompt';
@@ -8,13 +10,11 @@ type Props = ComponentProps<typeof SaveRunPrompt>;
 
 const defaults: Props = {
   completed: true,
-  totalTime: 2.2,
-  heardCount: 3,
-  plannedCount: 3,
   status: 'unsaved',
   failure: null,
   onSave: () => {},
   onDiscard: () => {},
+  onView: () => {},
 };
 
 const render = (props: Partial<Props> = {}): ReactTestRenderer => {
@@ -34,24 +34,62 @@ const first = (tree: ReactTestRenderer, testID: string) =>
 const has = (tree: ReactTestRenderer, testID: string): boolean =>
   tree.root.findAllByProps({ testID }).length > 0;
 
+const textsUnder = (tree: ReactTestRenderer, testID: string): string[] =>
+  first(tree, testID)
+    .findAll(
+      node =>
+        typeof node.type === 'string' &&
+        typeof node.props.children === 'string',
+    )
+    .map(node => node.props.children);
+
+/** Reports a new system font scale the way the OS does, as a window change. */
+const setFontScale = (fontScale: number): void => {
+  act(() => {
+    Dimensions.set({
+      window: { ...Dimensions.get('window'), fontScale },
+      screen: Dimensions.get('screen'),
+    });
+  });
+};
+
 describe('SaveRunPrompt', () => {
-  it('asks to save a completed run, with its time', () => {
+  const initialWindow = Dimensions.get('window');
+
+  afterEach(() => setFontScale(initialWindow.fontScale));
+
+  it('makes Save run the main action, with Discard beside it', () => {
     const tree = render();
 
-    expect(first(tree, 'text-save-run-summary').props.children).toBe(
-      '2.20s · 3 steps heard.',
-    );
-    expect(first(tree, 'btn-save-run').props.label).toBe('Save run');
+    expect(first(tree, 'btn-save-run').props).toMatchObject({
+      label: 'Save run',
+      variant: 'primary',
+      size: 'main',
+    });
+    expect(first(tree, 'btn-discard-run').props).toMatchObject({
+      label: 'Discard',
+      variant: 'secondary',
+      accessibilityLabel: 'Discard run',
+    });
+  });
+
+  it('says nothing more about a completed run', () => {
+    const tree = render();
+
+    expect(has(tree, 'text-save-run-note')).toBe(false);
     expect(has(tree, 'text-save-run-error')).toBe(false);
   });
 
-  it('says a run stopped early is kept as incomplete', () => {
-    const tree = render({ completed: false, totalTime: 1.4, heardCount: 1 });
+  it('says a run stopped early saves as incomplete', () => {
+    const tree = render({ completed: false });
 
-    expect(first(tree, 'text-save-run-summary').props.children).toBe(
-      'Stopped early at 1.40s: 1 of 3 steps heard. It is kept as incomplete and left out of your best and average.',
+    expect(first(tree, 'text-save-run-note').props.children).toBe(
+      'Saves as incomplete, left out of your best and average.',
     );
-    expect(first(tree, 'btn-save-run').props.label).toBe('Save as incomplete');
+    expect(first(tree, 'btn-save-run').props).toMatchObject({
+      label: 'Save run',
+      accessibilityLabel: 'Save run as incomplete',
+    });
   });
 
   it('calls back on Save and on Discard', () => {
@@ -71,6 +109,7 @@ describe('SaveRunPrompt', () => {
 
     expect(first(tree, 'btn-save-run').props).toMatchObject({
       label: 'Saving…',
+      busy: true,
       disabled: true,
     });
     expect(first(tree, 'btn-discard-run').props.disabled).toBe(true);
@@ -95,19 +134,53 @@ describe('SaveRunPrompt', () => {
     expect(first(tree, 'btn-discard-run').props.disabled).toBe(false);
   });
 
-  it('stacks its buttons at a large text size', () => {
+  it('keeps the actions side by side, Save the wider, at a normal text size', () => {
+    setFontScale(1);
+    const tree = render();
+
+    const row = StyleSheet.flatten(
+      first(tree, 'row-save-run-actions').props.style,
+    );
+    expect(row.flexDirection).toBe('row');
+    const save = StyleSheet.flatten(first(tree, 'btn-save-run').props.style);
+    const discard = StyleSheet.flatten(
+      first(tree, 'btn-discard-run').props.style,
+    );
+    expect(save.flex).toBe(2);
+    expect(discard.flex).toBe(1);
+  });
+
+  it('stacks its actions at a large text size', () => {
     // Jest's window has a font scale of 2.
     const tree = render();
 
-    const row = first(tree, 'btn-discard-run').parent?.parent;
-    expect(row?.props.style).toMatchObject({ flexDirection: 'column' });
+    const row = StyleSheet.flatten(
+      first(tree, 'row-save-run-actions').props.style,
+    );
+    expect(row.flexDirection).toBe('column');
   });
 
-  it('says the run is saved in place of the question', () => {
-    const tree = render({ status: 'saved' });
+  it('says the run is saved in place of the actions, with a way to view it', () => {
+    const onView = jest.fn();
+    const tree = render({ status: 'saved', onView });
 
-    expect(has(tree, 'text-run-saved')).toBe(true);
+    expect(textsUnder(tree, 'text-run-saved')).toEqual(['Saved to History']);
     expect(has(tree, 'btn-save-run')).toBe(false);
     expect(has(tree, 'btn-discard-run')).toBe(false);
+
+    act(() => first(tree, 'btn-view-run').props.onPress());
+    expect(onView).toHaveBeenCalledTimes(1);
+    expect(first(tree, 'btn-view-run').props).toMatchObject({
+      accessibilityRole: 'button',
+      accessibilityLabel: 'View in History',
+    });
+  });
+
+  it('says a run stopped early was saved as incomplete', () => {
+    const tree = render({ status: 'saved', completed: false });
+
+    expect(textsUnder(tree, 'text-run-saved')).toEqual([
+      'Saved to History as incomplete',
+    ]);
   });
 });
