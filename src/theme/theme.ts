@@ -100,6 +100,8 @@ export const sizes = {
   /** A bottom sheet's handle. */
   sheetHandleWidth: 40,
   sheetHandleHeight: 4,
+  /** A sheet's Cancel and confirm buttons; a minimum, like the others. */
+  sheetActionMin: 56,
 } as const;
 
 export type Spacing = typeof spacing;

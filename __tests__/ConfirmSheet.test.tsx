@@ -9,7 +9,7 @@ import {
 } from 'react-test-renderer';
 
 import { ConfirmSheet } from '../src/components/ConfirmSheet';
-import { lightTheme } from '../src/theme/theme';
+import { lightTheme, sizes } from '../src/theme/theme';
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -76,17 +76,25 @@ const textsOf = (node: ReactTestInstance): string[] =>
 const requestClose = (tree: ReactTestRenderer) =>
   act(() => tree.root.findByType(Modal).props.onRequestClose());
 
-/** The host view of a button, where its fill colour is drawn. */
-const fillOf = (tree: ReactTestRenderer, suffix: string): unknown => {
+/** One style property of a button's host view, as it is finally drawn. */
+const styleOf = (
+  tree: ReactTestRenderer,
+  suffix: string,
+  key: string,
+): unknown => {
   const flat = [host(tree, suffix).props.style].flat(Infinity) as Record<
     string,
     unknown
   >[];
   return flat.reduce<unknown>(
-    (fill, style) => style?.backgroundColor ?? fill,
+    (value, style) => style?.[key] ?? value,
     undefined,
   );
 };
+
+/** The fill colour of a button's host view. */
+const fillOf = (tree: ReactTestRenderer, suffix: string): unknown =>
+  styleOf(tree, suffix, 'backgroundColor');
 
 describe('ConfirmSheet', () => {
   it('shows the title as a header next to a close button', () => {
@@ -160,6 +168,15 @@ describe('ConfirmSheet', () => {
     expect(order).toEqual([`${SHEET}-cancel`, `${SHEET}-confirm`]);
     expect(fillOf(tree, 'confirm')).toBe(lightTheme.colors.primary);
   });
+
+  it.each(['cancel', 'confirm'])(
+    'makes the %s button at least the sheet action height',
+    suffix => {
+      const tree = render();
+
+      expect(styleOf(tree, suffix, 'minHeight')).toBe(sizes.sheetActionMin);
+    },
+  );
 
   describe('while busy', () => {
     it('shows the busy label and announces the confirm button as busy', () => {

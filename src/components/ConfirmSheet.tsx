@@ -39,7 +39,7 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.inset,
       marginTop: theme.spacing.sm,
     },
-    action: { flex: 1 },
+    action: { flex: 1, minHeight: theme.sizes.sheetActionMin },
   });
 
 /**

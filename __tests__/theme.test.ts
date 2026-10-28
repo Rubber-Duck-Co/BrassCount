@@ -169,6 +169,7 @@ describe('Range Card tokens', () => {
       touchTarget: 48,
       sheetHandleWidth: 40,
       sheetHandleHeight: 4,
+      sheetActionMin: 56,
     });
   });
 
