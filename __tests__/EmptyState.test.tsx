@@ -36,13 +36,20 @@ describe('EmptyState', () => {
     ['empty', '—'],
   ] as const)('draws the %s mark as %s in an outlined box', (mark, glyph) => {
     const tree = render(
-      <EmptyState mark={mark} title="No drills yet" message="Create one." />,
+      <EmptyState
+        mark={mark}
+        title="No drills yet"
+        message="Create one."
+        testID="state"
+      />,
     );
 
     expect(text(tree, glyph)?.props.variant).toBe('stencilSmall');
     expect(
-      StyleSheet.flatten(host(tree, 'empty-state-mark').props.style),
+      StyleSheet.flatten(host(tree, 'state-mark').props.style),
     ).toMatchObject({
+      minWidth: sizes.markBox,
+      minHeight: sizes.markBox,
       borderWidth: sizes.border,
       borderColor: lightTheme.colors.outline,
       borderRadius: 0,
@@ -51,13 +58,31 @@ describe('EmptyState', () => {
 
   it('hides the mark from a screen reader', () => {
     const tree = render(
-      <EmptyState mark="new" title="No drills yet" message="Create one." />,
+      <EmptyState
+        mark="new"
+        title="No drills yet"
+        message="Create one."
+        testID="state"
+      />,
     );
 
-    expect(host(tree, 'empty-state-mark').props).toMatchObject({
+    expect(host(tree, 'state-mark').props).toMatchObject({
       accessibilityElementsHidden: true,
       importantForAccessibility: 'no-hide-descendants',
     });
+  });
+
+  it('gives its mark no test ID when it has none itself', () => {
+    const tree = render(
+      <EmptyState mark="new" title="No drills yet" message="Create one." />,
+    );
+
+    expect(
+      tree.root.findAll(
+        node =>
+          typeof node.type === 'string' && node.props.testID !== undefined,
+      ),
+    ).toHaveLength(0);
   });
 
   it('shows the title as a heading and the message muted', () => {

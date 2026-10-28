@@ -156,6 +156,8 @@ describe('Range Card tokens', () => {
 
   it('defines the layout sizes from the spec', () => {
     expect(spacing.gutter).toBe(20);
+    expect(spacing.inset).toBe(12);
+    expect(sizes.markBox).toBe(40);
     expect(sizes).toMatchObject({
       headerMin: 124,
       tabBar: 64,

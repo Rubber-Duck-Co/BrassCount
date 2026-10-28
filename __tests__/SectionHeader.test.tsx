@@ -30,17 +30,24 @@ const text = (tree: ReactTestRenderer, value: string) =>
 describe('SectionHeader', () => {
   it('sets its title as a muted section label in capitals', () => {
     const tree = render(<SectionHeader title="Saved drills" />);
+    const title = text(tree, 'Saved drills');
 
-    expect(text(tree, 'SAVED DRILLS')?.props).toMatchObject({
+    expect(title?.props).toMatchObject({
       variant: 'sectionLabel',
       color: 'textSecondary',
     });
+    expect(StyleSheet.flatten(title?.props.style).textTransform).toBe(
+      'uppercase',
+    );
   });
 
-  it('is announced as a heading', () => {
+  it('is announced as a heading, in the words as written', () => {
     const tree = render(<SectionHeader title="Splits" />);
 
-    expect(text(tree, 'SPLITS')?.props.accessibilityRole).toBe('header');
+    // Capitals come from the style, so TalkBack reads "Splits" as a word
+    // instead of spelling out S-P-L-I-T-S.
+    expect(text(tree, 'SPLITS')).toBeUndefined();
+    expect(text(tree, 'Splits')?.props.accessibilityRole).toBe('header');
   });
 
   it('draws its action as underlined Ink text in capitals', () => {

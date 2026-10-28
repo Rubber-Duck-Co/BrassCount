@@ -304,7 +304,7 @@ describe('DrillsScreen', () => {
 
       const { tree } = await renderScreen();
 
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 2']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved · 2']);
     });
 
     it('leaves out a stored entry that cannot be read', async () => {
@@ -317,7 +317,7 @@ describe('DrillsScreen', () => {
       const { tree } = await renderScreen();
 
       expect(rowOrder(tree)).toEqual([drill.id]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 1']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved · 1']);
     });
   });
 
@@ -328,7 +328,7 @@ describe('DrillsScreen', () => {
       expect(has(tree, 'state-drills-empty')).toBe(true);
       expect(textsOf(tree, 'state-drills-empty')).toContain('No drills yet');
       expect(rowOrder(tree)).toEqual([]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 0']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved · 0']);
     });
 
     it('leaves creating a drill to the Create Drill card, not a second button', async () => {
@@ -391,7 +391,7 @@ describe('DrillsScreen', () => {
       await goTo('Drills');
 
       expect(rowOrder(tree)).toEqual([second.id, first.id]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 2']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved · 2']);
     });
 
     it('drops a drill deleted while the screen was in the background', async () => {
@@ -459,7 +459,7 @@ describe('DrillsScreen', () => {
 
       expect(has(tree, 'state-drills-error')).toBe(true);
       expect(has(tree, 'state-drills-empty')).toBe(false);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved']);
       expect(has(tree, 'btn-create-drill')).toBe(true);
 
       const retry = tree.root.findAllByProps({ label: 'Try again' })[0];
@@ -757,7 +757,7 @@ describe('DrillsScreen', () => {
 
       expect(isAsking(tree)).toBe(false);
       expect(rowOrder(tree)).toEqual([kept.id]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 1']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved · 1']);
       expect(await storedIds()).toEqual([kept.id]);
     });
 
@@ -886,7 +886,7 @@ describe('DrillsScreen', () => {
       await press(tree, `${SHEET}-confirm`);
 
       expect(has(tree, 'state-drills-empty')).toBe(true);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 0']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved · 0']);
     });
 
     it('tells a screen reader the drill was deleted', async () => {

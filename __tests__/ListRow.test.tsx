@@ -209,18 +209,38 @@ describe('ListRow', () => {
   });
 
   it('numbers a step in a square outlined badge, not in orange', () => {
-    const tree = render(<ListRow title="Shot 1" index={1} />);
+    const tree = render(<ListRow title="Shot 1" index={1} testID="row-1" />);
     const number = tree.root
       .findAllByType(Typography)
       .find(text => text.props.children === 1);
 
     expect(number?.props.color).toBe('textSecondary');
     expect(
-      StyleSheet.flatten(host(tree, 'list-row-index').props.style),
+      StyleSheet.flatten(host(tree, 'row-1-index').props.style),
     ).toMatchObject({
       borderWidth: sizes.rule,
       borderColor: lightTheme.colors.outline,
       borderRadius: 0,
     });
+  });
+
+  it('gives each row its own badge test ID, and none without a row ID', () => {
+    const tree = render(
+      <>
+        <ListRow title="Shot 1" index={1} testID="row-1" />
+        <ListRow title="Shot 2" index={2} testID="row-2" />
+        <ListRow title="Shot 3" index={3} />
+      </>,
+    );
+    const badgeIds = tree.root
+      .findAll(
+        node =>
+          typeof node.type === 'string' &&
+          typeof node.props.testID === 'string' &&
+          node.props.testID.endsWith('-index'),
+      )
+      .map(node => node.props.testID);
+
+    expect(badgeIds).toEqual(['row-1-index', 'row-2-index']);
   });
 });

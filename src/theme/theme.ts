@@ -51,8 +51,12 @@ export type Palette = typeof palette;
 // Spacing & radius — proportional scales. Screens/components MUST use these.
 export const spacing = {
   none: 0,
+  /** Between a row's title and subtitle. */
+  xxs: 2,
   xs: 4,
   sm: 8,
+  /** Inside a ruled box: row side padding, a notice's padding. */
+  inset: 12,
   md: 16,
   /** Side gutter and the gap between blocks. */
   gutter: 20,
@@ -84,6 +88,8 @@ export const sizes = {
   /** Divider between rows. */
   rule: 1,
   badge: 26,
+  /** An empty state's mark box. */
+  markBox: 40,
   removeButton: 32,
   moveButton: 40,
   iconSm: 12,

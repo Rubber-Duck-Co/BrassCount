@@ -30,18 +30,16 @@ type EmptyStateProps = {
   testID?: string;
 };
 
-/** The mark box: wide enough for one stencil glyph at the default size. */
-const MARK_BOX = 40;
-
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     container: {
       alignItems: 'flex-start',
-      gap: theme.spacing.md - theme.spacing.xs,
+      gap: theme.spacing.inset,
     },
     mark: {
-      minWidth: MARK_BOX,
-      minHeight: MARK_BOX,
+      // Minimums, so the glyph grows the box at a large system font.
+      minWidth: theme.sizes.markBox,
+      minHeight: theme.sizes.markBox,
       borderWidth: theme.sizes.border,
       borderColor: theme.colors.outline,
       borderRadius: theme.radius.none,
@@ -77,7 +75,7 @@ export const EmptyState = ({
         style={styles.mark}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
-        testID="empty-state-mark"
+        testID={testID ? `${testID}-mark` : undefined}
       >
         <Typography variant="stencilSmall">{MARK_GLYPHS[mark]}</Typography>
       </View>

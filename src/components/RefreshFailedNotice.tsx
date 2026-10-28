@@ -20,15 +20,15 @@ const createStyles = (theme: Theme) =>
     box: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: theme.spacing.md - theme.spacing.xs,
-      padding: theme.spacing.md - theme.spacing.xs,
+      gap: theme.spacing.inset,
+      padding: theme.spacing.inset,
       borderWidth: theme.sizes.border,
       borderColor: theme.colors.outline,
       borderRadius: theme.radius.none,
       backgroundColor: theme.colors.background,
     },
     // Drops the mark onto the first line of text.
-    mark: { marginTop: theme.spacing.xs / 2 },
+    mark: { marginTop: theme.spacing.xxs },
     message: { flex: 1 },
   });
 
@@ -46,6 +46,8 @@ export const RefreshFailedNotice = ({ testID }: RefreshFailedNoticeProps) => {
   return (
     <View
       style={styles.box}
+      // Android gives the status role no live region, so the
+      // announcement comes from `useAnnounce` alone and is made once.
       role="status"
       accessible
       accessibilityLabel={REFRESH_FAILED_MESSAGE}

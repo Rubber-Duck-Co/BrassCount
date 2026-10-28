@@ -60,9 +60,9 @@ const createStyles = (theme: Theme) =>
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md - theme.spacing.xs,
+      gap: theme.spacing.inset,
       paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md - theme.spacing.xs,
+      paddingHorizontal: theme.spacing.inset,
       minHeight: theme.sizes.touchTarget,
     },
     divided: {
@@ -80,7 +80,7 @@ const createStyles = (theme: Theme) =>
     },
     body: {
       flex: 1,
-      gap: theme.spacing.xs / 2,
+      gap: theme.spacing.xxs,
     },
   });
 
@@ -125,7 +125,10 @@ export const ListRow = ({
   const content = (
     <>
       {index !== undefined ? (
-        <View style={styles.badge} testID="list-row-index">
+        <View
+          style={styles.badge}
+          testID={testID ? `${testID}-index` : undefined}
+        >
           <Typography variant="overline" color="textSecondary">
             {index}
           </Typography>

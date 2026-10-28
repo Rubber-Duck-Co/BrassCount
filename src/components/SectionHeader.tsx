@@ -38,7 +38,9 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.md,
       marginBottom: theme.spacing.sm,
     },
-    title: { flexShrink: 1 },
+    // Capitals come from the style, not the string, so TalkBack reads the
+    // title as words instead of spelling out the letters.
+    title: { flexShrink: 1, textTransform: 'uppercase' },
     action: {
       paddingVertical: theme.spacing.xs,
       paddingLeft: theme.spacing.xs,
@@ -72,7 +74,7 @@ export const SectionHeader = ({
         accessibilityRole="header"
         style={styles.title}
       >
-        {title.toUpperCase()}
+        {title}
       </Typography>
 
       {actionLabel && onActionPress ? (
