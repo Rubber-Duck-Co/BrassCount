@@ -140,6 +140,15 @@ describe('navigation', () => {
       expect(tabLabels(tree)).toEqual(['Timer', 'Drills', 'Log', 'Setup']);
     });
 
+    it('opens the Setup screen from the Setup tab', async () => {
+      const { tree, currentRoute } = await renderTabs();
+
+      await press(tree, 'tab-Setup');
+
+      expect(currentRoute()).toBe('SetupHome');
+      expect(byTestId(tree, 'screen-setup')).not.toHaveLength(0);
+    });
+
     it('lands on the Timer', async () => {
       const tree = await mount(<RootNavigator />);
 
@@ -166,16 +175,6 @@ describe('navigation', () => {
       await press(tree, 'row-calibration');
 
       expect(currentRoute()).toBe('Calibration');
-      expect(isSelected(tree, 'Setup')).toBe(true);
-    });
-
-    it('keeps it on Settings, with Setup selected', async () => {
-      const { tree, currentRoute } = await renderTabs();
-
-      await press(tree, 'tab-Setup');
-      await press(tree, 'btn-open-settings');
-
-      expect(currentRoute()).toBe('Settings');
       expect(isSelected(tree, 'Setup')).toBe(true);
     });
 

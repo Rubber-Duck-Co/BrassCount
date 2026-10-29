@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import {
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
   View,
   type AccessibilityActionEvent,
   type AccessibilityActionInfo,
@@ -84,6 +85,13 @@ const createStyles = (theme: Theme) =>
     },
   });
 
+/**
+ * Above this font scale a title and a value such as `Random, 1.5 to 10 s`
+ * no longer fit side by side on a phone, so the value goes under the
+ * title.
+ */
+const VALUE_UNDER_TITLE_ABOVE_FONT_SCALE = 1.2;
+
 /** The title's colour: greyed when disabled, `danger` when destructive. */
 const titleColor = (
   disabled: boolean,
@@ -119,8 +127,17 @@ export const ListRow = ({
 }: ListRowProps) => {
   const styles = useThemedStyles(createStyles);
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   const showChevron =
     chevron ?? (Boolean(onPress) && !disabled && !right && !value);
+  const valueUnderTitle =
+    Boolean(value) && fontScale > VALUE_UNDER_TITLE_ABOVE_FONT_SCALE;
+
+  const valueText = value ? (
+    <Typography variant="metricSmall" color={valueColor}>
+      {value}
+    </Typography>
+  ) : null;
 
   const content = (
     <>
@@ -140,7 +157,9 @@ export const ListRow = ({
         <Typography
           variant="rowLabel"
           color={titleColor(disabled, destructive)}
-          numberOfLines={1}
+          // Two lines under a value, so a long title wraps rather than
+          // losing its end.
+          numberOfLines={valueUnderTitle ? 2 : 1}
         >
           {title}
         </Typography>
@@ -151,13 +170,10 @@ export const ListRow = ({
             {subtitle}
           </Typography>
         ) : null}
+        {valueUnderTitle ? valueText : null}
       </View>
 
-      {value ? (
-        <Typography variant="metricSmall" color={valueColor}>
-          {value}
-        </Typography>
-      ) : null}
+      {valueUnderTitle ? null : valueText}
       {right}
       {showChevron ? (
         <Icon name="chevron" size={theme.sizes.iconSm} color="textPrimary" />

@@ -38,7 +38,7 @@ Every screen reads real data through a service. There are no display fixtures (`
 - `src/types/` — stored models (`Drill`, `Session`, `Profile`), run types, and all navigation param lists (`navigation.ts`).
 - `src/screens/`, `src/components/` — screens compose the primitives in `components/`.
 
-Navigation: root native stack → `Tabs` only: **Timer** (first, initial), then Drills, Log and Setup, each a nested stack so the tab bar stays at every depth (`DrillList` → `SequenceEditor`; `HistoryList` → `HistoryDetail` → `RunComparison`; `SetupHome` (Profile, for now) → `Calibration`, `Settings`). Pressing the active Drills tab with the editor open does nothing, so a draft is kept. Navigator headers are off: each screen renders its own through `Screen` (wordmark or back link, one text `action`, title, subtitle), and the bottom chrome is the custom text-only `TabBar`.
+Navigation: root native stack → `Tabs` only: **Timer** (first, initial), then Drills, Log and Setup, each a nested stack so the tab bar stays at every depth (`DrillList` → `SequenceEditor`; `HistoryList` → `HistoryDetail` → `RunComparison`; `SetupHome` (Setup: profile and settings) → `Calibration`). Pressing the active Drills tab with the editor open does nothing, so a draft is kept. Navigator headers are off: each screen renders its own through `Screen` (wordmark or back link, one text `action`, title, subtitle), and the bottom chrome is the custom text-only `TabBar`.
 
 ### Invariants
 

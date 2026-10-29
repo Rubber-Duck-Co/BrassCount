@@ -16,7 +16,7 @@ What the app is supposed to do is in `.claude/CLAUDE.md`. When a check below and
 6. Timer: timed runs (synthetic input)
 7. Saving and discarding runs
 8. History list and detail
-9. Profile and appearance
+9. Setup: profile and settings
 10. Display settings: dark mode and large text
 11. Lifecycle: leaving mid-run, relaunch
 
@@ -25,7 +25,7 @@ What the app is supposed to do is in `.claude/CLAUDE.md`. When a check below and
 ## 1. Launch and navigation
 
 1.1 Cold launch lands on the Timer tab (`screen-timer`), with no red box, no LogBox toast and nothing in `d crashes`.
-1.2 The tab bar reads TIMER · DRILLS · LOG · SETUP, and each tab opens its screen: `tab-Timer` → `screen-timer`, `tab-Drills` → `screen-drills`, `tab-Log` → `screen-history`, `tab-Setup` → `screen-profile` (the Setup root, for now). Calibration opens from Setup's `row-calibration` (`screen-calibration`) and `btn-back` returns to Setup. The tab bar stays visible on every pushed screen: the editor, Calibration, Settings, a drill's runs and Compare.
+1.2 The tab bar reads TIMER · DRILLS · LOG · SETUP, and each tab opens its screen: `tab-Timer` → `screen-timer`, `tab-Drills` → `screen-drills`, `tab-Log` → `screen-history`, `tab-Setup` → `screen-setup`. Calibration opens from Setup's `row-calibration` (`screen-calibration`) and `btn-back` returns to Setup. The tab bar stays visible on every pushed screen: the editor, Calibration, a drill's runs and Compare.
 1.3 Screenshot each tab once (light theme) and look at it: nothing clipped, overlapping, or unthemed.
 
 ## 2. Drills: create, edit, reorder, limits
@@ -39,7 +39,7 @@ Step testIDs are 0-based (`btn-par-step-0` is the first step), though the screen
 2.5 Step type: `select-step-1` (the second step) offers draw, shot, reload, rack, holster (not transition); choosing Reload changes the row and the preview.
 2.6 Remove: `btn-remove-step-N` (0-based) removes that row only; the others keep their type and par.
 2.7 Reorder: with two or more steps the Steps header shows Reorder. In reorder mode each row has Move up / Move down (`btn-move-up-step-N`, `btn-move-down-step-N`, 0-based), disabled at the ends, and par / remove are hidden. A move keeps the step's type and par. Done leaves the mode. With one step there is no Reorder.
-2.8 Save (`btn-save-drill`): back on the list, the drill's row shows its name and steps, and the list's "SAVED · N" header went up by one (the Drills tab has no count testID; `text-drill-count` is on Profile).
+2.8 Save (`btn-save-drill`): back on the list, the drill's row shows its name and steps, and the list's "SAVED · N" header went up by one (the Drills tab has no count testID; Setup's `text-profile-meta` reads `… · N drills`).
 2.9 Edit: tap the row → the editor loads the same name, steps and pars. Rename (`clear-field`, type `ZZE2EBravo`), change a par, Save changes: the list shows the new name. Reopen: the change stuck.
 2.10 Leaving the editor with the back control (`btn-back`) after an edit drops the edit without asking; the stored drill is unchanged.
 2.11 Step limit: optional, slow (100 steps). Do it only if the editor's step code changed on this branch; otherwise N/A.
@@ -117,22 +117,22 @@ Note History's Runs counter before this area.
 8.6 Delete a drill that has runs (`ZZE2EGone`'s, or make one): its runs stay listed under Deleted drill, and the detail title reads Deleted drill.
 8.7 Back (`btn-back`) returns to the list and the tab bar stayed visible throughout.
 
-## 9. Profile and Settings
+## 9. Setup: profile and settings
 
-Write down the profile's name, handle, and Settings' Appearance and Level units before touching anything, and put them back at the end of this area.
+Write down the profile's name, handle, and Setup's Appearance and Level units before touching anything, and put them back at the end of this area.
 
-9.1 The Runs and Drills counters match History's Runs and the Drills tab's count (Profile counts the whole library).
-9.2 Edit (`btn-edit-profile`): change the name and handle (`input-profile-name`, `input-profile-handle`; type `e2ehandle` without the @). Save: the handle shows as `@e2ehandle`. Cancel (`btn-cancel-profile`) on a second edit discards it.
+9.1 Setup (`screen-setup`) is the profile box over four groups: Microphone · this session (`row-calibration`, `row-sensitivity`), Timer (`row-start-delay`, `row-beep-volume`), Display (`row-appearance`, `row-level-unit`) and Data (`row-clear-history`, the version note `text-about`). The box's `text-profile-meta` (`@handle · N runs · M drills`) matches History's Runs and the Drills tab's count (it counts the whole library). `row-calibration` reads `0 of 3 sounds` in Signal after a relaunch.
+9.2 Edit (`btn-edit-profile`) turns the box into the form: change the name and handle (`input-profile-name`, `input-profile-handle`; type `e2ehandle` without the @). Save: the handle shows as `@e2ehandle`. Cancel (`btn-cancel-profile`) on a second edit discards it.
 9.3 Clearing the name or handle (empty field) and saving clears it.
-9.4 Profile has no Preferences section. The gear (`btn-open-settings`, top right) opens Settings (`screen-settings`) in the Setup tab; `btn-back` returns to Profile. Settings → Display → Appearance (`row-appearance`) → Light / Dark / System (`opt-appearance-*`) applies at once (screenshot each); choosing an option closes the sheet, and `btn-appearance-close` (the backdrop) closes it without a change. The choice survives a force-stop and relaunch.
-9.5 Settings → Display → Level units (`row-level-unit`) → Level / dBFS (`opt-level-unit-*`); `btn-level-unit-close` closes without a change. With a sound calibrated, the Calibration readouts, scale labels and "Threshold set to …" line switch unit at once (Level `85` ↔ `-9 dBFS` for 4.4's threshold). The unit survives a force-stop and relaunch (calibration itself does not).
+9.4 Display → Appearance (`row-appearance`) → Light / Dark / System (`opt-appearance-*`) applies at once (screenshot each); choosing an option closes the sheet, and `btn-appearance-close` (the backdrop) closes it without a change. The choice survives a force-stop and relaunch.
+9.5 Display → Level units (`row-level-unit`) → Level / dBFS (`opt-level-unit-*`); `btn-level-unit-close` closes without a change. With a sound calibrated, the Calibration readouts, scale labels and "Threshold set to …" line switch unit at once (Level `85` ↔ `-9 dBFS` for 4.4's threshold). The unit survives a force-stop and relaunch (calibration itself does not).
 9.6 Restore the original name, handle, appearance and level unit, and check them on screen.
 
 ## 10. Display settings: dark mode and large text
 
 Read the current values first (`settings get system font_scale`, `cmd uimode night`) and put them back afterwards.
 
-10.1 With Appearance on System, `adb shell cmd uimode night yes`: screenshot Timer, Drills, History detail, Calibration, Profile. Every screen is dark, text readable, no white boxes. Then `night no`.
+10.1 With Appearance on System, `adb shell cmd uimode night yes`: screenshot Timer, Drills, History detail, Calibration, Setup. Every screen is dark, text readable, no white boxes. Then `night no`.
 10.2 Large text: force-stop the app first (changing the font scale while it runs crashes it, a known react-native-screens issue, not a bug to file), `adb shell settings put system font_scale 1.4`, relaunch. The save prompt stacks its two buttons; History detail's summary card puts Avg under Best. Both stack only _above_ 1.3: at exactly 1.3 they stay side by side, which is correct.
 10.3 Same at `2.0`: the History detail run table stacks each step's figures; calibration cards wrap rather than truncate. Screenshot and look.
 10.4 Restore the original font scale (force-stop first).

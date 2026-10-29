@@ -14,6 +14,8 @@ type TextFieldProps = {
   numeric?: boolean;
   /** Mono + decimal keypad, for par times and other fractional values. */
   decimal?: boolean;
+  /** Mono text on the default keypad, for a value such as a handle. */
+  mono?: boolean;
   /** Trailing unit shown inside the field, e.g. "dB". */
   unit?: string;
   editable?: boolean;
@@ -27,21 +29,24 @@ type TextFieldProps = {
    * takes the danger border, and announced when it appears.
    */
   error?: string | null;
+  /** A muted line under the field. The error takes its place while shown. */
+  hint?: string;
   testID?: string;
 };
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     group: { gap: theme.spacing.xs },
+    // Paper inside the Card of the box it sits in, ruled like the box.
     field: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: theme.spacing.sm,
-      backgroundColor: theme.colors.surfaceElevated,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
-      borderRadius: theme.radius.md,
-      paddingHorizontal: theme.spacing.md,
+      backgroundColor: theme.colors.background,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
+      paddingHorizontal: theme.spacing.inset,
       minHeight: theme.sizes.touchTarget,
     },
     input: {
@@ -50,16 +55,19 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.textPrimary,
       ...theme.typography.body,
     },
-    numericInput: {
+    monoInput: {
       ...theme.typography.metricSmall,
       color: theme.colors.textPrimary,
-      textAlign: 'right',
     },
+    numericInput: { textAlign: 'right' },
     disabled: { opacity: 0.5 },
     invalid: { borderColor: theme.colors.danger },
   });
 
-/** Labelled text input wired to the theme's surfaces and type scale. */
+/**
+ * Labelled text input: the Range Card field, a 2px ruled Paper box at
+ * least 48dp tall, with its label above and a hint or error below.
+ */
 export const TextField = ({
   label,
   value,
@@ -67,12 +75,14 @@ export const TextField = ({
   placeholder,
   numeric = false,
   decimal = false,
+  mono = false,
   unit,
   editable = true,
   maxLength,
   autoCapitalize,
   autoCorrect,
   error,
+  hint,
   testID,
 }: TextFieldProps) => {
   const styles = useThemedStyles(createStyles);
@@ -83,15 +93,11 @@ export const TextField = ({
     : numeric
       ? 'number-pad'
       : 'default';
-  const monoInput = numeric || decimal;
+  const numericInput = numeric || decimal;
 
   return (
     <View style={styles.group}>
-      {label ? (
-        <Typography variant="label" color="textSecondary">
-          {label}
-        </Typography>
-      ) : null}
+      {label ? <Typography variant="bodyStrong">{label}</Typography> : null}
 
       <View
         style={[
@@ -112,7 +118,14 @@ export const TextField = ({
           autoCapitalize={autoCapitalize}
           autoCorrect={autoCorrect}
           accessibilityLabel={label}
-          style={[styles.input, monoInput && styles.numericInput]}
+          // The hint is read on the input, where the reader is; the line
+          // under the field is hidden from TalkBack so it is not read twice.
+          accessibilityHint={error ? undefined : hint}
+          style={[
+            styles.input,
+            (mono || numericInput) && styles.monoInput,
+            numericInput && styles.numericInput,
+          ]}
         />
         {unit ? (
           <Typography variant="label" color="textTertiary">
@@ -129,6 +142,16 @@ export const TextField = ({
           testID={testID ? `${testID}-error` : undefined}
         >
           {error}
+        </Typography>
+      ) : hint ? (
+        <Typography
+          variant="label"
+          color="textSecondary"
+          accessibilityElementsHidden
+          importantForAccessibility="no"
+          testID={testID ? `${testID}-hint` : undefined}
+        >
+          {hint}
         </Typography>
       ) : null}
     </View>

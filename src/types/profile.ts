@@ -1,6 +1,6 @@
 /**
- * Domain model for the local profile: who the Profile screen says the
- * shooter is, and the preferences Settings changes (display, and the
+ * Domain model for the local profile: who Setup's profile box says the
+ * shooter is, and the preferences Setup changes (display, and the
  * timer's start delay and beep volume). There is one
  * profile per install and no account behind it. Persistence is handled by
  * `ProfileStorageService`, which also normalises the name and handle and

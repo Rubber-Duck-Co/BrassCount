@@ -66,15 +66,14 @@ const metrics = {
 const Tab = createBottomTabNavigator<TestTabParamList>();
 const SetupStack = createNativeStackNavigator<SetupStackParamList>();
 
-/** Stands in for the other tabs and the other Setup screens. */
+/** Stands in for the other tabs and the Setup root. */
 const Blank = () => null;
 
-/** The Setup tab, as the app has it, with blank screens beside Calibration. */
+/** The Setup tab, as the app has it, with a blank root under Calibration. */
 const Setup = () => (
   <SetupStack.Navigator screenOptions={{ headerShown: false }}>
     <SetupStack.Screen name="SetupHome" component={Blank} />
     <SetupStack.Screen name="Calibration" component={CalibrationScreen} />
-    <SetupStack.Screen name="Settings" component={Blank} />
   </SetupStack.Navigator>
 );
 

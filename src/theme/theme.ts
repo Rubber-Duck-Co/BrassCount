@@ -108,6 +108,10 @@ export const sizes = {
   sheetRowMin: 56,
   /** The most a sheet's options take before they scroll. */
   sheetListMax: 380,
+  /** The shooter's square in Setup's profile box. */
+  avatar: 52,
+  /** Setup's profile box; a minimum. */
+  profileBoxMin: 72,
   /** A drill in the Drills library; a minimum. */
   drillRowMin: 72,
   /** The Delete action a swiped list row shows, at the default font size. */

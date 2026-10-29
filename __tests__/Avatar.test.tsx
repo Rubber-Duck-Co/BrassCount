@@ -49,6 +49,20 @@ describe('Avatar', () => {
     expect(renderAvatar('Marty').root.findAllByType(Icon)).toHaveLength(0);
   });
 
+  it('sets the initials in stencil, in the colour drawn on an Ink fill', () => {
+    const initials =
+      renderAvatar('Marty McFly').root.findAllByType(Typography)[0];
+
+    expect(initials.props.variant).toBe('stencilSmall');
+    expect(initials.props.color).toBe('textOnInverse');
+  });
+
+  it('draws the glyph in the same colour as the initials', () => {
+    expect(renderAvatar('').root.findAllByType(Icon)[0].props.color).toBe(
+      'textOnInverse',
+    );
+  });
+
   it('keeps the initials out of the screen reader’s way', () => {
     const initials =
       renderAvatar('Marty McFly').root.findAllByType(Typography)[0];
