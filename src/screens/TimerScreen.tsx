@@ -18,8 +18,10 @@ import {
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import {
   useIsFocused,
+  useRoute,
   useNavigation,
   type CompositeNavigationProp,
+  type RouteProp,
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -208,6 +210,7 @@ const failureAction = (
 export const TimerScreen = () => {
   const styles = useThemedStyles(createStyles);
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Timer'>>();
   const { startDelay } = useTimerSettings();
 
   const { state: drillsState, reload: reloadDrills } = useDrills();
@@ -389,6 +392,26 @@ export const TimerScreen = () => {
   // away at a stray touch, and Stop already ends it. Nor while a run is
   // being saved, which it would replace.
   const resetLocked = running || pending || saving;
+
+  // A Load on the Drills tab names a drill to put on the timer. It is
+  // cleared at once, so a drill picked here later is never overridden by
+  // it, and ignored while the drill is locked by a run. An id that is no
+  // longer stored needs nothing more: the screen falls back as it does for
+  // any drill that goes. It is set before the drills read on focus have
+  // answered, so a drill made moments ago appears once they do.
+  const loadedDrillId = route.params?.drillId;
+  useEffect(() => {
+    if (loadedDrillId === undefined) {
+      return;
+    }
+    navigation.setParams({ drillId: undefined });
+    if (!resetLocked) {
+      selectDrill(loadedDrillId);
+      // Held even when it is the drill already on show as the newest, so a
+      // drill made later does not take its place.
+      setSelectedDrillId(loadedDrillId);
+    }
+  }, [loadedDrillId, navigation, resetLocked, selectDrill]);
 
   const drillPar = totalPar(plan);
   const finished = phase === 'finished' && result !== null;

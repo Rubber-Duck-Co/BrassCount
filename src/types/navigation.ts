@@ -13,7 +13,11 @@ export type RootStackParamList = {
  * opened without naming a screen shows whatever its stack last showed.
  */
 export type MainTabParamList = {
-  Timer: undefined;
+  /**
+   * `drillId` is the drill a Load on the Drills tab puts on the timer. The
+   * Timer clears it once used, so it never overrides a later pick.
+   */
+  Timer: { drillId?: string } | undefined;
   Drills: NavigatorScreenParams<DrillsStackParamList> | undefined;
   Log: NavigatorScreenParams<LogStackParamList> | undefined;
   Setup: NavigatorScreenParams<SetupStackParamList> | undefined;

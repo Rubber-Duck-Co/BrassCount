@@ -11,6 +11,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   NavigationContainer,
   createNavigationContainerRef,
+  type NavigationContainerRefWithCurrent,
   type NavigatorScreenParams,
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -81,7 +82,8 @@ const prepareMock = jest.mocked(StartSequenceService.prepare);
 const mockedNativeAudioCapture = jest.mocked(NativeAudioCapture);
 
 type TestTabParamList = {
-  Timer: undefined;
+  /** A Load from the Drills tab names the drill to put on the timer. */
+  Timer: { drillId?: string } | undefined;
   Elsewhere: undefined;
   /** The tab whose editor the empty library sends the shooter to. */
   Drills: NavigatorScreenParams<DrillsStackParamList> | undefined;
@@ -157,6 +159,8 @@ const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
+
+type TestNavigationRef = NavigationContainerRefWithCurrent<TestTabParamList>;
 
 const Tab = createBottomTabNavigator<TestTabParamList>();
 const DrillsStack = createNativeStackNavigator<DrillsStackParamList>();
@@ -1562,6 +1566,116 @@ describe('TimerScreen', () => {
     });
   });
 
+  describe('loading a drill from the Drills tab', () => {
+    /** What Load on a Drills row does: switch to the Timer, naming the drill. */
+    const load = async (
+      navigationRef: TestNavigationRef,
+      drillId: string,
+    ): Promise<void> => {
+      await act(async () => {
+        navigationRef.navigate('Timer', { drillId });
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      await settle();
+    };
+
+    const timerParams = (navigationRef: TestNavigationRef) =>
+      navigationRef.getRootState()?.routes.find(route => route.name === 'Timer')
+        ?.params;
+
+    it('puts the drill a Load names on the timer', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(navigationRef.getCurrentRoute()?.name).toBe('Timer');
+      expect(first(tree, 'select-drill').props.value).toBe(drillIds.Mozambique);
+      expect(textsOf(tree, 'btn-drill-box')).toContain('Mozambique');
+    });
+
+    it('clears the Load once it is used', async () => {
+      const { navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(timerParams(navigationRef)).toEqual({ drillId: undefined });
+    });
+
+    it('keeps a drill picked after a Load when the tab is revisited', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+      await load(navigationRef, drillIds.Mozambique);
+
+      await pick(tree, 'Dot Torture');
+      await goTo('Elsewhere');
+      await goTo('Timer');
+      await settle();
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Dot Torture'],
+      );
+    });
+
+    it('keeps the loaded drill on the timer after a newer drill is made', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+      // Already on show, as the drill changed most recently.
+      await load(navigationRef, drillIds['Bill Drill']);
+      await goTo('Elsewhere');
+
+      await saveDrill(
+        { name: 'Box Drill', steps: [{ type: 'shot', par: 2 }] },
+        { getTimestamp: () => '2026-10-02T08:00:00.000Z' },
+      );
+      await goTo('Timer');
+      await settle();
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Bill Drill'],
+      );
+    });
+
+    it('loads the same drill again after another was picked', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await load(navigationRef, drillIds.Mozambique);
+      await pick(tree, 'Dot Torture');
+      await goTo('Elsewhere');
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(first(tree, 'select-drill').props.value).toBe(drillIds.Mozambique);
+    });
+
+    it('falls back to the newest drill when the loaded one no longer exists', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+      const gone = drillIds.Mozambique;
+      await deleteDrillById(gone);
+
+      await load(navigationRef, gone);
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Bill Drill'],
+      );
+      expect(has(tree, 'btn-start')).toBe(true);
+    });
+
+    it('ignores a Load while a run is on, the drill being locked', async () => {
+      const { tree, navigationRef } = await renderScreen();
+      await startRun(tree);
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Bill Drill'],
+      );
+      expect(buttonLabel(tree)).toBe('Stop timer');
+      expect(timerParams(navigationRef)).toEqual({ drillId: undefined });
+    });
+  });
+
   describe('saving a run', () => {
     /** Failure to Stop, start to finish: 2.20 s over three shots. */
     const completeRun = async (tree: ReactTestRenderer): Promise<void> => {
@@ -1792,6 +1906,32 @@ describe('TimerScreen', () => {
       expect(has(tree, 'btn-start')).toBe(false);
       expect(first(tree, 'btn-reset').props.disabled).toBe(true);
       expect(pickerLocked(tree)).toBe(true);
+    });
+
+    it('drops a Load from the Drills tab while the run is being saved', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await completeRun(tree);
+      jest
+        .spyOn(AsyncStorage, 'setItem')
+        .mockImplementationOnce(() => new Promise(() => {}));
+      await press(tree, 'btn-save-run');
+      await goTo('Elsewhere');
+
+      await act(async () => {
+        navigationRef.navigate('Timer', { drillId: drillIds.Mozambique });
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      await settle();
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Failure to Stop'],
+      );
+      expect(first(tree, 'btn-save-run').props.label).toBe('Saving…');
+      // Dropped, not held: nothing changes the drill once the save is done.
+      expect(
+        navigationRef.getRootState()?.routes.find(r => r.name === 'Timer')
+          ?.params,
+      ).toEqual({ drillId: undefined });
     });
 
     it('drops an unsaved run when another drill is picked', async () => {

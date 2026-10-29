@@ -144,4 +144,16 @@ describe('describeDrill', () => {
   it('leaves the par out of a drill with an untimed step', () => {
     expect(describeDrill({ shotCount: 1, totalPar: null })).toBe('1 shot');
   });
+
+  it('marks a drill with an untimed step as untimed when asked', () => {
+    expect(
+      describeDrill({ shotCount: 2, totalPar: null }, { markUntimed: true }),
+    ).toBe('2 shots · untimed');
+  });
+
+  it('gives the par as usual when asked to mark an untimed drill', () => {
+    expect(
+      describeDrill({ shotCount: 3, totalPar: 2.5 }, { markUntimed: true }),
+    ).toBe('3 shots · Par 2.50s');
+  });
 });
