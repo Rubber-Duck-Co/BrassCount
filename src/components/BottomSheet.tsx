@@ -10,6 +10,14 @@ import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import { Icon } from './Icon';
 import { Typography } from './Typography';
 
+/**
+ * The most of the window's height a sheet's scrolling content may take.
+ * The rest is left for the frame itself (handle, title row, bottom inset),
+ * so the title row and its close button stay on screen at a large font or
+ * in landscape.
+ */
+export const SHEET_CONTENT_MAX_HEIGHT_RATIO = 0.6;
+
 type BottomSheetProps = {
   visible: boolean;
   /** Called by the backdrop, the close button and the system back gesture. */

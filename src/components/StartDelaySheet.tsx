@@ -1,7 +1,6 @@
 import { useState } from 'react';
 
 import {
-  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -23,7 +22,7 @@ import {
   stepStartDelay,
 } from '@utils/startSettings';
 
-import { BottomSheet } from './BottomSheet';
+import { BottomSheet, SHEET_CONTENT_MAX_HEIGHT_RATIO } from './BottomSheet';
 import { Button } from './Button';
 import { Typography } from './Typography';
 
@@ -36,76 +35,32 @@ type StartDelaySheetProps = {
   onClose: () => void;
 };
 
-/** The most of the screen's height the sheet's contents take up. */
-const SHEET_MAX_HEIGHT_RATIO = 0.8;
-
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    body: {
-      paddingHorizontal: theme.spacing.lg,
-      gap: theme.spacing.md,
-    },
+    content: { gap: theme.spacing.md },
     // Label above, controls below: on one line the label is squeezed to a
     // sliver at the largest text size.
     stepper: { gap: theme.spacing.sm },
-    stepperLabel: { gap: 2 },
+    stepperLabel: { gap: theme.spacing.xxs },
     stepperControls: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: theme.spacing.md,
     },
+    // A square ruled box, as wide as it is tall at the default font size.
     stepButton: {
-      width: theme.sizes.touchTarget,
-      height: theme.sizes.touchTarget,
-      borderRadius: theme.radius.md,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surfaceElevated,
-      alignItems: 'center',
-      justifyContent: 'center',
+      minWidth: theme.sizes.touchTarget,
+      paddingHorizontal: theme.spacing.none,
     },
-    // Matches a disabled `Button`.
-    stepButtonDisabled: { opacity: 0.5 },
-    stepValue: {
-      flex: 1,
-      textAlign: 'center',
+    stepValue: { flex: 1 },
+    // Side by side, like a confirm sheet's Cancel and confirm.
+    actions: {
+      flexDirection: 'row',
+      gap: theme.spacing.inset,
+      marginTop: theme.spacing.sm,
     },
-    actions: { gap: theme.spacing.sm },
+    action: { flex: 1, minHeight: theme.sizes.sheetActionMin },
   });
-
-type StepButtonProps = {
-  symbol: string;
-  accessibilityLabel: string;
-  disabled: boolean;
-  onPress: () => void;
-  testID: string;
-};
-
-const StepButton = ({
-  symbol,
-  accessibilityLabel,
-  disabled,
-  onPress,
-  testID,
-}: StepButtonProps) => {
-  const styles = useThemedStyles(createStyles);
-
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ disabled }}
-      style={[styles.stepButton, disabled && styles.stepButtonDisabled]}
-      testID={testID}
-    >
-      <Typography variant="title" color="textPrimary">
-        {symbol}
-      </Typography>
-    </Pressable>
-  );
-};
 
 type StepperProps = {
   label: string;
@@ -137,22 +92,25 @@ const Stepper = ({
     <View style={styles.stepper}>
       <View style={styles.stepperLabel}>
         <Typography variant="bodyStrong">{label}</Typography>
-        <Typography variant="caption" color="textTertiary">
+        <Typography variant="caption" color="textSecondary">
           {hint}
         </Typography>
       </View>
       <View style={styles.stepperControls}>
-        <StepButton
-          symbol="−"
+        <Button
+          label="−"
+          variant="secondary"
           accessibilityLabel={`Shorten the ${subject} delay`}
           disabled={valueMs <= floorMs}
           onPress={() =>
             onChange(stepStartDelay(valueMs, -1, floorMs, ceilingMs))
           }
+          style={styles.stepButton}
           testID={`${testID}-shorter`}
         />
         <Typography
           variant="metric"
+          align="center"
           style={styles.stepValue}
           accessibilityLabel={`${label} delay, ${spokenStartDelay(valueMs)}`}
           accessibilityLiveRegion="polite"
@@ -160,13 +118,15 @@ const Stepper = ({
         >
           {formatStartDelay(valueMs)}
         </Typography>
-        <StepButton
-          symbol="+"
+        <Button
+          label="+"
+          variant="secondary"
           accessibilityLabel={`Lengthen the ${subject} delay`}
           disabled={valueMs >= ceilingMs}
           onPress={() =>
             onChange(stepStartDelay(valueMs, 1, floorMs, ceilingMs))
           }
+          style={styles.stepButton}
           testID={`${testID}-longer`}
         />
       </View>
@@ -207,31 +167,25 @@ export const StartDelaySheet = ({
       visible={visible}
       onClose={onClose}
       closeLabel="Close start delay picker"
-      backdropTestID="btn-start-delay-close"
+      title="Start delay"
+      closeTestID="btn-start-delay-close"
+      backdropTestID="btn-start-delay-backdrop"
     >
       {/* Scrolls when large text makes the sheet taller than the screen
           allows, so Save stays reachable. */}
       <ScrollView
-        style={{ maxHeight: height * SHEET_MAX_HEIGHT_RATIO }}
-        contentContainerStyle={styles.body}
+        style={{ maxHeight: height * SHEET_CONTENT_MAX_HEIGHT_RATIO }}
+        contentContainerStyle={styles.content}
+        bounces={false}
       >
-        <View>
-          <Typography
-            variant="overline"
-            color="textSecondary"
-            accessibilityRole="header"
-          >
-            START DELAY
-          </Typography>
-          <Typography
-            variant="body"
-            color="textSecondary"
-            accessibilityLabel={spokenStartDelayRange(draft)}
-            testID="text-start-delay-summary"
-          >
-            {describeStartDelay(draft)}
-          </Typography>
-        </View>
+        <Typography
+          variant="body"
+          color="textSecondary"
+          accessibilityLabel={spokenStartDelayRange(draft)}
+          testID="text-start-delay-summary"
+        >
+          {describeStartDelay(draft)}
+        </Typography>
 
         <Stepper
           label="Shortest"
@@ -254,15 +208,18 @@ export const StartDelaySheet = ({
 
         <View style={styles.actions}>
           <Button
-            label="Save"
-            onPress={() => onSave(draft)}
-            testID="btn-start-delay-save"
-          />
-          <Button
             label="Cancel"
             variant="secondary"
             onPress={onClose}
+            style={styles.action}
             testID="btn-start-delay-cancel"
+          />
+          <Button
+            label="Save"
+            variant="primary"
+            onPress={() => onSave(draft)}
+            style={styles.action}
+            testID="btn-start-delay-save"
           />
         </View>
       </ScrollView>
