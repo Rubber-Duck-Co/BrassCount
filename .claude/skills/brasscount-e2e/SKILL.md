@@ -64,7 +64,7 @@ For formatting, check only the files the branch touches (`npx prettier --check <
    - Otherwise start it yourself in the background (`npx react-native start --port 8081`) and note that you started it. Give the background command a long timeout (the full run takes well over an hour): if the background task is stopped at its time limit, the node process can survive it, orphaned, still holding the port. Either way, find it for teardown by its port (`netstat -ano | grep :8081` for the PID), not by the task.
    - If the app later sits on "Loading from 10.0.2.2:8081…", the user's Metro is wedged: see the memory note for the 8082 workaround; do not stop theirs.
 4. `$D mic grant`, `$D synth silent`, `$D log-clear`, `$D launch`. Wait a few seconds before the first tap: the tab bar appears a moment before the app takes taps.
-5. Baseline. Write down, from the screens: Profile name, handle and the Runs / Drills counters; Settings' Appearance and Level units; History's Runs / Drills counters; the Drills tab's count; and `adb shell settings get system font_scale`. Teardown checks these come back.
+5. Baseline. Write down, from the screens: Setup's profile name, handle and runs / drills line, Appearance and Level units; History's Runs / Drills counters; the Drills tab's count; and `adb shell settings get system font_scale`. Teardown checks these come back.
 
 ### If a patch anchor is missing
 
@@ -104,11 +104,11 @@ Judge each check against CLAUDE.md's description of the intended behaviour. When
 
 Do every step, in this order, even when testing stopped early.
 
-1. Put back what you changed on the device: profile name and handle (through the Profile screen), Appearance and Level units (through Settings), `cmd uimode night no` if you changed it, the original font scale (force-stop the app first).
+1. Put back what you changed on the device: profile name and handle Appearance and Level units (all through Setup), `cmd uimode night no` if you changed it, the original font scale (force-stop the app first).
 2. `$P synth off`. The native code is now back to normal in the repo.
 3. `$D stop-app` first: with the app open, Metro's Fast Refresh loads the cleanup the moment it is applied, and step 4 then logs `removed sessions=0 drills=0`. Then `$P cleanup on`, and rebuild and install from Git Bash as in step 3.2. This one build both drops the patched native code from the emulator and loads the cleanup. Check `$D metro` after the build and restart it as in step 3.3 if it died.
 4. `$D log-clear`, `$D launch`, wait ~5 s, `$D log`. Expect a line `BRASSCOUNT-E2E removed sessions=N drills=M; left drills=… sessions=…`. A `cleanup failed` line is a finding; report it and the data left behind.
-5. Check the baseline on screen: Drills count, History Runs / Drills and Profile counters and the profile fields all match what you wrote down. No `ZZE2E` drill is listed.
+5. Check the baseline on screen: Drills count, History Runs / Drills and Setup's profile counts and the profile fields all match what you wrote down. No `ZZE2E` drill is listed.
 6. `$P cleanup off`, then `$P status` must say no patched files and no e2e markers. `git status --porcelain` must match the preflight snapshot exactly. If it does not, fix that before anything else; leaving test code in the user's tree is the worst outcome of this skill.
 7. Relaunch once (`$D stop-app`, `$D launch`, wait until the Timer shows) while Metro serves the clean bundle. The device caches the last dev bundle it loaded, and until it does this the cached one still imports `e2eCleanup`, so the next launch without Metro, or with the user's own Metro on another branch, fails on the missing file.
 8. `$D synth off` is unnecessary (the installed build no longer reads it), but remove the file anyway: `adb shell run-as com.brasscount.app rm -f files/e2e-synth.txt`.

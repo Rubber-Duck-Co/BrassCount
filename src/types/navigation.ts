@@ -43,14 +43,12 @@ export type LogStackParamList = {
 };
 
 /**
- * The Setup tab. Its root is the Profile screen until the Setup screen
- * replaces it; Calibration and Settings are pushed from there.
+ * The Setup tab: the profile and every setting, with Calibration pushed
+ * over it.
  */
 export type SetupStackParamList = {
   SetupHome: undefined;
   Calibration: undefined;
-  /** App preferences. */
-  Settings: undefined;
 };
 
 declare global {

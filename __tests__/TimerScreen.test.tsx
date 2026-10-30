@@ -183,7 +183,6 @@ const StubSetup = () => (
   <SetupStack.Navigator screenOptions={{ headerShown: false }}>
     <SetupStack.Screen name="SetupHome" component={Blank} />
     <SetupStack.Screen name="Calibration" component={Blank} />
-    <SetupStack.Screen name="Settings" component={Blank} />
   </SetupStack.Navigator>
 );
 

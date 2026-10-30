@@ -1,9 +1,11 @@
 import { DBFS_MIN } from '../src/types/calibration';
 import type {
   CalibrationSamples,
+  CalibrationState,
   SoundCalibration,
 } from '../src/types/calibration';
 import {
+  countCalibratedSounds,
   deriveCalibration,
   isAudibleSample,
   MIN_SAMPLE_DBFS,
@@ -119,5 +121,43 @@ describe('testOutcome', () => {
   it('fails a test that is quieter than the threshold', () => {
     expect(testOutcome(calibrated(-30, -30.1))).toBe('failed');
     expect(testOutcome(calibrated(-30, DBFS_MIN))).toBe('failed');
+  });
+});
+
+describe('countCalibratedSounds', () => {
+  const uncalibrated: SoundCalibration = {
+    status: 'uncalibrated',
+    thresholdDbfs: null,
+    lastTestDbfs: null,
+  };
+
+  it('counts none before any sound is calibrated', () => {
+    const state: CalibrationState = {
+      shot: uncalibrated,
+      reload: uncalibrated,
+      rack: uncalibrated,
+    };
+
+    expect(countCalibratedSounds(state)).toBe(0);
+  });
+
+  it('counts only the sounds that have a threshold', () => {
+    const state: CalibrationState = {
+      shot: calibrated(-20, null),
+      reload: uncalibrated,
+      rack: calibrated(-25, -10),
+    };
+
+    expect(countCalibratedSounds(state)).toBe(2);
+  });
+
+  it('counts every sound once all are calibrated', () => {
+    const state: CalibrationState = {
+      shot: calibrated(-20, null),
+      reload: calibrated(-30, null),
+      rack: calibrated(-25, null),
+    };
+
+    expect(countCalibratedSounds(state)).toBe(3);
   });
 });

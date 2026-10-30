@@ -7,7 +7,7 @@ import { DrillStorageService } from '@services/drillStorage';
 import { ProfileStorageService } from '@services/profileStorage';
 import { SessionStorageService } from '@services/sessionStorage';
 
-/** Everything the Profile screen shows that comes out of storage. */
+/** Everything Setup's profile box shows that comes out of storage. */
 export type ProfileOverview = {
   profile: Profile;
   /** Saved sessions: one per completed run of a drill. */
@@ -26,6 +26,12 @@ export type UseProfileOverviewResult = {
   /** Read everything again from scratch, e.g. from a "Try again" button. */
   reload: () => void;
   /**
+   * Read everything again, keeping what is shown until the new values
+   * arrive, as a return to the screen does. For a change made on the same
+   * screen, such as clearing the run history.
+   */
+  refresh: () => void;
+  /**
    * Save changes to the profile and show the stored result. Rejects with
    * the service's `ProfileStorageError`, leaving what is shown untouched.
    */
@@ -33,8 +39,8 @@ export type UseProfileOverviewResult = {
 };
 
 /**
- * Loads the local profile and the run / drill counts for the Profile
- * screen, and reads them again each time the screen regains focus: runs
+ * Loads the local profile and the run / drill counts for Setup's profile
+ * box, and reads them again each time the screen regains focus: runs
  * and drills are saved from other tabs while this one stays mounted.
  *
  * A refresh keeps the current values on screen until the new ones arrive,
@@ -112,6 +118,10 @@ export const useProfileOverview = (): UseProfileOverviewResult => {
     load().catch(() => {});
   }, [load]);
 
+  const refresh = useCallback(() => {
+    load().catch(() => {});
+  }, [load]);
+
   const saveProfile = useCallback(
     async (changes: ProfileChanges): Promise<Profile> => {
       const profile = await ProfileStorageService.update(changes);
@@ -126,5 +136,5 @@ export const useProfileOverview = (): UseProfileOverviewResult => {
     [],
   );
 
-  return { state, reload, saveProfile };
+  return { state, reload, refresh, saveProfile };
 };

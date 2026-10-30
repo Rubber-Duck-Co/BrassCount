@@ -24,7 +24,7 @@ export type UseRunHistoryClearResult = {
 };
 
 /**
- * The Settings screen's Data section: counts the stored runs each time the
+ * Setup's Data section: counts the stored runs each time the
  * screen gains focus, and clears them.
  *
  * The count is one per stored key, the same keys `clearSessions` removes,

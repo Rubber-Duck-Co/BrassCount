@@ -1,7 +1,7 @@
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 
 import type { Theme } from '@/theme/theme';
-import { useThemedStyles } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
 import { Icon } from './Icon';
 import { Typography } from './Typography';
@@ -9,15 +9,16 @@ import { Typography } from './Typography';
 type AvatarProps = {
   /**
    * Full name. Reduced to up to two initials; a blank name shows a person
-   * glyph instead, so the circle is never empty.
+   * glyph instead, so the square is never empty.
    */
   name: string;
+  /** Width and height. Defaults to the `avatar` size token. */
   size?: number;
   onPress?: () => void;
   testID?: string;
 };
 
-/** How much of the circle the person glyph fills. */
+/** How much of the square the person glyph fills. */
 const GLYPH_SCALE = 0.5;
 
 const initialsOf = (name: string) =>
@@ -36,29 +37,33 @@ const createStyles = (theme: Theme) =>
     base: {
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.primarySoft,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.inverse,
+      borderRadius: theme.radius.none,
     },
   });
 
-/** Initials avatar. Avoids bundling image assets for a placeholder. */
-export const Avatar = ({ name, size = 40, onPress, testID }: AvatarProps) => {
+/**
+ * The Range Card initials square: stencil initials in Paper on an Ink
+ * fill. Avoids bundling image assets for a placeholder.
+ */
+export const Avatar = ({ name, size, onPress, testID }: AvatarProps) => {
   const styles = useThemedStyles(createStyles);
+  const theme = useTheme();
   const initials = initialsOf(name);
+  const side = size ?? theme.sizes.avatar;
 
-  const sizing = { width: size, height: size, borderRadius: size / 2 };
+  const sizing = { width: side, height: side };
   const content = initials ? (
     <Typography
-      variant={size >= 64 ? 'title' : 'bodyStrong'}
-      color="primary"
+      variant="stencilSmall"
+      color="textOnInverse"
       accessibilityElementsHidden
       importantForAccessibility="no"
     >
       {initials}
     </Typography>
   ) : (
-    <Icon name="user" size={size * GLYPH_SCALE} color="primary" />
+    <Icon name="user" size={side * GLYPH_SCALE} color="textOnInverse" />
   );
 
   if (onPress) {

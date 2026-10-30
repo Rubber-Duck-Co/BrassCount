@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { Dimensions, StyleSheet } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
@@ -69,6 +69,79 @@ describe('ListRow', () => {
     expect(host(tree, 'row').props).toMatchObject({
       accessibilityRole: 'button',
       accessibilityLabel: 'Bill Drill, 3 runs',
+    });
+  });
+
+  describe('with a value at a large font', () => {
+    const initialWindow = Dimensions.get('window');
+
+    /** Reports a new system font scale the way the OS does. */
+    const setFontScale = (fontScale: number): void => {
+      act(() => {
+        Dimensions.set({
+          window: { ...Dimensions.get('window'), fontScale },
+          screen: Dimensions.get('screen'),
+        });
+      });
+    };
+
+    afterEach(() => {
+      setFontScale(initialWindow.fontScale);
+    });
+
+    /** Whether the value is drawn in the title's column, under it. */
+    const valueUnderTitle = (tree: ReactTestRenderer): boolean => {
+      const texts = tree.root.findAllByType(Typography);
+      const title = texts.find(node => node.props.children === 'Start delay');
+      const value = texts.find(
+        node => node.props.children === 'Random, 1.5 to 10 s',
+      );
+      if (title === undefined || value === undefined) {
+        throw new Error('the title or value is not rendered');
+      }
+      return title.parent === value.parent;
+    };
+
+    const renderRow = () =>
+      render(
+        <ListRow
+          title="Start delay"
+          value="Random, 1.5 to 10 s"
+          onPress={() => {}}
+          chevron
+          testID="row"
+        />,
+      );
+
+    it('puts the value under the title, so neither squeezes the other out', () => {
+      setFontScale(2);
+
+      const tree = renderRow();
+
+      expect(valueUnderTitle(tree)).toBe(true);
+      expect(
+        tree.root
+          .findAllByType(Typography)
+          .find(node => node.props.children === 'Start delay')?.props
+          .numberOfLines,
+      ).toBe(2);
+    });
+
+    it('keeps the value beside the title at the default font', () => {
+      setFontScale(1);
+
+      const tree = renderRow();
+
+      expect(valueUnderTitle(tree)).toBe(false);
+    });
+
+    it('follows a font scale changed while the row is shown', () => {
+      setFontScale(1);
+      const tree = renderRow();
+
+      setFontScale(2);
+
+      expect(valueUnderTitle(tree)).toBe(true);
     });
   });
 
