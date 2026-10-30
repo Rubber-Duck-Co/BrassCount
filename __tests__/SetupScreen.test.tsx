@@ -1,4 +1,4 @@
-import { AccessibilityInfo, Text } from 'react-native';
+import { AccessibilityInfo, Modal, Text } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -9,6 +9,8 @@ import {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
+import { BottomSheet } from '../src/components/BottomSheet';
+import { Button } from '../src/components/Button';
 import { SectionHeader } from '../src/components/SectionHeader';
 import { useCalibration } from '../src/hooks/useCalibration';
 import { useLevelUnit } from '../src/hooks/useLevelUnit';
@@ -228,6 +230,25 @@ const sectionTitles = (tree: ReactTestRenderer): string[] =>
 const press = async (tree: ReactTestRenderer, testID: string) => {
   await act(async () => {
     byTestId(tree, testID)[0].props.onPress();
+  });
+  await settle();
+};
+
+/** The sheet that is up: the one visible `Modal`. */
+const visibleSheet = (tree: ReactTestRenderer) => {
+  const open = tree.root
+    .findAllByType(Modal)
+    .filter(modal => modal.props.visible === true);
+  if (open.length !== 1) {
+    throw new Error(`expected one open sheet, found ${open.length}`);
+  }
+  return open[0];
+};
+
+/** The system back gesture, or Escape on a keyboard. */
+const pressBack = async (tree: ReactTestRenderer) => {
+  await act(async () => {
+    visibleSheet(tree).props.onRequestClose();
   });
   await settle();
 };
@@ -1497,6 +1518,147 @@ describe('SetupScreen', () => {
     });
   });
 
+  describe('the preference sheets', () => {
+    type SheetCase = {
+      title: string;
+      /** The Setup row that opens the sheet. */
+      row: string;
+      /** The sheet's close button is `btn-<id>-close`, its backdrop `btn-<id>-backdrop`. */
+      id: string;
+      /** A control the sheet shows only while it is up. */
+      probe: string;
+      /** A control pressed before dismissing, whose change must not be kept. */
+      edit?: string;
+    };
+
+    const SHEETS: SheetCase[] = [
+      {
+        title: 'Appearance',
+        row: 'row-appearance',
+        id: 'appearance',
+        probe: 'opt-appearance-dark',
+      },
+      {
+        title: 'Level units',
+        row: 'row-level-unit',
+        id: 'level-unit',
+        probe: 'opt-level-unit-dbfs',
+      },
+      {
+        title: 'Sensitivity',
+        row: 'row-sensitivity',
+        id: 'sensitivity',
+        probe: 'opt-sensitivity-high',
+      },
+      {
+        title: 'Start delay',
+        row: 'row-start-delay',
+        id: 'start-delay',
+        probe: 'btn-start-delay-save',
+        edit: 'stepper-start-delay-max-longer',
+      },
+      {
+        title: 'Beep volume',
+        row: 'row-beep-volume',
+        id: 'beep-volume',
+        probe: 'btn-test-beep',
+      },
+    ];
+
+    const DISMISSALS: [
+      string,
+      (tree: ReactTestRenderer, id: string) => Promise<void>,
+    ][] = [
+      ['the close button', (tree, id) => press(tree, `btn-${id}-close`)],
+      ['the backdrop', (tree, id) => press(tree, `btn-${id}-backdrop`)],
+      ['back or Escape', tree => pressBack(tree)],
+    ];
+
+    describe.each(SHEETS)('$title', ({ title, row, id, probe, edit }) => {
+      it('rises on the shared sheet frame', async () => {
+        const { tree } = await renderScreen();
+
+        await press(tree, row);
+
+        // `visibleSheet` throws unless exactly one modal is open, so the
+        // one open modal is the frame's own: no sheet draws its own.
+        visibleSheet(tree);
+        const openFrames = tree.root
+          .findAllByType(BottomSheet)
+          .filter(sheet => sheet.props.visible === true);
+        expect(openFrames).toHaveLength(1);
+      });
+
+      it(`is titled "${title}" beside a close button`, async () => {
+        const { tree } = await renderScreen();
+
+        await press(tree, row);
+
+        const sheet = visibleSheet(tree);
+        const headings = sheet.findAll(
+          node =>
+            typeof node.type === 'string' &&
+            node.props.accessibilityRole === 'header',
+        );
+        expect(headings.map(node => node.props.accessibilityLabel)).toEqual([
+          title,
+        ]);
+        expect(
+          byTestId(tree, `btn-${id}-close`)[0].props.accessibilityRole,
+        ).toBe('button');
+      });
+
+      it.each(DISMISSALS)(
+        'closes without a change from %s',
+        async (_how, dismiss) => {
+          const { tree } = await renderScreen();
+          await press(tree, row);
+          if (edit !== undefined) {
+            await press(tree, edit);
+          }
+
+          await dismiss(tree, id);
+
+          expect(has(tree, probe)).toBe(false);
+          expect((await loadProfile()).updatedAt).toBeNull();
+        },
+      );
+    });
+
+    /** The sheet's buttons, in the order they are drawn. */
+    const sheetButtons = (tree: ReactTestRenderer, testIDs: string[]) =>
+      visibleSheet(tree)
+        .findAllByType(Button)
+        .filter(button => testIDs.includes(button.props.testID))
+        .map(button => [button.props.testID, button.props.variant]);
+
+    it('puts Cancel before Save on the start delay sheet, Save as the main action', async () => {
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-start-delay');
+
+      expect(
+        sheetButtons(tree, ['btn-start-delay-cancel', 'btn-start-delay-save']),
+      ).toEqual([
+        ['btn-start-delay-cancel', 'secondary'],
+        ['btn-start-delay-save', 'primary'],
+      ]);
+    });
+
+    it('puts Test beep before Done on the beep volume sheet, Done as the main action', async () => {
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-beep-volume');
+
+      expect(
+        sheetButtons(tree, ['btn-test-beep', 'btn-beep-volume-done']),
+      ).toEqual([
+        ['btn-test-beep', 'secondary'],
+        ['btn-beep-volume-done', 'primary'],
+      ]);
+    });
+  });
+
   describe('Data', () => {
     const SHEET = 'sheet-clear-history';
 
@@ -1675,6 +1837,17 @@ describe('SetupScreen', () => {
       await press(tree, 'row-clear-history');
 
       await press(tree, `${SHEET}-backdrop`);
+
+      expect(isAsking(tree)).toBe(false);
+      expect(await countSessions()).toBe(2);
+    });
+
+    it('deletes nothing when the sheet is closed with back or Escape', async () => {
+      await seedRuns(2);
+      const { tree } = await renderScreen();
+      await press(tree, 'row-clear-history');
+
+      await pressBack(tree);
 
       expect(isAsking(tree)).toBe(false);
       expect(await countSessions()).toBe(2);
