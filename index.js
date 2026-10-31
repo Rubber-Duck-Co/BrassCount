@@ -1,4 +1,6 @@
 /**
+ * App entry point: registers the root component with React Native.
+ *
  * @format
  */
 

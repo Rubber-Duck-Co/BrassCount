@@ -1,3 +1,5 @@
+# Line-ending and binary rules Git applies to files in this repo.
+
 # Check text files out with LF line endings on every platform, whatever
 # core.autocrlf says. Prettier enforces LF (`npm run format:check`), so a
 # CRLF checkout on Windows would fail it on every file.

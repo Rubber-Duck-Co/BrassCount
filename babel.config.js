@@ -1,3 +1,4 @@
+// Babel config: the React Native preset, path aliases and `.env` inlining.
 const moduleResolver = [
   'module-resolver',
   {
