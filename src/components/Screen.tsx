@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 import {
   ScrollView,
@@ -49,6 +49,8 @@ type ScreenProps = {
   centered?: boolean;
   /** Wrap content in a ScrollView. Use for any screen that can overflow. */
   scrollable?: boolean;
+  /** The ScrollView of a `scrollable` screen, to scroll it from the screen. */
+  scrollRef?: Ref<ScrollView>;
   contentStyle?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -236,6 +238,7 @@ export const Screen = ({
   children,
   centered = false,
   scrollable = false,
+  scrollRef,
   contentStyle,
   testID,
 }: ScreenProps) => {
@@ -264,6 +267,7 @@ export const Screen = ({
       {header}
       {scrollable ? (
         <ScrollView
+          ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
