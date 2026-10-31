@@ -29,6 +29,11 @@ type TextFieldProps = {
    * takes the danger border, and announced when it appears.
    */
   error?: string | null;
+  /**
+   * The field sits straight on the Paper ground, not inside a Card: its
+   * box takes the Card fill and its label is a section label, in capitals.
+   */
+  onPaper?: boolean;
   /** A muted line under the field. The error takes its place while shown. */
   hint?: string;
   testID?: string;
@@ -60,6 +65,10 @@ const createStyles = (theme: Theme) =>
       color: theme.colors.textPrimary,
     },
     numericInput: { textAlign: 'right' },
+    fieldOnPaper: { backgroundColor: theme.colors.surface },
+    // Capitals come from the style, not the string, so TalkBack reads the
+    // label as words instead of spelling out the letters.
+    sectionLabel: { textTransform: 'uppercase' },
     disabled: { opacity: 0.5 },
     invalid: { borderColor: theme.colors.danger },
   });
@@ -82,6 +91,7 @@ export const TextField = ({
   autoCapitalize,
   autoCorrect,
   error,
+  onPaper = false,
   hint,
   testID,
 }: TextFieldProps) => {
@@ -97,11 +107,24 @@ export const TextField = ({
 
   return (
     <View style={styles.group}>
-      {label ? <Typography variant="bodyStrong">{label}</Typography> : null}
+      {label ? (
+        onPaper ? (
+          <Typography
+            variant="sectionLabel"
+            color="textSecondary"
+            style={styles.sectionLabel}
+          >
+            {label}
+          </Typography>
+        ) : (
+          <Typography variant="bodyStrong">{label}</Typography>
+        )
+      ) : null}
 
       <View
         style={[
           styles.field,
+          onPaper && styles.fieldOnPaper,
           !editable && styles.disabled,
           error ? styles.invalid : null,
         ]}

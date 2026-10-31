@@ -88,6 +88,22 @@ const STEP_TYPE_LABELS: Record<DrillStepType, string> = {
 export const stepTypeLabel = (type: DrillStepType): string =>
   STEP_TYPE_LABELS[type];
 
+const STEP_TYPE_DESCRIPTIONS: Record<DrillStepType, string> = {
+  draw: 'From the holster',
+  shot: 'One round downrange',
+  reload: 'Magazine change',
+  rack: 'Cycle the slide',
+  transition: 'Move to the next target',
+  holster: 'Make safe',
+};
+
+/**
+ * What a step type means, under its name in the editor and in the step
+ * type sheet: `draw` reads "From the holster".
+ */
+export const stepTypeDescription = (type: DrillStepType): string =>
+  STEP_TYPE_DESCRIPTIONS[type];
+
 /**
  * What to call the step at `position` in an ordered step list.
  *

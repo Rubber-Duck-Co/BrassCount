@@ -1,30 +1,49 @@
 import { useState } from 'react';
 
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 
 import type { Theme } from '@/theme/theme';
 import { MAX_STEP_PAR_SECONDS } from '@/types/drill';
-import { useTheme, useThemedStyles } from '@hooks/useTheme';
+import { useKeyboardHeight } from '@hooks/useKeyboardHeight';
+import { useThemedStyles } from '@hooks/useTheme';
 import { parseParInput } from '@utils/drillDraft';
 import { formatSeconds, spokenSeconds } from '@utils/format';
 
 import { BottomSheet } from './BottomSheet';
 import { Button } from './Button';
-import { Icon } from './Icon';
 import { TextField } from './TextField';
 import { Typography } from './Typography';
 
-/** Tallest the preset list gets before it scrolls, in dp: 7.5 rows. */
-const OPTION_LIST_MAX_HEIGHT = 420;
-const OPTION_MIN_HEIGHT = 56;
+/**
+ * The most of the window's height the preset grid takes before it scrolls,
+ * leaving the title row and the custom field below it on screen at a
+ * large font or in landscape.
+ */
+const PRESET_GRID_MAX_HEIGHT_RATIO = 0.4;
+
+/** Presets side by side in a row of the grid. */
+const PRESET_COLUMNS = 3;
+/**
+ * Presets side by side from `TWO_COLUMN_FONT_SCALE` up: at a third of the
+ * sheet a description such as "Comfortable" no longer fits on a line and
+ * breaks mid-word.
+ */
+const LARGE_TEXT_PRESET_COLUMNS = 2;
+const TWO_COLUMN_FONT_SCALE = 1.5;
 
 type ParPreset = {
-  /** `undefined` is the "No par" row, which leaves the step untimed. */
+  /** `undefined` is the "No par" tile, which leaves the step untimed. */
   seconds: number | undefined;
   description?: string;
 };
 
-/** Step pars offered as one-tap rows under the custom field. */
+/** Step pars offered as one-tap tiles above the custom field. */
 const PAR_PRESETS: readonly ParPreset[] = [
   { seconds: undefined, description: 'Untimed step' },
   { seconds: 0.15, description: 'Very fast split' },
@@ -39,6 +58,17 @@ const PAR_PRESETS: readonly ParPreset[] = [
   { seconds: 3.0 },
 ];
 
+/** The presets cut into rows of `columns`. */
+const presetRows = (columns: number): (readonly ParPreset[])[] =>
+  Array.from({ length: Math.ceil(PAR_PRESETS.length / columns) }, (_, row) =>
+    PAR_PRESETS.slice(row * columns, (row + 1) * columns),
+  );
+
+const PRESET_ROWS = {
+  [PRESET_COLUMNS]: presetRows(PRESET_COLUMNS),
+  [LARGE_TEXT_PRESET_COLUMNS]: presetRows(LARGE_TEXT_PRESET_COLUMNS),
+};
+
 /** Room for the longest par that can be typed, "60.00", and one to spare. */
 const CUSTOM_PAR_MAX_LENGTH = 6;
 
@@ -47,7 +77,7 @@ const presetLabel = (seconds: number | undefined): string =>
 
 type ParPickerSheetProps = {
   visible: boolean;
-  /** Position of the step being timed, counted from 1, for the heading. */
+  /** Position of the step being timed, counted from 1, for the title. */
   stepNumber: number;
   /** The step's current par in seconds; `undefined` when it is untimed. */
   par: number | undefined;
@@ -64,44 +94,129 @@ type ParPickerBodyProps = Pick<
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    header: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingBottom: theme.spacing.sm,
-      gap: 2,
+    body: { gap: theme.spacing.inset },
+    grid: { gap: theme.spacing.sm },
+    gridRow: { flexDirection: 'row', gap: theme.spacing.sm },
+    // A minimum height, so a description that wraps at a large font grows
+    // the tile instead of clipping.
+    tile: {
+      flexGrow: 1,
+      justifyContent: 'center',
+      gap: theme.spacing.xxs,
+      minHeight: theme.sizes.parTileMin,
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.sm,
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
     },
-    custom: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingBottom: theme.spacing.md,
-      gap: theme.spacing.xs,
+    // The chosen par is inverted, like the active tab, so the choice does
+    // not rest on a colour alone.
+    tileSelected: {
+      backgroundColor: theme.colors.inverse,
+      borderColor: theme.colors.inverse,
     },
+    // One column of the grid. Its tile pads itself inside it, so every
+    // column, and the empty ones that hold a short last row open, takes
+    // the same share of the row whatever padding its tile has.
+    cell: { flex: 1 },
+    custom: { gap: theme.spacing.xs, marginTop: theme.spacing.xs },
     customRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
       gap: theme.spacing.sm,
     },
     customField: { flex: 1 },
-    presetHeader: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingTop: theme.spacing.sm,
-      paddingBottom: theme.spacing.xs,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border,
-    },
-    option: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.md,
-      paddingVertical: theme.spacing.md - theme.spacing.xs,
-      paddingHorizontal: theme.spacing.lg,
-      minHeight: OPTION_MIN_HEIGHT,
-    },
-    optionDivider: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border,
-    },
-    optionBody: { flex: 1, gap: 2 },
-    optionList: { maxHeight: OPTION_LIST_MAX_HEIGHT },
+    set: { width: theme.sizes.parSetWidth },
   });
+
+type PresetTileProps = {
+  preset: ParPreset;
+  selected: boolean;
+  onSelect: (par: number | undefined) => void;
+};
+
+/** One preset par in the grid. */
+const PresetTile = ({ preset, selected, onSelect }: PresetTileProps) => {
+  const styles = useThemedStyles(createStyles);
+  const spoken =
+    preset.seconds === undefined ? 'No par' : spokenSeconds(preset.seconds);
+
+  return (
+    <Pressable
+      onPress={() => onSelect(preset.seconds)}
+      accessibilityRole="button"
+      accessibilityLabel={
+        preset.description ? `${spoken}, ${preset.description}` : spoken
+      }
+      accessibilityState={{ selected }}
+      style={[styles.tile, selected && styles.tileSelected]}
+      testID={`opt-par-${preset.seconds ?? 'none'}`}
+    >
+      <Typography
+        variant="metricSmall"
+        color={selected ? 'textOnInverse' : 'textPrimary'}
+      >
+        {presetLabel(preset.seconds)}
+      </Typography>
+      {preset.description ? (
+        <Typography
+          variant="caption"
+          color={selected ? 'textOnInverse' : 'textSecondary'}
+        >
+          {preset.description}
+        </Typography>
+      ) : null}
+    </Pressable>
+  );
+};
+
+type PresetGridProps = Pick<ParPickerSheetProps, 'par' | 'onSelect'>;
+
+/** The preset tiles, the step's par inverted, in a grid that scrolls. */
+const PresetGrid = ({ par, onSelect }: PresetGridProps) => {
+  const styles = useThemedStyles(createStyles);
+  const { height, fontScale } = useWindowDimensions();
+  const columns =
+    fontScale >= TWO_COLUMN_FONT_SCALE
+      ? LARGE_TEXT_PRESET_COLUMNS
+      : PRESET_COLUMNS;
+
+  // The grid can be taller than its cap at a large font, so the bar stays
+  // drawn: without it nothing shows that presets lie below.
+  return (
+    <ScrollView
+      style={{ maxHeight: height * PRESET_GRID_MAX_HEIGHT_RATIO }}
+      contentContainerStyle={styles.grid}
+      bounces={false}
+      showsVerticalScrollIndicator
+      persistentScrollbar
+      testID="list-par-presets"
+    >
+      {PRESET_ROWS[columns].map((row, i) => (
+        <View
+          key={presetLabel(row[0]?.seconds)}
+          style={styles.gridRow}
+          testID={`row-par-preset-${i}`}
+        >
+          {row.map(preset => (
+            <View key={presetLabel(preset.seconds)} style={styles.cell}>
+              <PresetTile
+                preset={preset}
+                selected={preset.seconds === par}
+                onSelect={onSelect}
+              />
+            </View>
+          ))}
+          {Array.from({ length: columns - row.length }, (_, spacer) => (
+            <View key={`spacer-${spacer}`} style={styles.cell} />
+          ))}
+        </View>
+      ))}
+    </ScrollView>
+  );
+};
 
 /**
  * What the sheet shows. A separate component so the custom field starts
@@ -110,7 +225,9 @@ const createStyles = (theme: Theme) =>
  */
 const ParPickerBody = ({ stepNumber, par, onSelect }: ParPickerBodyProps) => {
   const styles = useThemedStyles(createStyles);
-  const { sizes } = useTheme();
+  // The custom field is the last thing on the sheet: keep it, and Set,
+  // above the keyboard it opens.
+  const keyboardHeight = useKeyboardHeight();
   // Prefilled with the current par, so a small change is one keystroke.
   const [customText, setCustomText] = useState(
     par === undefined ? '' : par.toFixed(2),
@@ -120,33 +237,32 @@ const ParPickerBody = ({ stepNumber, par, onSelect }: ParPickerBodyProps) => {
   const customRejected = customText.trim().length > 0 && customPar === null;
 
   return (
-    <>
-      <View style={styles.header}>
-        <Typography
-          variant="overline"
-          color="textSecondary"
-          accessibilityRole="header"
-          testID="text-par-heading"
-        >
-          {`STEP ${stepNumber} PAR`}
-        </Typography>
-        <Typography variant="caption" color="textTertiary">
-          {stepNumber === 1
-            ? 'Max time from the timer start to this step.'
-            : 'Max time from the previous step to this one.'}
-        </Typography>
-      </View>
+    <View style={[styles.body, { paddingBottom: keyboardHeight }]}>
+      <Typography
+        variant="body"
+        color="textSecondary"
+        testID="text-par-heading"
+      >
+        {stepNumber === 1
+          ? 'Max time from the timer start to this step.'
+          : 'Max time from the previous step to this one.'}
+      </Typography>
+
+      {/* While the keyboard is up the shooter is typing a par, and the
+          grid would push the sheet's title under the status bar at a
+          large font: it comes back when the keyboard goes. */}
+      {keyboardHeight > 0 ? null : <PresetGrid par={par} onSelect={onSelect} />}
 
       <View style={styles.custom}>
         <View style={styles.customRow}>
           <View style={styles.customField}>
             <TextField
-              label="Custom par"
+              label="Custom par · seconds"
               value={customText}
               onChangeText={setCustomText}
               placeholder="0.00"
               decimal
-              unit="s"
+              onPaper
               maxLength={CUSTOM_PAR_MAX_LENGTH}
               testID="input-par-custom"
             />
@@ -163,83 +279,29 @@ const ParPickerBody = ({ stepNumber, par, onSelect }: ParPickerBodyProps) => {
             accessibilityHint={
               customPar === null ? 'Enter a valid par time first' : undefined
             }
+            style={styles.set}
             testID="btn-par-custom-set"
           />
         </View>
         {/* Always shown, so the reason "Set" is disabled is on screen
             before anything is typed; the colour only adds emphasis. */}
         <Typography
-          variant="caption"
-          color={customRejected ? 'danger' : 'textTertiary'}
+          variant="label"
+          color={customRejected ? 'danger' : 'textSecondary'}
           testID="text-par-custom-hint"
         >
-          {`Enter a time from 0.01 to ${MAX_STEP_PAR_SECONDS} seconds.`}
+          {`From 0.01 to ${MAX_STEP_PAR_SECONDS} seconds.`}
         </Typography>
       </View>
-
-      <View style={styles.presetHeader}>
-        <Typography variant="overline" color="textSecondary">
-          OR PICK A PRESET
-        </Typography>
-      </View>
-
-      {/* The list is taller than its cap, so the bar stays drawn: without it
-          nothing shows that the last presets lie below the edge. */}
-      <ScrollView
-        style={styles.optionList}
-        bounces={false}
-        showsVerticalScrollIndicator
-        persistentScrollbar
-        testID="list-par-presets"
-      >
-        {PAR_PRESETS.map((preset, i) => {
-          const isSelected = preset.seconds === par;
-          const spoken =
-            preset.seconds === undefined
-              ? 'No par'
-              : spokenSeconds(preset.seconds);
-
-          return (
-            <Pressable
-              key={presetLabel(preset.seconds)}
-              onPress={() => onSelect(preset.seconds)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                preset.description ? `${spoken}, ${preset.description}` : spoken
-              }
-              accessibilityState={{ selected: isSelected }}
-              style={[styles.option, i > 0 && styles.optionDivider]}
-              testID={`opt-par-${preset.seconds ?? 'none'}`}
-            >
-              <View style={styles.optionBody}>
-                <Typography
-                  variant="bodyStrong"
-                  color={isSelected ? 'primary' : 'textPrimary'}
-                >
-                  {presetLabel(preset.seconds)}
-                </Typography>
-                {preset.description ? (
-                  <Typography variant="caption" color="textTertiary">
-                    {preset.description}
-                  </Typography>
-                ) : null}
-              </View>
-
-              {isSelected ? (
-                <Icon name="check" size={sizes.iconLg} color="primary" />
-              ) : null}
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-    </>
+    </View>
   );
 };
 
 /**
- * Bottom sheet for one step's par: a custom time typed to the hundredth of
- * a second, or one of the preset rows. Choosing either calls `onSelect`;
- * closing the sheet is left to the caller, through `visible`.
+ * Bottom sheet for one step's par, on the Range Card sheet frame: a grid
+ * of preset tiles, then a custom time typed to the hundredth of a second.
+ * Choosing either calls `onSelect`; closing the sheet is left to the
+ * caller, through `visible`.
  */
 export const ParPickerSheet = ({
   visible,
@@ -252,8 +314,10 @@ export const ParPickerSheet = ({
     <BottomSheet
       visible={visible}
       onClose={onClose}
+      title={`Step ${stepNumber} par`}
       closeLabel="Close par picker"
-      backdropTestID="btn-par-close"
+      backdropTestID="btn-par-backdrop"
+      closeTestID="btn-par-close"
     >
       <ParPickerBody stepNumber={stepNumber} par={par} onSelect={onSelect} />
     </BottomSheet>

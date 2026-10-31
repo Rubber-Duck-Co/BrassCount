@@ -29,6 +29,7 @@ import {
   MAX_DRILL_NAME_LENGTH,
   MAX_DRILL_STEPS,
   type DrillStep,
+  type DrillStepType,
 } from '@/types/drill';
 import type { DrillsStackParamList } from '@/types/navigation';
 import { Card } from '@components/Card';
@@ -38,6 +39,7 @@ import { Icon } from '@components/Icon';
 import { ParPickerSheet } from '@components/ParPickerSheet';
 import { Screen } from '@components/Screen';
 import { SectionHeader } from '@components/SectionHeader';
+import { SelectSheet, type SelectOption } from '@components/Select';
 import { TextField } from '@components/TextField';
 import { Typography } from '@components/Typography';
 import {
@@ -47,10 +49,17 @@ import {
   type DrillSaveState,
 } from '@hooks/useDrillEditor';
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
-import { countShots, stepLabel, stepTypeLabel, totalPar } from '@utils/drill';
+import {
+  countShots,
+  stepLabel,
+  stepTypeDescription,
+  stepTypeLabel,
+  totalPar,
+} from '@utils/drill';
 import {
   canAddStep,
   nextStepType,
+  stepTypeChoices,
   type DrillDraftProblem,
 } from '@utils/drillDraft';
 import { formatSeconds, pluralize, spokenSeconds } from '@utils/format';
@@ -59,12 +68,12 @@ type Nav = NativeStackNavigationProp<DrillsStackParamList, 'SequenceEditor'>;
 type EditorRoute = RouteProp<DrillsStackParamList, 'SequenceEditor'>;
 
 /**
- * Narrowest the step-type dropdown may get, at the default text size,
- * before the controls after it drop to a line of their own. It
- * grows with the system font scale, so large text wraps the row instead
- * of cutting the type name short.
+ * Narrowest a step's name may get, at the default text size, before the
+ * controls after it drop to a line of their own. It grows with the system
+ * font scale, so large text wraps the row instead of cutting the name
+ * short.
  */
-const STEP_SELECT_MIN_WIDTH = 112;
+const STEP_LABEL_MIN_WIDTH = 112;
 
 /** Where focus goes after a removal when no step is left beside it. */
 const ADD_STEP_FOCUS = 'add-step';
@@ -129,7 +138,22 @@ const saveFailureMessage = (
     : 'Could not save the drill. Try again.';
 };
 
-/** The whole sequence in one sentence, for the Preview card's reader label. */
+/**
+ * The types the step type sheet offers a step of type `current`, each
+ * with what it means; none while the sheet is closed.
+ */
+const typeOptions = (
+  current: DrillStepType | undefined,
+): SelectOption<DrillStepType>[] =>
+  current === undefined
+    ? []
+    : stepTypeChoices(current).map(type => ({
+        value: type,
+        label: stepTypeLabel(type),
+        description: stepTypeDescription(type),
+      }));
+
+/** The whole sequence in one sentence, for the Preview box's reader label. */
 const spokenPreview = (steps: readonly DrillStep[]): string =>
   steps
     .map((step, i) => {
@@ -142,22 +166,26 @@ const spokenPreview = (steps: readonly DrillStep[]): string =>
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    hint: {
-      paddingHorizontal: theme.spacing.xs,
-      marginBottom: theme.spacing.sm,
-    },
+    hint: { marginBottom: theme.spacing.sm },
+    // A minimum height, so the label grows the row at a large font.
     addRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
       gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.md,
-      paddingHorizontal: theme.spacing.md,
+      minHeight: theme.sizes.addRowMin,
+      paddingHorizontal: theme.spacing.inset,
     },
-    addRowDisabled: { opacity: 0.5 },
+    addLabel: { textTransform: 'uppercase' },
     limitNote: {
-      paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.md,
+      paddingHorizontal: theme.spacing.inset,
+      paddingBottom: theme.spacing.inset,
+    },
+    // Outlined on the Paper, with no Card fill: it shows, it is not edited.
+    previewBox: {
+      padding: theme.spacing.inset,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
     },
     emptyRow: {
       paddingVertical: theme.spacing.lg,
@@ -192,7 +220,7 @@ const StepPreview = memo(({ steps }: StepPreviewProps) => {
   return (
     <View>
       <SectionHeader title="Preview" />
-      <Card>
+      <View style={styles.previewBox}>
         {/* Read as one sentence: the arrows and brackets mean nothing
             spoken a step at a time. */}
         <View
@@ -202,22 +230,22 @@ const StepPreview = memo(({ steps }: StepPreviewProps) => {
           testID="text-preview"
         >
           {steps.map((step, i) => (
-            <Typography key={step.id} variant="label">
+            <Typography key={step.id} variant="rowLabel">
               {stepLabel(steps, i)}
               {step.par === undefined ? null : (
-                <Typography variant="label" color="textTertiary">
+                <Typography variant="rowLabel" color="textSecondary">
                   {` (${formatSeconds(step.par)})`}
                 </Typography>
               )}
               {i < steps.length - 1 ? (
-                <Typography variant="label" color="textTertiary">
+                <Typography variant="rowLabel" color="textSecondary">
                   {'  →  '}
                 </Typography>
               ) : null}
             </Typography>
           ))}
         </View>
-      </Card>
+      </View>
     </View>
   );
 });
@@ -370,11 +398,14 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
   // The step whose par is being picked. An id, not a position, so it
   // still points at the same step whatever happens to the list.
   const [parStepId, setParStepId] = useState<string | null>(null);
+  // The step whose type is being picked, by id for the same reason.
+  const [typeStepId, setTypeStepId] = useState<string | null>(null);
   // Whether the rows show move buttons in place of their par and remove
   // controls. Only offered while there are two steps to swap.
   const [reorderRequested, setReorderRequested] = useState(false);
 
   const closeParPicker = useCallback(() => setParStepId(null), []);
+  const closeTypePicker = useCallback(() => setTypeStepId(null), []);
 
   // The remove buttons and the add button, so focus can be put on one after
   // a removal took the row the reader was on.
@@ -507,6 +538,8 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
   }
 
   const parPosition = steps.findIndex(step => step.id === parStepId);
+  const typePosition = steps.findIndex(step => step.id === typeStepId);
+  const typeStep = steps[typePosition];
   const hasRoom = canAddStep(steps);
   const canReorder = steps.length > 1;
   const reordering = reorderRequested && canReorder;
@@ -538,21 +571,20 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
         saveFailure={saveFailure}
       />
 
-      <Card>
-        <TextField
-          label="Drill name"
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Bill Drill"
-          maxLength={MAX_DRILL_NAME_LENGTH}
-          editable={saveState === 'idle'}
-          testID="input-drill-name"
-        />
-      </Card>
+      <TextField
+        label="Drill name"
+        value={name}
+        onChangeText={setName}
+        placeholder="e.g. Bill Drill"
+        maxLength={MAX_DRILL_NAME_LENGTH}
+        editable={saveState === 'idle'}
+        onPaper
+        testID="input-drill-name"
+      />
 
       <View>
         <SectionHeader
-          title="Steps"
+          title={steps.length > 0 ? `Steps · ${steps.length}` : 'Steps'}
           actionLabel={
             canReorder ? (reordering ? 'Done' : 'Reorder') : undefined
           }
@@ -562,10 +594,10 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
           onActionPress={toggleReorder}
           actionTestID="btn-reorder-steps"
         />
-        <Typography variant="caption" color="textTertiary" style={styles.hint}>
+        <Typography variant="label" color="textSecondary" style={styles.hint}>
           {reordering
             ? 'Use the arrows to move a step. Tap Done when the order is right.'
-            : "Tap a step's par to cap how long it can take from the previous action. Step 1's par runs from the timer start."}
+            : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
         </Typography>
 
         <Card flush>
@@ -589,8 +621,8 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
                 last={i === steps.length - 1}
                 label={stepLabel(steps, i)}
                 reordering={reordering}
-                selectMinWidth={STEP_SELECT_MIN_WIDTH * fontScale}
-                onChangeType={changeStepType}
+                labelMinWidth={STEP_LABEL_MIN_WIDTH * fontScale}
+                onEditType={setTypeStepId}
                 onEditPar={setParStepId}
                 onRemove={removeStepAndRefocus}
                 onMove={moveStep}
@@ -606,11 +638,19 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
             accessibilityRole="button"
             accessibilityLabel="Add step"
             accessibilityState={{ disabled: !hasRoom }}
-            style={[styles.addRow, !hasRoom && styles.addRowDisabled]}
+            style={styles.addRow}
             testID="btn-add-step"
           >
-            <Icon name="plus" size={sizes.iconLg} color="primary" />
-            <Typography variant="bodyStrong" color="primary">
+            <Icon
+              name="plus"
+              size={sizes.iconMd}
+              color={hasRoom ? 'textPrimary' : 'disabled'}
+            />
+            <Typography
+              variant="actionLabel"
+              color={hasRoom ? 'textPrimary' : 'disabled'}
+              style={styles.addLabel}
+            >
               Add step
             </Typography>
           </TouchableOpacity>
@@ -618,8 +658,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
           {hasRoom ? null : (
             <Typography
               variant="caption"
-              color="textTertiary"
-              align="center"
+              color="textSecondary"
               accessibilityLiveRegion="polite"
               style={styles.limitNote}
               testID="text-step-limit"
@@ -643,6 +682,21 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
           closeParPicker();
         }}
         onClose={closeParPicker}
+      />
+
+      <SelectSheet
+        visible={typeStep !== undefined}
+        onClose={closeTypePicker}
+        value={typeStep?.type ?? nextStepType(steps)}
+        options={typeOptions(typeStep?.type)}
+        onChoose={type => {
+          if (typeStepId !== null) {
+            changeStepType(typeStepId, type);
+          }
+          closeTypePicker();
+        }}
+        title={`Step ${typePosition + 1} type`}
+        testID="select-step-type"
       />
     </Screen>
   );

@@ -5,6 +5,7 @@ import {
   isStepPar,
   roundPar,
   stepLabel,
+  stepTypeDescription,
   stepTypeLabel,
   totalPar,
 } from '../src/utils/drill';
@@ -94,6 +95,19 @@ describe('stepTypeLabel', () => {
       'Rack',
       'Transition',
       'Holster',
+    ]);
+  });
+});
+
+describe('stepTypeDescription', () => {
+  it('explains every step type a drill can hold', () => {
+    expect(DRILL_STEP_TYPES.map(stepTypeDescription)).toEqual([
+      'From the holster',
+      'One round downrange',
+      'Magazine change',
+      'Cycle the slide',
+      'Move to the next target',
+      'Make safe',
     ]);
   });
 });
