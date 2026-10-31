@@ -39,8 +39,8 @@ Step testIDs are 0-based (`btn-par-step-0` is the first step), though the screen
 2.5 Step type: `select-step-1` (the second step) offers draw, shot, reload, rack, holster (not transition); choosing Reload changes the row and the preview.
 2.6 Remove: `btn-remove-step-N` (0-based) removes that row only; the others keep their type and par.
 2.7 Reorder: with two or more steps the Steps header shows Reorder. In reorder mode each row has Move up / Move down (`btn-move-up-step-N`, `btn-move-down-step-N`, 0-based), disabled at the ends, and par / remove are hidden. A move keeps the step's type and par. Done leaves the mode. With one step there is no Reorder.
-2.8 Save (`btn-save-drill`): back on the list, the drill's row shows its name and steps, and the list's "SAVED · N" header went up by one (the Drills tab has no count testID; Setup's `text-profile-meta` reads `… · N drills`).
-2.9 Edit: tap the row → the editor loads the same name, steps and pars. Rename (`clear-field`, type `ZZE2EBravo`), change a par, Save changes: the list shows the new name. Reopen: the change stuck.
+2.8 Save (header action `btn-save-drill`, grey until the drill has a name and a step; TalkBack reads "Save drill"): back on the list, the drill's row shows its name and steps, and the list's "SAVED · N" header went up by one (the Drills tab has no count testID; Setup's `text-profile-meta` reads `… · N drills`).
+2.9 Edit: tap the row → the editor loads the same name, steps and pars. Rename (`clear-field`, type `ZZE2EBravo`), change a par, Save: the list shows the new name. Reopen: the change stuck.
 2.10 Leaving the editor with the back control (`btn-back`) after an edit drops the edit without asking; the stored drill is unchanged.
 2.11 Step limit: optional, slow (100 steps). Do it only if the editor's step code changed on this branch; otherwise N/A.
 

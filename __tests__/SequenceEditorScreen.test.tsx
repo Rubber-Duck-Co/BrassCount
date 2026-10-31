@@ -1,4 +1,4 @@
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, ScrollView } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -213,6 +213,40 @@ const isDisabled = (tree: ReactTestRenderer, testID: string): boolean =>
 
 const spokenLabel = (tree: ReactTestRenderer, testID: string): string =>
   first(tree, testID).props.accessibilityLabel;
+
+/** The scroll view holding the editor's form, as the screen's ref sees it. */
+const editorScroll = (tree: ReactTestRenderer): ScrollView => {
+  const field = first(tree, 'input-drill-name');
+  const scroll = tree.root
+    .findAllByType(ScrollView)
+    .find(candidate => isUnder(candidate)(field));
+  if (scroll === undefined || scroll.instance === null) {
+    throw new Error('the editor has no scroll view');
+  }
+  return scroll.instance as ScrollView;
+};
+
+/**
+ * Watch the editor's `scrollTo` from now on. The ScrollView mock shares one
+ * `jest.fn` across instances and tests, so earlier calls are cleared.
+ */
+const watchScroll = (tree: ReactTestRenderer) => {
+  const scrollTo = jest.spyOn(editorScroll(tree), 'scrollTo');
+  scrollTo.mockClear();
+  return scrollTo;
+};
+
+/** Whether `node` sits somewhere inside `ancestor`. */
+const isUnder =
+  (ancestor: ReactTestInstance) =>
+  (node: ReactTestInstance): boolean => {
+    for (let at: ReactTestInstance | null = node; at; at = at.parent) {
+      if (at === ancestor) {
+        return true;
+      }
+    }
+    return false;
+  };
 
 /** How many step rows are on screen. */
 const stepCount = (tree: ReactTestRenderer): number => {
@@ -1087,10 +1121,33 @@ describe('SequenceEditorScreen', () => {
       expect(isDisabled(tree, 'btn-save-drill')).toBe(true);
     });
 
-    it('reads "Create drill" for a new drill', async () => {
+    it('sits in the header, with no save button under the steps', async () => {
+      const { tree } = await renderEditor();
+      await type(tree, 'input-drill-name', 'Bill Drill');
+      await addSteps(tree, 1);
+
+      const header = first(tree, 'screen-header');
+      expect(has(tree, 'btn-save-drill')).toBe(true);
+      expect(byTestId(tree, 'btn-save-drill').every(isUnder(header))).toBe(
+        true,
+      );
+      expect(allText(tree)).not.toContain('Create drill');
+    });
+
+    it('reads SAVE and is announced as "Save drill" for a new drill', async () => {
       const { tree } = await renderEditor();
 
-      expect(first(tree, 'btn-save-drill').props.label).toBe('Create drill');
+      expect(textOf(tree, 'btn-save-drill')).toBe('SAVE');
+      expect(spokenLabel(tree, 'btn-save-drill')).toBe('Save drill');
+    });
+
+    it('says what the drill still needs above its name', async () => {
+      const { tree } = await renderEditor();
+
+      const texts = allText(tree);
+      expect(texts.indexOf(textOf(tree, 'text-save-hint'))).toBeLessThan(
+        texts.indexOf('Drill name'),
+      );
     });
 
     it('says a drill with steps still needs a name', async () => {
@@ -1215,7 +1272,8 @@ describe('SequenceEditorScreen', () => {
 
       await press(tree, 'btn-save-drill');
 
-      expect(first(tree, 'btn-save-drill').props.label).toBe('Saving…');
+      expect(textOf(tree, 'btn-save-drill')).toBe('SAVING…');
+      expect(spokenLabel(tree, 'btn-save-drill')).toBe('Saving…');
       expect(isDisabled(tree, 'btn-save-drill')).toBe(true);
       expect(currentRoute()?.name).toBe('SequenceEditor');
     });
@@ -1277,6 +1335,31 @@ describe('SequenceEditorScreen', () => {
       expect(await loadDrills()).toEqual([]);
     });
 
+    it('scrolls back up to say so, since Save can be pressed from anywhere', async () => {
+      jest
+        .spyOn(DrillStorageService, 'save')
+        .mockRejectedValueOnce(
+          new DrillStorageError('Failed to save drill', 'STORAGE_FAILURE'),
+        );
+      const { tree } = await renderEditor();
+      await buildDrill(tree);
+      const scrollTo = watchScroll(tree);
+
+      await press(tree, 'btn-save-drill');
+      await settle();
+
+      expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ y: 0 }));
+    });
+
+    it('does not scroll while the drill is only being edited', async () => {
+      const { tree } = await renderEditor();
+      const scrollTo = watchScroll(tree);
+
+      await buildDrill(tree);
+
+      expect(scrollTo).not.toHaveBeenCalled();
+    });
+
     it('keeps what was built and saves it on the next try', async () => {
       jest
         .spyOn(DrillStorageService, 'save')
@@ -1290,7 +1373,7 @@ describe('SequenceEditorScreen', () => {
 
       expect(first(tree, 'input-drill-name').props.value).toBe('Bill Drill');
       expect(stepTypes(tree)).toEqual(['Draw', 'Shot']);
-      expect(first(tree, 'btn-save-drill').props.label).toBe('Create drill');
+      expect(spokenLabel(tree, 'btn-save-drill')).toBe('Save drill');
       expect(isDisabled(tree, 'btn-save-drill')).toBe(false);
 
       await press(tree, 'btn-save-drill');
@@ -1409,6 +1492,7 @@ describe('SequenceEditorScreen', () => {
       expect(has(tree, 'text-editor-loading')).toBe(true);
       expect(allText(tree)).toContain('Edit drill');
       expect(has(tree, 'input-drill-name')).toBe(false);
+      expect(has(tree, 'btn-save-drill')).toBe(false);
 
       await settle();
 
@@ -1440,12 +1524,13 @@ describe('SequenceEditorScreen', () => {
       expect(stepPars(tree)).toEqual(['1.50s', '+ par', '+ par']);
     });
 
-    it('reads "Save changes" and can be saved as it stands', async () => {
+    it('reads SAVE, announced as "Save changes", and can be saved as it stands', async () => {
       const drill = await saveDrill(BILL_DRILL);
 
       const { tree } = await renderEditor(drill.id);
 
-      expect(first(tree, 'btn-save-drill').props.label).toBe('Save changes');
+      expect(textOf(tree, 'btn-save-drill')).toBe('SAVE');
+      expect(spokenLabel(tree, 'btn-save-drill')).toBe('Save changes');
       expect(isDisabled(tree, 'btn-save-drill')).toBe(false);
     });
 
@@ -1536,7 +1621,7 @@ describe('SequenceEditorScreen', () => {
 
       await press(tree, 'btn-save-drill');
 
-      expect(first(tree, 'btn-save-drill').props.label).toBe('Saving…');
+      expect(textOf(tree, 'btn-save-drill')).toBe('SAVING…');
       expect(isDisabled(tree, 'btn-save-drill')).toBe(true);
     });
 
@@ -1700,6 +1785,7 @@ describe('SequenceEditorScreen', () => {
       expect(has(tree, 'state-editor-error')).toBe(true);
       expect(has(tree, 'state-editor-missing')).toBe(false);
       expect(has(tree, 'input-drill-name')).toBe(false);
+      expect(has(tree, 'btn-save-drill')).toBe(false);
 
       await pressLabelled(tree, 'Try again');
 
