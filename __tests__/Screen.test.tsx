@@ -1,3 +1,5 @@
+import { createRef } from 'react';
+
 import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -196,6 +198,18 @@ describe('Screen', () => {
     );
     expect(style.minHeight).toBe(sizes.headerMin);
     expect(style.height).toBeUndefined();
+  });
+
+  it('hands its scroll view to scrollRef, so a screen can scroll it', () => {
+    const scrollRef = createRef<ScrollView>();
+
+    render(
+      <Screen title="Edit drill" scrollable scrollRef={scrollRef}>
+        {null}
+      </Screen>,
+    );
+
+    expect(typeof scrollRef.current?.scrollTo).toBe('function');
   });
 
   it('keeps the header out of the scrolling content', () => {

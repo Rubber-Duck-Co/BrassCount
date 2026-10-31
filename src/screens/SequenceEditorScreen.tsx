@@ -10,6 +10,7 @@ import {
 import {
   AccessibilityInfo,
   findNodeHandle,
+  ScrollView,
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
@@ -30,7 +31,6 @@ import {
   type DrillStep,
 } from '@/types/drill';
 import type { DrillsStackParamList } from '@/types/navigation';
-import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { DrillStepRow } from '@components/DrillStepRow';
 import { EmptyState } from '@components/EmptyState';
@@ -171,7 +171,7 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       gap: theme.spacing.xs,
     },
-    footer: { gap: theme.spacing.sm },
+    status: { gap: theme.spacing.xs },
     loading: {
       alignItems: 'center',
       paddingVertical: theme.spacing.xxl,
@@ -282,56 +282,41 @@ const EditorUnavailable = ({
   );
 };
 
-type SaveFooterProps = {
+type SaveStatusProps = {
   /** Whether a saved drill is being changed, not a new one created. */
   editing: boolean;
   problems: readonly DrillDraftProblem[];
-  canSave: boolean;
-  saveState: DrillSaveState;
   saveFailure: DrillSaveFailure | null;
-  onSave: () => void;
 };
 
 /**
- * The save button, with why the last save failed above it and what the
- * draft still needs below it.
+ * Why the last save failed and what the draft still needs, at the top of
+ * the editor just under the header's Save, so the reason Save is grey is
+ * the first thing read after it.
  */
-const SaveFooter = ({
-  editing,
-  problems,
-  canSave,
-  saveState,
-  saveFailure,
-  onSave,
-}: SaveFooterProps) => {
+const SaveStatus = ({ editing, problems, saveFailure }: SaveStatusProps) => {
   const styles = useThemedStyles(createStyles);
-  const idleLabel = editing ? 'Save changes' : 'Create drill';
+
+  if (saveFailure === null && problems.length === 0) {
+    return null;
+  }
 
   return (
-    <View style={styles.footer}>
+    <View style={styles.status}>
       {saveFailure === null ? null : (
         <Typography
-          variant="caption"
+          variant="body"
           color="danger"
-          align="center"
           accessibilityLiveRegion="polite"
           testID="text-drill-save-error"
         >
           {saveFailureMessage(saveFailure, editing)}
         </Typography>
       )}
-      <Button
-        label={saveState === 'idle' ? idleLabel : 'Saving…'}
-        onPress={onSave}
-        busy={saveState !== 'idle'}
-        disabled={!canSave}
-        testID="btn-save-drill"
-      />
       {problems.length > 0 ? (
         <Typography
-          variant="caption"
-          color="textTertiary"
-          align="center"
+          variant="body"
+          color="textSecondary"
           testID="text-save-hint"
         >
           {saveHint(problems)}
@@ -339,6 +324,20 @@ const SaveFooter = ({
       ) : null}
     </View>
   );
+};
+
+/**
+ * What the header's Save says aloud: what a press does, or that it is
+ * busy. Each name holds the word shown, so "tap Save" works by voice.
+ */
+const saveAccessibilityLabel = (
+  editing: boolean,
+  saveState: DrillSaveState,
+): string => {
+  if (saveState !== 'idle') {
+    return 'Saving…';
+  }
+  return editing ? 'Save changes' : 'Save drill';
 };
 
 type DrillEditorProps = {
@@ -393,6 +392,15 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
   // rows are not drawn again on every edit.
   const stepsRef = useRef(steps);
   stepsRef.current = steps;
+  const scrollRef = useRef<ScrollView>(null);
+
+  // Save sits in the header and can be pressed from anywhere down the
+  // form, but why it failed is said at the top: go there.
+  useEffect(() => {
+    if (saveFailure !== null) {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }
+  }, [saveFailure]);
 
   const registerRemoveButton = useCallback(
     (id: string, node: ElementRef<typeof TouchableOpacity> | null) => {
@@ -513,9 +521,23 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
           ? describeSteps(steps)
           : 'Name it, then add the actions in order'
       }
+      action={{
+        label: saveState === 'idle' ? 'Save' : 'Saving…',
+        onPress: saveAndLeave,
+        accessibilityLabel: saveAccessibilityLabel(editing, saveState),
+        testID: 'btn-save-drill',
+      }}
+      actionDisabled={!canSave || saveState !== 'idle'}
       scrollable
+      scrollRef={scrollRef}
       testID="screen-drill-editor"
     >
+      <SaveStatus
+        editing={editing}
+        problems={problems}
+        saveFailure={saveFailure}
+      />
+
       <Card>
         <TextField
           label="Drill name"
@@ -610,15 +632,6 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
 
       {steps.length > 0 ? <StepPreview steps={steps} /> : null}
 
-      <SaveFooter
-        editing={editing}
-        problems={problems}
-        canSave={canSave}
-        saveState={saveState}
-        saveFailure={saveFailure}
-        onSave={saveAndLeave}
-      />
-
       <ParPickerSheet
         visible={parPosition >= 0}
         stepNumber={parPosition + 1}
@@ -639,9 +652,11 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
  * Create / edit a drill: its name and its ordered steps, each with a type
  * and an optional par, plus a live preview of the sequence. Opened with
  * the id of a saved drill it starts from that drill; without one it
- * starts empty. The save button stores the draft through
- * `DrillStorageService` — a new drill is created, an opened one updated —
- * and goes back; leaving any other way drops the draft.
+ * starts empty. Save is the header's action, grey until the draft can be
+ * saved, with the reason on the first line under the header. It stores the
+ * draft through `DrillStorageService` — a new drill is created, an opened
+ * one updated — and goes back; leaving any other way drops the draft.
+ * While a saved drill is loading or cannot be shown there is no Save.
  */
 export const SequenceEditorScreen = () => {
   const route = useRoute<EditorRoute>();
