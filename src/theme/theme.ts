@@ -8,6 +8,8 @@ import type { AppearancePreference } from '@/types/profile';
  * Roles: Paper is the screen ground, Card the inside of every ruled box,
  * Ink the text and the 2px outlines (dark mode draws outlines in a softer
  * grey), Pencil labels and captions, Rule the 1px row dividers only.
+ * Meter track is the unfilled track of the calibration level meter and
+ * nothing else.
  * Signal orange means "act or look" and is used only for `primary` and
  * `warning` (an over-par split, a sound still to calibrate).
  *
@@ -33,6 +35,7 @@ const palette = {
   rule: '#BDB5A0',
   signal: '#C2410C',
   disabled: '#8C8778',
+  meterTrack: '#DDD5C0',
 
   paperDark: '#1F1E1B',
   cardDark: '#292824',
@@ -42,6 +45,7 @@ const palette = {
   ruleDark: '#3B3A34',
   signalDark: '#E8692F',
   disabledDark: '#6B675B',
+  meterTrackDark: '#35342E',
 
   /** Behind a sheet: Ink at 55% in light, black at 60% in dark. */
   scrim: 'rgba(27, 27, 23, 0.55)',
@@ -332,6 +336,11 @@ export type SemanticColors = {
   primarySoft: string;
   /** Disabled text and controls; exempt from the contrast minimum. */
   disabled: string;
+  /**
+   * The unfilled track of the calibration level meter. Its outline is
+   * `outline` (Ink in light, the softer grey in dark).
+   */
+  meterTrack: string;
   success: string;
   danger: string;
   warning: string;
@@ -359,6 +368,7 @@ const lightColors: SemanticColors = {
   primaryMuted: palette.signal,
   primarySoft: palette.card,
   disabled: palette.disabled,
+  meterTrack: palette.meterTrack,
   success: palette.ink,
   danger: palette.ink,
   warning: palette.signal,
@@ -385,6 +395,7 @@ const darkColors: SemanticColors = {
   primaryMuted: palette.signalDark,
   primarySoft: palette.cardDark,
   disabled: palette.disabledDark,
+  meterTrack: palette.meterTrackDark,
   success: palette.inkDark,
   danger: palette.inkDark,
   warning: palette.signalDark,
