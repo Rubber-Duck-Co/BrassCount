@@ -22,6 +22,11 @@ export type DrillHistorySummary = {
   drillId: string;
   /** The drill's current name, or `DELETED_DRILL_NAME`. */
   drillName: string;
+  /**
+   * The drill is no longer saved, so its runs are listed under the
+   * stand-in name. Kept apart from the name, which a saved drill may share.
+   */
+  deleted: boolean;
   /** Every run, complete or stopped early. */
   runCount: number;
   /**
@@ -75,6 +80,7 @@ export const summarizeDrillHistory = (
         ? {
             drillId,
             drillName: drillNames.get(drillId) ?? DELETED_DRILL_NAME,
+            deleted: !drillNames.has(drillId),
             runCount: 1,
             bestTime: time,
             lastRunAt: createdAt,

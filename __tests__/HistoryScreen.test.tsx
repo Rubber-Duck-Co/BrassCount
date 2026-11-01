@@ -40,6 +40,7 @@ type TestTabParamList = {
   HistoryList: undefined;
   Elsewhere: undefined;
   HistoryDetail: { drillId: string; drillName: string };
+  Timer: undefined;
 };
 
 const metrics = {
@@ -115,6 +116,7 @@ const mountScreen = (): Harness => {
             <Tab.Screen name="HistoryList" component={HistoryScreen} />
             <Tab.Screen name="Elsewhere" component={Blank} />
             <Tab.Screen name="HistoryDetail" component={Blank} />
+            <Tab.Screen name="Timer" component={Blank} />
           </Tab.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>,
@@ -362,6 +364,39 @@ describe('HistoryScreen', () => {
       expect(counters(tree)).toEqual({ runs: '2', drills: '1' });
     });
 
+    it('greys the name of a deleted drill, and only that one', async () => {
+      const gone = await seedDrill('Bill Drill');
+      const kept = await seedDrill('Mozambique');
+      await seedSession(gone.id, 3.1, '2026-10-11T12:00:00.000Z');
+      await seedSession(kept.id, 2.8, '2026-10-10T12:00:00.000Z');
+      await deleteDrillById(gone.id);
+
+      const { tree } = await renderScreen();
+
+      const nameColor = (id: string) =>
+        byTestId(tree, `text-history-name-${id}`)[0].props.color;
+      expect(nameColor(gone.id)).toBe('textSecondary');
+      expect(nameColor(kept.id)).toBe('textPrimary');
+    });
+
+    it('sets the names in the stencil face and the figures in Plex Mono', async () => {
+      const drill = await seedDrill('Bill Drill');
+      await seedSession(drill.id, 3.1, '2026-10-11T12:00:00.000Z');
+
+      const { tree } = await renderScreen();
+
+      const [name] = byTestId(tree, `text-history-name-${drill.id}`);
+      expect(name.props.variant).toBe('stencilSmall');
+      // Capitals from the style, so the name is still read as words.
+      expect(textsOf(tree, `text-history-name-${drill.id}`)).toEqual([
+        'Bill Drill',
+      ]);
+      const meta = byTestId(tree, `row-history-${drill.id}`)[0].findAll(
+        node => node.props.variant === 'metricCaption',
+      );
+      expect(meta).not.toHaveLength(0);
+    });
+
     it('says there is nothing yet when no drill has been run', async () => {
       await seedDrill('Bill Drill');
 
@@ -370,6 +405,29 @@ describe('HistoryScreen', () => {
       expect(has(tree, 'state-history-empty')).toBe(true);
       expect(rowOrder(tree)).toEqual([]);
       expect(counters(tree)).toEqual({ runs: '0', drills: '0' });
+    });
+
+    it('sends the shooter to the Timer when nothing has been run', async () => {
+      const { tree, currentRoute } = await renderScreen();
+
+      const goToTimer = byTestId(tree, 'state-history-empty')[0].findAll(
+        node =>
+          node.props.accessibilityRole === 'button' &&
+          node.props.accessibilityLabel === 'Go to Timer',
+      )[0];
+      await act(async () => {
+        goToTimer.props.onPress();
+      });
+
+      expect(currentRoute()?.name).toBe('Timer');
+    });
+
+    it('is titled Log', async () => {
+      const { tree } = await renderScreen();
+
+      expect(textsOf(tree, 'screen-header')).toEqual(
+        expect.arrayContaining(['Log', 'Pick a drill to see previous runs']),
+      );
     });
   });
 
@@ -517,6 +575,13 @@ describe('HistoryScreen', () => {
       expect(textsOf(tree, 'text-history-refresh-failed')).toEqual([
         'Could not refresh. Showing what was loaded earlier.',
       ]);
+      // Above the list it is about, under the counters.
+      const texts = textsOf(tree, 'screen-history');
+      const notice = texts.indexOf(
+        'Could not refresh. Showing what was loaded earlier.',
+      );
+      expect(notice).toBeLessThan(texts.indexOf('Drills'));
+      expect(notice).toBeGreaterThan(texts.indexOf('DRILLS'));
       expect(announce).toHaveBeenCalledWith(
         'Could not refresh. Showing what was loaded earlier.',
       );
@@ -594,7 +659,7 @@ describe('HistoryScreen', () => {
 
       await renderScreen();
 
-      expect(announce).toHaveBeenCalledWith('Could not load your history');
+      expect(announce).toHaveBeenCalledWith('Could not load your log');
     });
 
     it('does not show the raw error', async () => {

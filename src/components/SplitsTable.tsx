@@ -1,6 +1,6 @@
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import type { Theme } from '@/theme/theme';
+import type { Sizes, Theme } from '@/theme/theme';
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import type { SplitDeltaTone, SplitRow } from '@utils/splitRows';
 
@@ -50,25 +50,53 @@ const createStyles = (theme: Theme) =>
     label: { flex: 1 },
   });
 
+/** What the time column is headed, and the width that caption needs. */
+const TIME_COLUMNS = {
+  time: { caption: 'TIME', size: 'splitFigureColumn' },
+  actual: { caption: 'ACTUAL', size: 'splitActualColumn' },
+} as const satisfies Record<string, { caption: string; size: keyof Sizes }>;
+
+type TimeColumn = keyof typeof TIME_COLUMNS;
+
 type SplitsTableProps = {
   rows: readonly SplitRow[];
+  /**
+   * Draw the table's own ruled box. Off when it sits inside a box that
+   * already draws one, such as a run card in the Log.
+   */
+  framed?: boolean;
+  /**
+   * The time column: `time` on the Timer, `actual` in the Log, whose
+   * longer caption takes a wider column.
+   */
+  timeColumn?: TimeColumn;
+  /** Defaults to `table-splits`; give each table its own in a list. */
+  testID?: string;
 };
 
 /**
- * The Timer's splits: a ruled table of STEP / PAR / TIME / Δ, one row per
- * step of the drill, the figures in Plex Mono. Each row is read as one
- * sentence, so the column headings are hidden from a screen reader.
+ * A run's splits: a ruled table of STEP / PAR / TIME / Δ, one row per
+ * step of the drill, the figures in Plex Mono. The Timer shows the run
+ * being made, and each run card in the Log a saved one. Each row is read
+ * as one sentence, so the column headings are hidden from a screen reader.
  */
-export const SplitsTable = ({ rows }: SplitsTableProps) => {
+export const SplitsTable = ({
+  rows,
+  framed = true,
+  timeColumn = 'time',
+  testID = 'table-splits',
+}: SplitsTableProps) => {
   const styles = useThemedStyles(createStyles);
   const { sizes } = useTheme();
   const { fontScale } = useWindowDimensions();
   const scale = Math.min(fontScale, FIGURE_MAX_FONT_MULTIPLIER);
   const figureCell = { width: sizes.splitFigureColumn * scale };
+  const { caption: timeCaption, size: timeSize } = TIME_COLUMNS[timeColumn];
+  const timeCell = { width: sizes[timeSize] * scale };
   const deltaCell = { width: sizes.splitDeltaColumn * scale };
 
   return (
-    <View style={styles.box} testID="table-splits">
+    <View style={framed ? styles.box : undefined} testID={testID}>
       <View
         style={[styles.row, styles.header]}
         accessibilityElementsHidden
@@ -93,14 +121,14 @@ export const SplitsTable = ({ rows }: SplitsTableProps) => {
             PAR
           </Typography>
         </View>
-        <View style={figureCell}>
+        <View style={timeCell}>
           <Typography
             variant="sectionLabel"
             color="textSecondary"
             align="right"
             maxFontSizeMultiplier={FIGURE_MAX_FONT_MULTIPLIER}
           >
-            TIME
+            {timeCaption}
           </Typography>
         </View>
         <View style={deltaCell}>
@@ -143,7 +171,7 @@ export const SplitsTable = ({ rows }: SplitsTableProps) => {
                 {row.par}
               </Typography>
             </View>
-            <View style={figureCell}>
+            <View style={timeCell}>
               <Typography
                 variant="splitFigure"
                 align="right"

@@ -120,6 +120,8 @@ export const sizes = {
   profileBoxMin: 72,
   /** A drill in the Drills library; a minimum. */
   drillRowMin: 72,
+  /** A closed run card in the Log; a minimum. */
+  runRowMin: 60,
   /** The Delete action a swiped list row shows, at the default font size. */
   swipeActionWidth: 96,
   /** The splits table's header and rows; minimums. */
@@ -128,6 +130,8 @@ export const sizes = {
   /** The splits table's PAR and TIME columns, and its Δ column. */
   splitFigureColumn: 52,
   splitDeltaColumn: 76,
+  /** The Log's ACTUAL column, which its caption needs wider than TIME. */
+  splitActualColumn: 60,
 } as const;
 
 export type Spacing = typeof spacing;

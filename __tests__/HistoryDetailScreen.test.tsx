@@ -32,14 +32,15 @@ import type { Session, SessionSplitInput } from '../src/types/session';
 import { formatDateTime, spokenDateTime } from '../src/utils/format';
 
 /**
- * In the app the detail screen is pushed over the list inside the History
+ * In the app the detail screen is pushed over the list inside the Log
  * tab. Here it is a tab of its own, next to a blank one to leave it for:
  * a tab keeps it mounted while it is out of sight, the way the tabs of
  * the app do.
  */
 type TestTabParamList = {
-  HistoryDetail: { drillId: string; drillName: string };
   Elsewhere: undefined;
+  HistoryDetail: { drillId: string; drillName: string };
+  Timer: undefined;
   RunComparison: { drillId: string; runIds: [string, string] };
 };
 
@@ -107,6 +108,8 @@ type Harness = {
   tree: ReactTestRenderer;
   /** Switch to the other tab, or back to the detail screen. */
   goTo: (tab: 'HistoryDetail' | 'Elsewhere') => Promise<void>;
+  /** The route on screen, e.g. the Timer after Go to Timer was pressed. */
+  currentRoute: () => { name: string } | undefined;
 };
 
 const mounted: ReactTestRenderer[] = [];
@@ -119,13 +122,20 @@ const mountScreen = (drillId: string, drillName: string): Harness => {
     tree = create(
       <SafeAreaProvider initialMetrics={metrics}>
         <NavigationContainer ref={navigationRef}>
-          <Tab.Navigator screenOptions={{ headerShown: false }}>
+          <Tab.Navigator
+            // The detail screen opens first, with a tab to go back to, as
+            // the list is behind it in the app.
+            initialRouteName="HistoryDetail"
+            backBehavior="history"
+            screenOptions={{ headerShown: false }}
+          >
+            <Tab.Screen name="Elsewhere" component={Blank} />
             <Tab.Screen
               name="HistoryDetail"
               component={HistoryDetailScreen}
               initialParams={{ drillId, drillName }}
             />
-            <Tab.Screen name="Elsewhere" component={Blank} />
+            <Tab.Screen name="Timer" component={Blank} />
             <Tab.Screen name="RunComparison" component={ComparisonProbe} />
           </Tab.Navigator>
         </NavigationContainer>
@@ -149,6 +159,7 @@ const mountScreen = (drillId: string, drillName: string): Harness => {
       });
       await settle();
     },
+    currentRoute: () => navigationRef.getCurrentRoute(),
   };
 };
 
@@ -217,9 +228,25 @@ const cardOrder = (tree: ReactTestRenderer): string[] => {
   return [...new Set(ids)];
 };
 
+/**
+ * What a screen reader says for a run card's header: the first element of
+ * the card it reads as one, the closed row or the open card's header.
+ */
+const spokenRun = (tree: ReactTestRenderer, session: Session): string => {
+  const [card] = byTestId(tree, `card-run-${session.id}`);
+  if (card === undefined) {
+    throw new Error(`there is no card for run "${session.id}"`);
+  }
+  const [header] = card.findAll(node => node.props.accessible === true);
+  return header.props.accessibilityLabel as string;
+};
+
 /** The button that shows or hides the steps of a run. */
 const toggleOf = (tree: ReactTestRenderer, session: Session) => {
-  const [toggle] = byTestId(tree, `btn-toggle-${session.id}`);
+  // The touchable itself, not the elements the `testID` is passed through.
+  const toggle = byTestId(tree, `btn-toggle-${session.id}`).find(
+    node => node.props.accessibilityRole === 'button',
+  );
   if (toggle === undefined) {
     throw new Error(`there is no card for run "${session.id}"`);
   }
@@ -309,7 +336,7 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      expect(totals(tree)).toEqual({ best: '2.00s', avg: '2.50s' });
+      expect(totals(tree)).toEqual({ best: '2.00', avg: '2.50' });
       expect(screenTexts(tree)).toContain('3 runs logged');
     });
 
@@ -327,7 +354,7 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      expect(totals(tree)).toEqual({ best: '2.00s', avg: '2.50s' });
+      expect(totals(tree)).toEqual({ best: '2.00', avg: '2.50' });
       // Every run is still logged.
       expect(screenTexts(tree)).toContain('3 runs logged');
     });
@@ -353,7 +380,7 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      expect(totals(tree)).toEqual({ best: '3.10s', avg: '3.10s' });
+      expect(totals(tree)).toEqual({ best: '3.10', avg: '3.10' });
       expect(screenTexts(tree)).toContain('1 run logged');
     });
 
@@ -391,7 +418,7 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
 
       expect(cardOrder(tree)).toEqual([run.id]);
-      expect(totals(tree)).toEqual({ best: '3.10s', avg: '3.10s' });
+      expect(totals(tree)).toEqual({ best: '3.10', avg: '3.10' });
     });
 
     it('shows when a run was made, its total time and how it compares to the run before', async () => {
@@ -403,14 +430,17 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      expect(textsOf(tree, `btn-toggle-${newest.id}`)).toEqual([
+      // Open, as the newest run is: the header over the splits.
+      expect(textsOf(tree, `header-run-${newest.id}`)).toEqual([
         formatDateTime(at),
-        '-0.50S VS PREVIOUS',
-        '2.40s',
-        'Hide splits',
+        '−0.50 VS PREVIOUS',
+        '2.40',
       ]);
-      expect(textsOf(tree, `chip-delta-${middle.id}`)).toEqual([
-        '+0.70S VS PREVIOUS',
+      // Closed: the same, on the one row.
+      expect(textsOf(tree, `btn-toggle-${middle.id}`)).toEqual([
+        formatDateTime('2026-10-05T12:00:00Z'),
+        '+0.70 VS PREVIOUS',
+        '2.90',
       ]);
     });
 
@@ -432,7 +462,7 @@ describe('HistoryDetailScreen', () => {
         'STOPPED EARLY',
       ]);
       expect(has(tree, `chip-delta-${stopped.id}`)).toBe(false);
-      expect(toggleOf(tree, stopped).props.accessibilityLabel).toBe(
+      expect(spokenRun(tree, stopped)).toBe(
         `Run on ${spokenDateTime(at)}, 0.5 seconds, stopped early`,
       );
     });
@@ -452,7 +482,7 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
 
       expect(textsOf(tree, `chip-delta-${newest.id}`)).toEqual([
-        '-0.50S VS PREVIOUS',
+        '−0.50 VS PREVIOUS',
       ]);
       expect(has(tree, `chip-incomplete-${newest.id}`)).toBe(false);
       expect(has(tree, `chip-incomplete-${oldest.id}`)).toBe(false);
@@ -476,11 +506,9 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
 
       expect(textsOf(tree, `chip-delta-${newest.id}`)).toEqual([
-        '0.00S VS PREVIOUS',
+        '0.00 VS PREVIOUS',
       ]);
-      expect(toggleOf(tree, newest).props.accessibilityLabel).toContain(
-        'the same as the run before',
-      );
+      expect(spokenRun(tree, newest)).toContain('the same as the run before');
     });
 
     it('puts the total time under the date at large text, instead of beside it', async () => {
@@ -491,9 +519,9 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
       /** Which way the date block and the total time are laid out. */
       const headerDirection = (): 'row' | 'column' => {
-        // Walk up from the chip to the card's button, looking for a row.
-        let node = byTestId(tree, `chip-delta-${newest.id}`)[0].parent;
-        while (node && node.props.testID !== `btn-toggle-${newest.id}`) {
+        // Walk up from the total to the card's header, looking for a row.
+        let node = byTestId(tree, `text-run-total-${newest.id}`)[0].parent;
+        while (node && node.props.testID !== `header-run-${newest.id}`) {
           if (StyleSheet.flatten(node.props.style)?.flexDirection === 'row') {
             return 'row';
           }
@@ -521,13 +549,13 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      expect(toggleOf(tree, newest).props.accessibilityLabel).toBe(
+      expect(spokenRun(tree, newest)).toBe(
         `Run on ${spokenDateTime(newestAt)}, 2.4 seconds, 0.5 seconds faster than the run before`,
       );
-      expect(toggleOf(tree, middle).props.accessibilityLabel).toBe(
+      expect(spokenRun(tree, middle)).toBe(
         `Run on ${spokenDateTime(middleAt)}, 2.9 seconds, 0.7 seconds slower than the run before`,
       );
-      expect(toggleOf(tree, oldest).props.accessibilityLabel).toBe(
+      expect(spokenRun(tree, oldest)).toBe(
         `Run on ${spokenDateTime(oldestAt)}, 2.2 seconds, personal best`,
       );
     });
@@ -543,6 +571,10 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
 
       expect(textsOf(tree, `chip-pb-${fastest.id}`)).toEqual(['PB']);
+      // An Ink badge: the one mark on the card that is filled in.
+      expect(byTestId(tree, `chip-pb-${fastest.id}`)[0].props.tone).toBe(
+        'inverse',
+      );
       expect(has(tree, `chip-pb-${newest.id}`)).toBe(false);
       expect(has(tree, `chip-pb-${oldest.id}`)).toBe(false);
     });
@@ -629,7 +661,7 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      expect(toggleOf(tree, newest).props.accessibilityLabel).toBe(
+      expect(spokenRun(tree, newest)).toBe(
         `Run on ${spokenDateTime(at)}, 2.4 seconds, personal best, 0.5 seconds faster than the run before`,
       );
     });
@@ -645,7 +677,7 @@ describe('HistoryDetailScreen', () => {
 
       expect(isOpen(tree, newest)).toBe(true);
       expect(isOpen(tree, older)).toBe(false);
-      expect(toggleOf(tree, newest).props.accessibilityState).toEqual({
+      expect(toggleOf(tree, newest).props.accessibilityState).toMatchObject({
         expanded: true,
       });
       expect(toggleOf(tree, older).props.accessibilityState).toEqual({
@@ -662,15 +694,88 @@ describe('HistoryDetailScreen', () => {
       await pressToggle(tree, older);
 
       expect(isOpen(tree, older)).toBe(true);
-      expect(toggleOf(tree, older).props.accessibilityState).toEqual({
-        expanded: true,
+      // Open, the card is put away by Hide splits, under the splits.
+      expect(toggleOf(tree, older).props).toMatchObject({
+        accessibilityState: { expanded: true },
+        accessibilityLabel: `Hide splits, run on ${spokenDateTime(
+          older.createdAt,
+        )}`,
       });
-      expect(textsOf(tree, `btn-toggle-${older.id}`)).toContain('Hide splits');
+      expect(textsOf(tree, `btn-toggle-${older.id}`)).toEqual(['Hide splits']);
 
       await pressToggle(tree, older);
 
       expect(isOpen(tree, older)).toBe(false);
-      expect(textsOf(tree, `btn-toggle-${older.id}`)).toContain('Show splits');
+      // Closed, the whole row is the button again.
+      expect(toggleOf(tree, older).props).toMatchObject({
+        accessibilityState: { expanded: false },
+        accessibilityHint: 'Shows the time of each step',
+      });
+    });
+
+    describe('where a screen reader goes when a run is closed', () => {
+      let setFocus: jest.SpyInstance;
+      let handleSpy: jest.SpyInstance;
+      /** The test renderer has no native tags: one per node it is asked for. */
+      const tags = new Map<unknown, number>();
+      const handleOf = jest.fn((node: unknown) => {
+        if (node === null || node === undefined) {
+          return null;
+        }
+        if (!tags.has(node)) {
+          tags.set(node, tags.size + 1);
+        }
+        return tags.get(node) ?? null;
+      });
+
+      beforeEach(() => {
+        tags.clear();
+        handleOf.mockClear();
+        setFocus = jest
+          .spyOn(AccessibilityInfo, 'setAccessibilityFocus')
+          .mockImplementation(() => {});
+        // `findNodeHandle` is an accessor on the package, so spy on the
+        // getter; the cast is only to let TypeScript see it as one.
+        const reactNative = jest.requireActual('react-native') as {
+          readonly findNodeHandle: number;
+        };
+        handleSpy = jest
+          .spyOn(reactNative, 'findNodeHandle', 'get')
+          .mockReturnValue(handleOf as never);
+      });
+
+      afterEach(() => {
+        setFocus.mockRestore();
+        handleSpy.mockRestore();
+      });
+
+      it('moves to the closed card, since Hide splits went with the splits', async () => {
+        const drill = await seedDrill('Bill Drill');
+        const newest = await seedSession(drill.id, 2.4, '2026-10-10T12:00:00Z');
+        const { tree } = await renderScreen(drill);
+
+        await pressToggle(tree, newest);
+
+        expect(setFocus).toHaveBeenCalledTimes(1);
+        expect(handleOf).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            props: expect.objectContaining({
+              testID: `btn-toggle-${newest.id}`,
+            }),
+          }),
+        );
+      });
+
+      it('stays put when a run is opened', async () => {
+        const drill = await seedDrill('Bill Drill');
+        await seedSession(drill.id, 2.4, '2026-10-10T12:00:00Z');
+        const older = await seedSession(drill.id, 2.9, '2026-10-01T12:00:00Z');
+        const { tree } = await renderScreen(drill);
+
+        await pressToggle(tree, older);
+
+        expect(setFocus).not.toHaveBeenCalled();
+      });
     });
 
     it('closes the newest run when its card is pressed', async () => {
@@ -706,13 +811,13 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      // At the large text Jest runs at, each step captions its own figures.
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Draw', 'PAR', '1.50s', 'ACTUAL', '1.32s', 'Δ', '-0.18s'],
-        ...['Shot 1', 'PAR', '0.25s', 'ACTUAL', '0.31s', 'Δ', '+0.06s'],
-        ...['Shot 2', 'PAR', '0.50s', 'ACTUAL', '0.50s', 'Δ', '0.00s'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Draw', '1.50', '1.32', '−0.18'],
+        ...['Shot 1', '0.25', '0.31', '+0.06'],
+        ...['Shot 2', '0.50', '0.50', '0.00'],
         // An untimed step has no par, so nothing to be over or under.
-        ...['Holster', 'PAR', '—', 'ACTUAL', '1.50s', 'Δ', '—'],
+        ...['Holster', '—', '1.50', '—'],
       ]);
     });
 
@@ -747,8 +852,8 @@ describe('HistoryDetailScreen', () => {
 
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
         ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
-        ...['Draw', '1.50s', '1.32s', '-0.18s'],
-        ...['Holster', '—', '1.50s', '—'],
+        ...['Draw', '1.50', '1.32', '−0.18'],
+        ...['Holster', '—', '1.50', '—'],
       ]);
       // The captions are for the eye; every step still says its own.
       expect(spokenSteps(tree, run)).toEqual([
@@ -966,8 +1071,9 @@ describe('HistoryDetailScreen', () => {
 
       // The draw is silent, so its par is the first shot's, as in a run.
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '1.50s', 'ACTUAL', '1.62s', 'Δ', '+0.12s'],
-        ...['Shot 2', 'PAR', '0.25s', 'ACTUAL', '0.24s', 'Δ', '-0.01s'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '1.50', '1.62', '+0.12'],
+        ...['Shot 2', '0.25', '0.24', '−0.01'],
       ]);
       expect(spokenSteps(tree, run)).toEqual([
         'Shot 1, par 1.5 seconds, took 1.62 seconds, 0.12 seconds over par',
@@ -988,8 +1094,9 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
 
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '2.00s', 'ACTUAL', '1.62s', 'Δ', '-0.38s'],
-        ...['Shot 2', 'PAR', '0.25s', 'ACTUAL', '0.24s', 'Δ', '-0.01s'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '2.00', '1.62', '−0.38'],
+        ...['Shot 2', '0.25', '0.24', '−0.01'],
       ]);
     });
 
@@ -999,8 +1106,9 @@ describe('HistoryDetailScreen', () => {
       const { tree, goTo } = await renderScreen(drill);
 
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
-        ...['Shot 2', 'PAR', '—', 'ACTUAL', '0.24s', 'Δ', '—'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '—', '1.62', '—'],
+        ...['Shot 2', '—', '0.24', '—'],
       ]);
 
       await goTo('Elsewhere');
@@ -1008,8 +1116,9 @@ describe('HistoryDetailScreen', () => {
       await goTo('HistoryDetail');
 
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
-        ...['Shot 2', 'PAR', '0.25s', 'ACTUAL', '0.24s', 'Δ', '-0.01s'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '—', '1.62', '—'],
+        ...['Shot 2', '0.25', '0.24', '−0.01'],
       ]);
     });
 
@@ -1024,8 +1133,9 @@ describe('HistoryDetailScreen', () => {
       await goTo('HistoryDetail');
 
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
-        ...['Shot 2', 'PAR', '—', 'ACTUAL', '0.24s', 'Δ', '—'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '—', '1.62', '—'],
+        ...['Shot 2', '—', '0.24', '—'],
       ]);
     });
 
@@ -1044,8 +1154,9 @@ describe('HistoryDetailScreen', () => {
 
       // Shot 2 is now the first heard step, so the draw's par is its own.
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
-        ...['Shot 2', 'PAR', '1.75s', 'ACTUAL', '0.24s', 'Δ', '-1.51s'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '—', '1.62', '—'],
+        ...['Shot 2', '1.75', '0.24', '−1.51'],
       ]);
     });
 
@@ -1058,8 +1169,9 @@ describe('HistoryDetailScreen', () => {
       const { tree } = await renderScreen(drill);
 
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
-        ...['Shot 1', 'PAR', '—', 'ACTUAL', '1.62s', 'Δ', '—'],
-        ...['Shot 2', 'PAR', '—', 'ACTUAL', '0.24s', 'Δ', '—'],
+        ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
+        ...['Shot 1', '—', '1.62', '—'],
+        ...['Shot 2', '—', '0.24', '—'],
       ]);
     });
 
@@ -1110,6 +1222,63 @@ describe('HistoryDetailScreen', () => {
       expect(totals(tree)).toEqual({ best: '—', avg: '—' });
       expect(screenTexts(tree)).toContain('0 runs logged');
     });
+
+    it('sends the shooter to the Timer to log one', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const { tree, currentRoute } = await renderScreen(drill);
+
+      const [state] = byTestId(tree, 'state-history-detail-empty');
+      const goToTimer = state.findAll(
+        node =>
+          node.props.accessibilityRole === 'button' &&
+          node.props.accessibilityLabel === 'Go to Timer',
+      )[0];
+      await act(async () => {
+        goToTimer.props.onPress();
+      });
+
+      expect(currentRoute()?.name).toBe('Timer');
+    });
+  });
+
+  describe('the header', () => {
+    it('has a back link to the Log, read as words', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const { tree } = await renderScreen(drill);
+
+      expect(textsOf(tree, 'btn-back')).toContain('LOG');
+      expect(
+        byTestId(tree, 'btn-back').find(
+          node => node.props.accessibilityRole === 'button',
+        )?.props.accessibilityLabel,
+      ).toBe('Back to Log');
+    });
+
+    it('goes back when the back link is pressed', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const { tree, goTo, currentRoute } = await renderScreen(drill);
+      // Somewhere to go back to, as the list is in the app.
+      await goTo('Elsewhere');
+      await goTo('HistoryDetail');
+
+      await act(async () => {
+        byTestId(tree, 'btn-back')[0].props.onPress();
+      });
+
+      expect(currentRoute()?.name).toBe('Elsewhere');
+    });
+
+    it('captions the figures BEST and AVERAGE, in plain figures', async () => {
+      const drill = await seedDrill('Bill Drill');
+      await seedSession(drill.id, 3, '2026-10-10T12:00:00.000Z');
+      await seedSession(drill.id, 2, '2026-10-05T12:00:00.000Z');
+
+      const { tree } = await renderScreen(drill);
+
+      expect(screenTexts(tree)).toEqual(
+        expect.arrayContaining(['2.00', 'BEST', '2.50', 'AVERAGE']),
+      );
+    });
   });
 
   describe('coming back to the screen', () => {
@@ -1123,7 +1292,7 @@ describe('HistoryDetailScreen', () => {
       await goTo('HistoryDetail');
 
       expect(cardOrder(tree)).toEqual([second.id, first.id]);
-      expect(totals(tree)).toEqual({ best: '2.50s', avg: '2.80s' });
+      expect(totals(tree)).toEqual({ best: '2.50', avg: '2.80' });
       expect(isOpen(tree, second)).toBe(true);
       expect(isOpen(tree, first)).toBe(false);
     });
@@ -1169,7 +1338,7 @@ describe('HistoryDetailScreen', () => {
 
       expect(has(tree, 'state-history-detail-error')).toBe(false);
       expect(cardOrder(tree)).toEqual([run.id]);
-      expect(totals(tree)).toEqual({ best: '3.10s', avg: '3.10s' });
+      expect(totals(tree)).toEqual({ best: '3.10', avg: '3.10' });
     });
 
     it('says the runs may be out of date when reading again fails, until one succeeds', async () => {
@@ -1188,9 +1357,14 @@ describe('HistoryDetailScreen', () => {
         .mockRejectedValueOnce(storageFailure());
       await goTo('HistoryDetail');
 
-      expect(screenTexts(tree)).toContain(
+      const texts = screenTexts(tree);
+      const notice = texts.indexOf(
         'Could not refresh. Showing what was loaded earlier.',
       );
+      expect(notice).toBeGreaterThan(-1);
+      // Above the runs it is about, under the figures.
+      expect(notice).toBeLessThan(texts.indexOf('Runs'));
+      expect(notice).toBeGreaterThan(texts.indexOf('AVERAGE'));
       expect(announce).toHaveBeenCalledWith(
         'Could not refresh. Showing what was loaded earlier.',
       );
@@ -1220,7 +1394,7 @@ describe('HistoryDetailScreen', () => {
       await settle();
 
       expect(cardOrder(tree)).toEqual([run.id]);
-      expect(totals(tree)).toEqual({ best: '3.10s', avg: '3.10s' });
+      expect(totals(tree)).toEqual({ best: '3.10', avg: '3.10' });
     });
   });
 
@@ -1299,7 +1473,7 @@ describe('HistoryDetailScreen', () => {
 
       expect(has(tree, 'state-history-detail-error')).toBe(false);
       expect(cardOrder(tree)).toEqual([run.id]);
-      expect(totals(tree)).toEqual({ best: '3.10s', avg: '3.10s' });
+      expect(totals(tree)).toEqual({ best: '3.10', avg: '3.10' });
     });
   });
 });

@@ -1,32 +1,27 @@
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 
 import {
+  AccessibilityInfo,
+  findNodeHandle,
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
 
-import type { SemanticColors, Theme } from '@/theme/theme';
-import type { SessionSplit } from '@/types/session';
-import { useThemedStyles } from '@hooks/useTheme';
-import {
-  formatDateTime,
-  formatSeconds,
-  formatSignedSeconds,
-  spokenDateTime,
-  spokenSeconds,
-} from '@utils/format';
+import type { Theme } from '@/theme/theme';
+import type { Session } from '@/types/session';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
+import { formatDateTime, spokenDateTime, spokenSeconds } from '@utils/format';
 import { shownDeltaSign, type RunSummary } from '@utils/history';
+import { describeSavedSplits } from '@utils/splitRows';
 
 import { Button } from './Button';
 import { Card } from './Card';
 import { Chip } from './Chip';
 import { Icon } from './Icon';
+import { SplitsTable } from './SplitsTable';
 import { Typography } from './Typography';
-
-/** Stands in for a figure a step does not have: an untimed step's par. */
-const NO_VALUE = '—';
 
 /** What a run stopped before its last step is marked with. */
 const STOPPED_EARLY = 'Stopped early';
@@ -35,43 +30,35 @@ const STOPPED_EARLY = 'Stopped early';
 const PERSONAL_BEST = 'PB';
 
 /**
- * Sizes in dp at the default font size; each is multiplied by the system
- * font scale. A figure column of the split table is `FIGURE_COLUMN_WIDTH`
- * wide; stacked, a figure only needs room for its caption, which lets all
- * three share a line on most phones.
- */
-const FIGURE_COLUMN_WIDTH = 60;
-const STACKED_FIGURE_MIN_WIDTH = 48;
-
-/**
- * Above this font scale the table's four columns no longer fit side by
- * side on a phone, so each step puts its name over its captioned figures.
- */
-const STACK_SPLITS_ABOVE_FONT_SCALE = 1.2;
-
-/**
  * Above this font scale the date and the total time no longer fit side by
- * side, so the total goes under the date and chip.
+ * side, so the total goes under the date and chips.
  */
 const STACK_HEADER_ABOVE_FONT_SCALE = 1.3;
 
-const CHEVRON_SIZE = 12;
+/** A true minus sign, so a difference reads as the split table's do. */
+const MINUS = '−';
 
-type Tone = 'success' | 'danger' | 'neutral';
+/**
+ * How a run's total compares to the run before, in plain figures as the
+ * split table shows them: `+0.06`, `−0.10`, or `0.00` for one that
+ * rounds to nothing.
+ */
+const signedFigure = (delta: number): string => {
+  const sign = shownDeltaSign(delta);
+  const size = Math.abs(delta).toFixed(2);
+  if (sign === 0) {
+    return size;
+  }
+  return `${sign > 0 ? '+' : MINUS}${size}`;
+};
 
 /** A difference that reads as faster is good news, slower is bad. */
-const toneOf = (delta: number): Tone => {
+const toneOf = (delta: number): 'success' | 'danger' | 'neutral' => {
   const sign = shownDeltaSign(delta);
   if (sign === 0) {
     return 'neutral';
   }
   return sign < 0 ? 'success' : 'danger';
-};
-
-const toneColor: Record<Tone, keyof SemanticColors> = {
-  success: 'success',
-  danger: 'danger',
-  neutral: 'textSecondary',
 };
 
 /** A length of time said to the hundredth, the figure the card shows. */
@@ -108,25 +95,29 @@ const speakRun = ({
   return said.join(', ');
 };
 
-/** One step of the run as a screen reader should say it. */
-const speakSplit = ({ label, par, actual, delta }: SessionSplit): string => {
-  if (par === undefined || delta === null) {
-    return `${label}, no par, took ${speak(actual)}`;
-  }
-
-  const sign = shownDeltaSign(delta);
-  const againstPar =
-    sign === 0
-      ? 'on par'
-      : `${speak(delta)} ${sign < 0 ? 'under' : 'over'} par`;
-  return `${label}, par ${speak(par)}, took ${speak(actual)}, ${againstPar}`;
-};
-
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    header: {
-      padding: theme.spacing.md,
+    // A minimum, so a large system font grows the row instead of clipping.
+    closed: {
+      minHeight: theme.sizes.runRowMin,
+      flexDirection: 'row',
+      alignItems: 'center',
       gap: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.inset,
+      paddingVertical: theme.spacing.sm,
+    },
+    closedEnd: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    // The one chevron glyph points right: turned down for "open me".
+    chevronDown: { transform: [{ rotate: '90deg' }] },
+    header: {
+      paddingHorizontal: theme.spacing.inset,
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: theme.sizes.rule,
+      borderBottomColor: theme.colors.outline,
     },
     headerRow: {
       flexDirection: 'row',
@@ -134,217 +125,88 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.sm,
     },
     headerStacked: { gap: theme.spacing.xs },
-    headerText: { gap: theme.spacing.xs },
     // Beside the total, the date takes the room that is left and wraps.
-    headerTextInRow: { flex: 1 },
-    toggleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: theme.spacing.xs,
-    },
-    // The one chevron glyph points right: turned down to open, up to close.
-    chevronOpen: { transform: [{ rotate: '-90deg' }] },
-    chevronClosed: { transform: [{ rotate: '90deg' }] },
-    table: {
-      paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.sm,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border,
-    },
-    row: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.sm,
-    },
-    rowStacked: {
-      gap: theme.spacing.xs,
-      paddingVertical: theme.spacing.sm,
-    },
-    rowDivider: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: theme.colors.border,
-    },
-    name: { flex: 1 },
-    figures: {
-      flexDirection: 'row',
-      gap: theme.spacing.sm,
-    },
-    figuresStacked: {
+    summaryInRow: { flex: 1 },
+    summary: { gap: theme.spacing.xs },
+    chips: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      columnGap: theme.spacing.md,
-      rowGap: theme.spacing.xs,
+      gap: theme.spacing.xs,
     },
-    figure: { alignItems: 'flex-end' },
-    figureCaption: { textAlign: 'right' },
-    compare: {
-      paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.md,
+    // Under the splits, which is what a comparison sets side by side.
+    footer: {
+      gap: theme.spacing.inset,
+      paddingHorizontal: theme.spacing.inset,
+      paddingVertical: theme.spacing.sm,
+      borderTopWidth: theme.sizes.rule,
+      borderTopColor: theme.colors.border,
     },
+    footerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    hide: { paddingHorizontal: theme.spacing.none },
+    // Beside Hide splits, Compare takes the rest of the row. `minWidth: 0`
+    // lets it narrow below its label, which then wraps inside the button
+    // instead of running past the card.
+    compareInRow: { flex: 1, minWidth: 0 },
   });
 
-type Layout = {
-  /** Name over captioned figures, instead of four columns. */
-  stacked: boolean;
-  /** Width of one figure column at the current font scale. */
-  figureWidth: number;
+type RunSummaryLineProps = {
+  run: RunSummary;
+  /** Beside the total, rather than over it. */
+  inRow: boolean;
 };
 
-type FigureProps = Layout & {
-  caption: string;
-  value: string;
-  color?: keyof SemanticColors;
-};
-
-/** One of a step's three times. It carries its caption when stacked. */
-const Figure = ({
-  caption,
-  value,
-  color = 'textPrimary',
-  stacked,
-  figureWidth,
-}: FigureProps) => {
+/** When the run was made, over its marks: stopped early, PB, the delta. */
+const RunSummaryLine = ({ run, inRow }: RunSummaryLineProps) => {
   const styles = useThemedStyles(createStyles);
-
-  if (stacked) {
-    return (
-      <View style={{ minWidth: figureWidth }}>
-        <Typography variant="overline" color="textSecondary">
-          {caption}
-        </Typography>
-        <Typography variant="metricSmall" color={color}>
-          {value}
-        </Typography>
-      </View>
-    );
-  }
+  const { session, deltaToPrevious, personalBest } = run;
+  // A run stopped early is not compared, so it has one or the other.
+  const hasChips =
+    !session.completed || personalBest || deltaToPrevious !== null;
 
   return (
-    <View style={[styles.figure, { width: figureWidth }]}>
-      <Typography variant="metricSmall" color={color}>
-        {value}
+    <View style={[styles.summary, inRow && styles.summaryInRow]}>
+      <Typography variant="bodyStrong">
+        {formatDateTime(session.createdAt)}
       </Typography>
+      {hasChips ? (
+        <View style={styles.chips}>
+          {session.completed ? null : (
+            <Chip
+              label={STOPPED_EARLY}
+              testID={`chip-incomplete-${session.id}`}
+            />
+          )}
+          {personalBest ? (
+            <Chip
+              label={PERSONAL_BEST}
+              tone="inverse"
+              testID={`chip-pb-${session.id}`}
+            />
+          ) : null}
+          {deltaToPrevious !== null ? (
+            <Chip
+              label={`${signedFigure(deltaToPrevious)} vs previous`}
+              tone={toneOf(deltaToPrevious)}
+              testID={`chip-delta-${session.id}`}
+            />
+          ) : null}
+        </View>
+      ) : null}
     </View>
   );
 };
 
-const CAPTIONS = { par: 'PAR', actual: 'ACTUAL', delta: 'Δ' } as const;
+type TotalProps = { session: Session };
 
-/** The column captions, shown once above the rows when they sit in columns. */
-const SplitTableHeader = ({ figureWidth }: Pick<Layout, 'figureWidth'>) => {
-  const styles = useThemedStyles(createStyles);
-
-  return (
-    // Every row says its own figures by name, so the captions are skipped.
-    <View
-      style={styles.row}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
-      <Typography variant="overline" color="textSecondary" style={styles.name}>
-        STEP
-      </Typography>
-      <View style={styles.figures}>
-        {Object.values(CAPTIONS).map(caption => (
-          <Typography
-            key={caption}
-            variant="overline"
-            color="textSecondary"
-            style={[styles.figureCaption, { width: figureWidth }]}
-          >
-            {caption}
-          </Typography>
-        ))}
-      </View>
-    </View>
-  );
-};
-
-type SplitRowProps = Layout & {
-  split: SessionSplit;
-  /** Draw a rule above the row, to part it from the one before. */
-  divided: boolean;
-};
-
-const SplitRow = ({ split, divided, stacked, figureWidth }: SplitRowProps) => {
-  const styles = useThemedStyles(createStyles);
-  const layout = { stacked, figureWidth };
-
-  return (
-    <View
-      style={[
-        stacked ? styles.rowStacked : styles.row,
-        divided && styles.rowDivider,
-      ]}
-      accessible
-      accessibilityLabel={speakSplit(split)}
-    >
-      <Typography variant="body" style={stacked ? undefined : styles.name}>
-        {split.label}
-      </Typography>
-      <View style={stacked ? styles.figuresStacked : styles.figures}>
-        <Figure
-          caption={CAPTIONS.par}
-          value={split.par === undefined ? NO_VALUE : formatSeconds(split.par)}
-          color="textTertiary"
-          {...layout}
-        />
-        <Figure
-          caption={CAPTIONS.actual}
-          value={formatSeconds(split.actual)}
-          {...layout}
-        />
-        <Figure
-          caption={CAPTIONS.delta}
-          value={
-            split.delta === null ? NO_VALUE : formatSignedSeconds(split.delta)
-          }
-          color={
-            split.delta === null
-              ? 'textSecondary'
-              : toneColor[toneOf(split.delta)]
-          }
-          {...layout}
-        />
-      </View>
-    </View>
-  );
-};
-
-type SplitTableProps = {
-  sessionId: string;
-  splits: readonly SessionSplit[];
-};
-
-/**
- * Step / Par / Actual / Δ for every step of a run. A run has at most
- * `MAX_DRILL_STEPS` splits, so the rows are mapped, not virtualised.
- */
-const SplitTable = ({ sessionId, splits }: SplitTableProps) => {
-  const styles = useThemedStyles(createStyles);
-  const { fontScale } = useWindowDimensions();
-  const stacked = fontScale > STACK_SPLITS_ABOVE_FONT_SCALE;
-  const figureWidth =
-    (stacked ? STACKED_FIGURE_MIN_WIDTH : FIGURE_COLUMN_WIDTH) * fontScale;
-
-  return (
-    <View style={styles.table} testID={`table-splits-${sessionId}`}>
-      {stacked ? null : <SplitTableHeader figureWidth={figureWidth} />}
-      {splits.map((split, index) => (
-        <SplitRow
-          key={split.stepId}
-          split={split}
-          // Under the captions every row is ruled; stacked, the first is not.
-          divided={!stacked || index > 0}
-          stacked={stacked}
-          figureWidth={figureWidth}
-        />
-      ))}
-    </View>
-  );
-};
+/** A run's total, in plain figures as on the Timer's clock. */
+const Total = ({ session }: TotalProps) => (
+  <Typography variant="metric" testID={`text-run-total-${session.id}`}>
+    {session.totalTime.toFixed(2)}
+  </Typography>
+);
 
 type RunCardProps = {
   run: RunSummary;
@@ -362,100 +224,113 @@ type RunCardProps = {
 
 const RunCardBase = ({ run, expanded, onToggle, onCompare }: RunCardProps) => {
   const styles = useThemedStyles(createStyles);
+  const { sizes } = useTheme();
   const { fontScale } = useWindowDimensions();
   const headerStacked = fontScale > STACK_HEADER_ABOVE_FONT_SCALE;
-  const { session, deltaToPrevious, personalBest } = run;
+  const { session } = run;
+  const spokenWhen = spokenDateTime(session.createdAt);
+
+  // Hide splits goes with the splits, so a screen reader's focus is moved
+  // to the closed card rather than left on nothing.
+  const closedRef = useRef<View>(null);
+  const refocusOnClose = useRef(false);
+  useEffect(() => {
+    if (expanded || !refocusOnClose.current) {
+      return;
+    }
+    refocusOnClose.current = false;
+    const handle = findNodeHandle(closedRef.current);
+    if (handle !== null) {
+      AccessibilityInfo.setAccessibilityFocus(handle);
+    }
+  }, [expanded]);
+
+  const hide = () => {
+    refocusOnClose.current = true;
+    onToggle(session.id);
+  };
+
+  if (!expanded) {
+    return (
+      <Card flush testID={`card-run-${session.id}`}>
+        {/* The whole row is the button: a big target for a gloved hand. */}
+        <TouchableOpacity
+          ref={closedRef}
+          onPress={() => onToggle(session.id)}
+          accessibilityRole="button"
+          accessibilityLabel={speakRun(run)}
+          accessibilityHint="Shows the time of each step"
+          accessibilityState={{ expanded: false }}
+          activeOpacity={0.75}
+          style={styles.closed}
+          testID={`btn-toggle-${session.id}`}
+        >
+          <RunSummaryLine run={run} inRow />
+          <View style={styles.closedEnd}>
+            <Total session={session} />
+            <View style={styles.chevronDown}>
+              <Icon name="chevron" size={sizes.iconSm} color="textPrimary" />
+            </View>
+          </View>
+        </TouchableOpacity>
+      </Card>
+    );
+  }
 
   return (
     <Card flush testID={`card-run-${session.id}`}>
-      {/* The whole header is the button: a big target for a gloved hand. */}
-      <TouchableOpacity
-        onPress={() => onToggle(session.id)}
-        accessibilityRole="button"
-        accessibilityLabel={speakRun(run)}
-        accessibilityHint={
-          expanded
-            ? 'Hides the time of each step'
-            : 'Shows the time of each step'
-        }
-        accessibilityState={{ expanded }}
-        activeOpacity={0.75}
+      <View
         style={styles.header}
-        testID={`btn-toggle-${session.id}`}
+        accessible
+        accessibilityLabel={speakRun(run)}
+        testID={`header-run-${session.id}`}
       >
         <View style={headerStacked ? styles.headerStacked : styles.headerRow}>
-          <View
-            style={[
-              styles.headerText,
-              !headerStacked && styles.headerTextInRow,
-            ]}
-          >
-            <Typography variant="bodyStrong">
-              {formatDateTime(session.createdAt)}
-            </Typography>
-            {/* A run stopped early is not compared, so it has one or the other. */}
-            {session.completed ? null : (
-              <Chip
-                label={STOPPED_EARLY}
-                testID={`chip-incomplete-${session.id}`}
-              />
-            )}
-            {personalBest ? (
-              <Chip
-                label={PERSONAL_BEST}
-                tone="success"
-                testID={`chip-pb-${session.id}`}
-              />
-            ) : null}
-            {deltaToPrevious !== null ? (
-              <Chip
-                label={`${formatSignedSeconds(deltaToPrevious)} vs previous`}
-                tone={toneOf(deltaToPrevious)}
-                testID={`chip-delta-${session.id}`}
-              />
-            ) : null}
-          </View>
-          <Typography variant="metric">
-            {formatSeconds(session.totalTime)}
-          </Typography>
+          <RunSummaryLine run={run} inRow={!headerStacked} />
+          <Total session={session} />
         </View>
+      </View>
 
-        <View style={styles.toggleRow}>
-          <Typography variant="label" color="primary">
-            {expanded ? 'Hide splits' : 'Show splits'}
-          </Typography>
-          <View style={expanded ? styles.chevronOpen : styles.chevronClosed}>
-            <Icon name="chevron" size={CHEVRON_SIZE} color="primary" />
-          </View>
-        </View>
-      </TouchableOpacity>
+      <SplitsTable
+        rows={describeSavedSplits(session.splits)}
+        framed={false}
+        timeColumn="actual"
+        testID={`table-splits-${session.id}`}
+      />
 
-      {expanded ? (
-        <SplitTable sessionId={session.id} splits={session.splits} />
-      ) : null}
-
-      {/* Under the splits, which is what a comparison sets side by side. */}
-      {expanded && onCompare !== undefined ? (
-        <View style={styles.compare}>
+      <View style={[styles.footer, !headerStacked && styles.footerRow]}>
+        <Button
+          label="Hide splits"
+          variant="text"
+          expanded
+          onPress={hide}
+          // Starts with what the button says, so a voice command finds it.
+          accessibilityLabel={`Hide splits, run on ${spokenWhen}`}
+          style={styles.hide}
+          testID={`btn-toggle-${session.id}`}
+        />
+        {onCompare !== undefined ? (
           <Button
             label="Compare with another run"
             variant="secondary"
             onPress={() => onCompare(session.id)}
-            accessibilityLabel={`Compare the run on ${spokenDateTime(session.createdAt)} with another run`}
+            accessibilityLabel={`Compare the run on ${spokenWhen} with another run`}
+            style={!headerStacked && styles.compareInRow}
             testID={`btn-compare-${session.id}`}
           />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
     </Card>
   );
 };
 
 /**
- * One run of a drill: when it was made, its total time and how that
- * compares to the completed run before it, or that it was stopped early,
- * and a "PB" badge on the drill's personal best. Pressing the header shows
- * or hides the time of every step, and, when the drill has another run,
- * offers to compare the two.
+ * One run of a drill, as a ruled card. Closed, it is one row: when the run
+ * was made, its marks (stopped early, PB, how its total compares to the
+ * completed run before it), the total, and a chevron; pressing the row
+ * opens it. Open, the same header sits over the run's STEP / PAR / ACTUAL
+ * / Δ table, the Timer's own, and a footer with Hide splits and, when the
+ * drill has another run, Compare.
  *
  * Memoised because the screen lists every run of the drill and pressing
  * one card must not redraw the others.

@@ -265,6 +265,24 @@ describe('Button', () => {
     });
   });
 
+  it('says whether what it shows or hides is open', () => {
+    const tree = render(
+      <Button
+        label="Hide splits"
+        variant="text"
+        expanded
+        onPress={jest.fn()}
+        testID="btn"
+      />,
+    );
+
+    expect(host(tree).props.accessibilityState).toEqual({
+      disabled: false,
+      busy: false,
+      expanded: true,
+    });
+  });
+
   it('draws a leading mark beside its label', () => {
     const tree = render(
       <Button
