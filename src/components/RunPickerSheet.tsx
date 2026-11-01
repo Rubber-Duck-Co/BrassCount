@@ -2,7 +2,6 @@ import { useCallback } from 'react';
 
 import {
   FlatList,
-  Modal,
   Pressable,
   StyleSheet,
   useWindowDimensions,
@@ -10,29 +9,29 @@ import {
   type ListRenderItemInfo,
 } from 'react-native';
 
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
 import type { Theme } from '@/theme/theme';
-import { useTheme, useThemedStyles } from '@hooks/useTheme';
-import {
-  formatDateTime,
-  formatSeconds,
-  spokenDateTime,
-  spokenSeconds,
-} from '@utils/format';
+import type { Session } from '@/types/session';
+import { useThemedStyles } from '@hooks/useTheme';
+import { formatDateTime, spokenDateTime, spokenSeconds } from '@utils/format';
 import type { RunSummary } from '@utils/history';
 
+import { BottomSheet, SHEET_CONTENT_MAX_HEIGHT_RATIO } from './BottomSheet';
 import { Chip } from './Chip';
 import { Typography } from './Typography';
-
-/** The most of the window's height the sheet's list may take. */
-const LIST_MAX_HEIGHT_RATIO = 0.6;
 
 /** What a run stopped before its last step is marked with, as on its card. */
 const STOPPED_EARLY = 'Stopped early';
 
+/** What the drill's quickest completed run is marked with. */
+const PERSONAL_BEST = 'PB';
+
 type RunPickerSheetProps = {
   visible: boolean;
+  /**
+   * The run the one picked is set against, named in the line under the
+   * title. Without it the line asks for another run of the drill.
+   */
+  from?: Session;
   /** The runs that can be picked, newest first. */
   runs: readonly RunSummary[];
   /** Called with the session id of the run picked. */
@@ -43,50 +42,34 @@ type RunPickerSheetProps = {
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    // Mirrors the appearance and par picker sheets so they feel like the
-    // same primitive.
-    backdrop: {
-      flex: 1,
-      justifyContent: 'flex-end',
-      backgroundColor: theme.colors.overlay,
+    // The runs in a ruled box on the sheet's Paper, like `OptionList`.
+    box: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
     },
-    sheet: {
-      backgroundColor: theme.colors.background,
-      borderTopLeftRadius: theme.radius.lg,
-      borderTopRightRadius: theme.radius.lg,
-      paddingTop: theme.spacing.sm,
-    },
-    grabber: {
-      alignSelf: 'center',
-      width: 36,
-      height: 4,
-      borderRadius: theme.radius.pill,
-      backgroundColor: theme.colors.borderStrong,
-      marginBottom: theme.spacing.sm,
-    },
-    header: {
-      paddingHorizontal: theme.spacing.lg,
-      paddingBottom: theme.spacing.sm,
-      gap: theme.spacing.xs,
-    },
+    // A minimum height, so a date that wraps at a large font grows the
+    // row instead of clipping.
     option: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: theme.spacing.md,
-      paddingVertical: theme.spacing.md - theme.spacing.xs,
-      paddingHorizontal: theme.spacing.lg,
-      minHeight: 56,
+      gap: theme.spacing.sm,
+      minHeight: theme.sizes.sheetRowMin,
+      paddingVertical: theme.spacing.xs,
+      paddingHorizontal: theme.spacing.inset,
     },
-    optionDivider: {
-      borderTopWidth: StyleSheet.hairlineWidth,
+    divider: {
+      borderTopWidth: theme.sizes.rule,
       borderTopColor: theme.colors.border,
     },
-    // The date takes the room the total leaves, and wraps.
-    optionBody: { flex: 1, gap: theme.spacing.xs },
-    chips: {
+    // The date and its marks take the room the total leaves, and wrap.
+    summary: {
+      flex: 1,
       flexDirection: 'row',
       flexWrap: 'wrap',
-      gap: theme.spacing.xs,
+      alignItems: 'center',
+      gap: theme.spacing.sm,
     },
   });
 
@@ -106,6 +89,7 @@ type RunOptionProps = {
   onSelect: (sessionId: string) => void;
 };
 
+/** One run: its date and marks, then its total in plain figures. */
 const RunOption = ({ run, divided, onSelect }: RunOptionProps) => {
   const styles = useThemedStyles(createStyles);
   const { session, personalBest } = run;
@@ -116,22 +100,18 @@ const RunOption = ({ run, divided, onSelect }: RunOptionProps) => {
       accessibilityRole="button"
       accessibilityLabel={speakRun(run)}
       accessibilityHint="Compares this run with the one you chose"
-      style={[styles.option, divided && styles.optionDivider]}
+      style={[styles.option, divided && styles.divider]}
       testID={`opt-compare-${session.id}`}
     >
-      <View style={styles.optionBody}>
+      <View style={styles.summary}>
         <Typography variant="bodyStrong">
           {formatDateTime(session.createdAt)}
         </Typography>
-        {session.completed && !personalBest ? null : (
-          <View style={styles.chips}>
-            {session.completed ? null : <Chip label={STOPPED_EARLY} />}
-            {personalBest ? <Chip label="PB" tone="success" /> : null}
-          </View>
-        )}
+        {personalBest ? <Chip label={PERSONAL_BEST} tone="inverse" /> : null}
+        {session.completed ? null : <Chip label={STOPPED_EARLY} />}
       </View>
-      <Typography variant="metricSmall">
-        {formatSeconds(session.totalTime)}
+      <Typography variant="metricRow">
+        {session.totalTime.toFixed(2)}
       </Typography>
     </Pressable>
   );
@@ -141,19 +121,20 @@ const keyOfRun = (run: RunSummary): string => run.session.id;
 
 /**
  * Bottom sheet that picks the run to compare another run of the same drill
- * with. Picking one calls `onSelect`; closing the sheet is left to the
- * caller, through `visible`. A drill can be run any number of times, so
- * the runs are a list that scrolls inside the sheet.
+ * with, on the Range Card sheet frame: a line naming the run it compares
+ * from, then the runs in a ruled box. Picking one calls `onSelect`;
+ * closing the sheet is left to the caller, through `visible`. A drill can
+ * be run any number of times, so the runs are a list that scrolls inside
+ * the sheet.
  */
 export const RunPickerSheet = ({
   visible,
+  from,
   runs,
   onSelect,
   onClose,
 }: RunPickerSheetProps) => {
   const styles = useThemedStyles(createStyles);
-  const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
 
   const renderRun = useCallback(
@@ -164,52 +145,35 @@ export const RunPickerSheet = ({
   );
 
   return (
-    <Modal
+    <BottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      title="Compare with"
+      closeLabel="Close run picker"
+      backdropTestID="btn-compare-backdrop"
+      closeTestID="btn-compare-close"
+      testID="sheet-compare"
     >
-      <Pressable
-        style={styles.backdrop}
-        accessibilityRole="button"
-        accessibilityLabel="Close run picker"
-        onPress={onClose}
-        testID="btn-compare-close"
+      <Typography
+        variant="body"
+        color="textSecondary"
+        testID="text-compare-from"
       >
-        {/* Claims touches inside the sheet so they don't reach the backdrop
-            and dismiss it. */}
-        <View
-          onStartShouldSetResponder={() => true}
-          style={[
-            styles.sheet,
-            { paddingBottom: insets.bottom + theme.spacing.sm },
-          ]}
-          testID="sheet-compare"
-        >
-          <View style={styles.grabber} />
-          <View style={styles.header}>
-            <Typography
-              variant="overline"
-              color="textSecondary"
-              accessibilityRole="header"
-            >
-              COMPARE WITH
-            </Typography>
-            <Typography variant="caption" color="textTertiary">
-              Pick another run of this drill.
-            </Typography>
-          </View>
+        {from === undefined
+          ? 'Pick another run of this drill.'
+          : `Pick a run to set against the run on ${formatDateTime(from.createdAt)}.`}
+      </Typography>
 
-          <FlatList
-            data={runs}
-            keyExtractor={keyOfRun}
-            renderItem={renderRun}
-            style={{ maxHeight: height * LIST_MAX_HEIGHT_RATIO }}
-            testID="list-compare-runs"
-          />
-        </View>
-      </Pressable>
-    </Modal>
+      <FlatList
+        data={runs}
+        keyExtractor={keyOfRun}
+        renderItem={renderRun}
+        style={[
+          styles.box,
+          { maxHeight: height * SHEET_CONTENT_MAX_HEIGHT_RATIO },
+        ]}
+        testID="list-compare-runs"
+      />
+    </BottomSheet>
   );
 };
