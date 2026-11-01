@@ -10,10 +10,15 @@
  *
  * Under, on or over par is decided as the figure reads to the hundredth
  * (`shownDeltaSign`), so a row is never toned over par while it shows 0.00.
+ *
+ * The Log's run cards use the same table for a saved run
+ * (`describeSavedSplits`), so a run reads the same before and after it is
+ * saved.
  */
 
 import type { DrillStep } from '@/types/drill';
 import type { RunStep, StepResult } from '@/types/run';
+import type { SessionSplit } from '@/types/session';
 
 import { stepLabel } from './drill';
 import { spokenSeconds } from './format';
@@ -177,6 +182,41 @@ const heardRow = (
       .join(', '),
   };
 };
+
+/**
+ * The rows of a saved run, as the Log shows it: one per split, in the
+ * order they were run. A split carries its own label, par and difference,
+ * so nothing is worked out again; a step with no par shows a dash for
+ * both the par and the difference.
+ */
+export const describeSavedSplits = (
+  splits: readonly SessionSplit[],
+): SplitRow[] =>
+  splits.map(({ stepId, label, par, actual, delta }) => {
+    const took = `took ${speak(actual)}`;
+    const time = figure(actual);
+    if (par === undefined || delta === null) {
+      return {
+        stepId,
+        label,
+        par: par === undefined ? NO_FIGURE : figure(par),
+        time,
+        delta: NO_FIGURE,
+        deltaTone: 'note',
+        spoken: `${label}, no par, ${took}`,
+      };
+    }
+    const judged = againstPar(delta);
+    return {
+      stepId,
+      label,
+      par: figure(par),
+      time,
+      delta: judged.delta,
+      deltaTone: judged.deltaTone,
+      spoken: `${label}, par ${speak(par)}, ${took}, ${judged.spoken}`,
+    };
+  });
 
 /** One row per step of the drill, in order. */
 export const describeSplits = ({

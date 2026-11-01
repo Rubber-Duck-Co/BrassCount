@@ -1,3 +1,5 @@
+import type { ComponentProps } from 'react';
+
 import { StyleSheet } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
@@ -35,10 +37,12 @@ const ROWS: SplitRow[] = [
   },
 ];
 
-const render = (rows: SplitRow[] = ROWS): ReactTestRenderer => {
+const render = (
+  props: Partial<ComponentProps<typeof SplitsTable>> = {},
+): ReactTestRenderer => {
   let tree: ReactTestRenderer | undefined;
   act(() => {
-    tree = create(<SplitsTable rows={rows} />);
+    tree = create(<SplitsTable rows={ROWS} {...props} />);
   });
   if (tree === undefined) {
     throw new Error('render failed');
@@ -123,5 +127,43 @@ describe('SplitsTable', () => {
         .borderBottomWidth ?? 0;
     expect(divided(0)).toBe(1);
     expect(divided(2)).toBe(0);
+  });
+
+  it('draws its own ruled box unless it sits inside one', () => {
+    const borderOf = (tree: ReactTestRenderer) =>
+      StyleSheet.flatten(first(tree, 'table-splits').props.style)
+        ?.borderWidth ?? 0;
+
+    expect(borderOf(render())).toBe(2);
+    expect(borderOf(render({ framed: false }))).toBe(0);
+  });
+
+  it('heads the time column ACTUAL in a wider column for a saved run', () => {
+    const tree = render({ timeColumn: 'actual' });
+
+    const captions = first(tree, 'row-splits-header')
+      .findAll(node => typeof node.props.children === 'string')
+      .map(node => node.props.children);
+    expect(captions).toContain('ACTUAL');
+    expect(captions).not.toContain('TIME');
+    // Wide enough for ACTUAL at large text, so the caption never breaks.
+    const time = first(tree, 'row-split-1-time');
+    const cell = StyleSheet.flatten(time.parent?.props.style);
+    expect(cell.width).toBeCloseTo(60 * 1.2);
+    const par = first(tree, 'row-split-1-par');
+    expect(StyleSheet.flatten(par.parent?.props.style).width).toBeCloseTo(
+      52 * 1.2,
+    );
+  });
+
+  it('takes the testID it is given, so several tables can share a screen', () => {
+    const tree = render({ testID: 'table-splits-run-1' });
+
+    expect(
+      tree.root.findAllByProps({ testID: 'table-splits-run-1' }),
+    ).not.toHaveLength(0);
+    expect(tree.root.findAllByProps({ testID: 'table-splits' })).toHaveLength(
+      0,
+    );
   });
 });

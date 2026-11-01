@@ -61,6 +61,7 @@ describe('summarizeDrillHistory', () => {
       {
         drillId: 'a',
         drillName: 'Bill Drill',
+        deleted: false,
         runCount: 3,
         bestTime: 2.4,
         lastRunAt: '2026-10-03T10:00:00.000Z',
@@ -185,11 +186,21 @@ describe('summarizeDrillHistory', () => {
       {
         drillId: 'gone',
         drillName: DELETED_DRILL_NAME,
+        deleted: true,
         runCount: 2,
         bestTime: 2.8,
         lastRunAt: '2026-10-02T10:00:00.000Z',
       },
     ]);
+  });
+
+  it('does not take a saved drill for a deleted one by its name', () => {
+    const [summary] = summarizeDrillHistory(
+      [session('a', 3.1, '2026-10-02T10:00:00.000Z')],
+      [drill('a', DELETED_DRILL_NAME)],
+    );
+
+    expect(summary.deleted).toBe(false);
   });
 
   it('keeps two deleted drills as two rows', () => {

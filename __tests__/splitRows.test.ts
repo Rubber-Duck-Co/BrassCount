@@ -1,7 +1,12 @@
 import type { DrillStep } from '../src/types/drill';
 import type { StepResult } from '../src/types/run';
+import type { SessionSplit } from '../src/types/session';
 import { planRun } from '../src/utils/runDetection';
-import { describeSplits, type SplitStage } from '../src/utils/splitRows';
+import {
+  describeSavedSplits,
+  describeSplits,
+  type SplitStage,
+} from '../src/utils/splitRows';
 
 /** A draw, two shots with pars, and a holster with nothing heard after it. */
 const STEPS: DrillStep[] = [
@@ -160,5 +165,69 @@ describe('describeSplits', () => {
     const labels = rowsAt('before').map(row => row.label);
 
     expect(labels).toEqual(['Draw', 'Shot 1', 'Shot 2', 'Holster']);
+  });
+});
+
+describe('describeSavedSplits', () => {
+  const split = (
+    par: number | undefined,
+    actual: number,
+    delta: number | null,
+  ): SessionSplit => ({ stepId: 'step', label: 'Shot 1', par, actual, delta });
+
+  it('shows a step under par in plain figures with a true minus sign', () => {
+    const [row] = describeSavedSplits([split(1.5, 1.32, -0.18)]);
+
+    expect(row).toEqual({
+      stepId: 'step',
+      label: 'Shot 1',
+      par: '1.50',
+      time: '1.32',
+      delta: '−0.18',
+      deltaTone: 'figure',
+      spoken:
+        'Shot 1, par 1.5 seconds, took 1.32 seconds, 0.18 seconds under par',
+    });
+  });
+
+  it('shows a step over par with a plus sign, toned as over', () => {
+    const [row] = describeSavedSplits([split(0.25, 0.31, 0.06)]);
+
+    expect(row.delta).toBe('+0.06');
+    expect(row.deltaTone).toBe('over');
+    expect(row.spoken).toBe(
+      'Shot 1, par 0.25 seconds, took 0.31 seconds, 0.06 seconds over par',
+    );
+  });
+
+  it('shows a step on par as no difference, not as over', () => {
+    const [row] = describeSavedSplits([split(0.5, 0.504, 0.004)]);
+
+    expect(row.delta).toBe('0.00');
+    expect(row.deltaTone).toBe('figure');
+    expect(row.spoken).toBe(
+      'Shot 1, par 0.5 seconds, took 0.5 seconds, on par',
+    );
+  });
+
+  it('shows a dash for the par and the difference of a step with no par', () => {
+    const [row] = describeSavedSplits([split(undefined, 1.5, null)]);
+
+    expect(row).toMatchObject({
+      par: '—',
+      time: '1.50',
+      delta: '—',
+      deltaTone: 'note',
+      spoken: 'Shot 1, no par, took 1.5 seconds',
+    });
+  });
+
+  it('keeps the steps in the order they were run', () => {
+    const rows = describeSavedSplits([
+      { stepId: 'a', label: 'Draw', par: 1.5, actual: 1.4, delta: -0.1 },
+      { stepId: 'b', label: 'Shot 1', actual: 0.3, delta: null },
+    ]);
+
+    expect(rows.map(row => row.label)).toEqual(['Draw', 'Shot 1']);
   });
 });

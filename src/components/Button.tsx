@@ -69,6 +69,11 @@ type ButtonProps = {
   accessibilityLabel?: string;
   /** Read after the label; use it to say why the button is disabled. */
   accessibilityHint?: string;
+  /**
+   * For a button that shows or hides something: whether it is showing.
+   * Left out, the button is announced as neither.
+   */
+  expanded?: boolean;
   /** A mark drawn before the label, such as Stop's square. */
   leading?: ReactNode;
   /** The touchable, so a screen can move a screen reader's focus to it. */
@@ -113,6 +118,7 @@ export const Button = ({
   busy = false,
   accessibilityLabel,
   accessibilityHint,
+  expanded,
   leading,
   ref,
   style,
@@ -156,7 +162,7 @@ export const Button = ({
       // Announced as written: TalkBack spells out some words in capitals.
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityHint={accessibilityHint}
-      accessibilityState={{ disabled: inert, busy }}
+      accessibilityState={{ disabled: inert, busy, expanded }}
       activeOpacity={0.7}
       style={[styles.box, styles[size], colorStyle, style]}
     >
