@@ -3,7 +3,7 @@ import { StyleSheet, TextInput } from 'react-native';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { TextField } from '../src/components/TextField';
-import { fontFamilies } from '../src/theme/theme';
+import { fontFamilies, lightTheme } from '../src/theme/theme';
 
 type FieldProps = Partial<Parameters<typeof TextField>[0]>;
 
@@ -90,5 +90,51 @@ describe('TextField', () => {
     expect(tree.root.findByType(TextInput).props.accessibilityLabel).toBe(
       'Handle',
     );
+  });
+
+  describe('on the Paper ground', () => {
+    /** The style of the box drawn around the input. */
+    const boxStyle = (tree: ReactTestRenderer) => {
+      const box = tree.root.findByType(TextInput).parent;
+      if (box === null) {
+        throw new Error('the input has no box');
+      }
+      return StyleSheet.flatten(box.props.style);
+    };
+
+    /** The style of the text that shows the label. */
+    const labelStyle = (tree: ReactTestRenderer) =>
+      StyleSheet.flatten(
+        tree.root.find(
+          node =>
+            typeof node.type === 'string' && node.props.children === 'Handle',
+        ).props.style,
+      );
+
+    it('shows its label as a section label in capitals', () => {
+      const style = labelStyle(renderField({ onPaper: true }));
+
+      expect(style.fontFamily).toBe(fontFamilies.sansBold);
+      expect(style.fontSize).toBe(lightTheme.typography.sectionLabel.fontSize);
+      expect(style.textTransform).toBe('uppercase');
+      expect(style.color).toBe(lightTheme.colors.textSecondary);
+    });
+
+    it('fills its box with Card so it stands out from the Paper', () => {
+      expect(boxStyle(renderField({ onPaper: true })).backgroundColor).toBe(
+        lightTheme.colors.surface,
+      );
+      expect(boxStyle(renderField()).backgroundColor).toBe(
+        lightTheme.colors.background,
+      );
+    });
+
+    it('still names the input by its label, as written', () => {
+      const tree = renderField({ onPaper: true });
+
+      expect(tree.root.findByType(TextInput).props.accessibilityLabel).toBe(
+        'Handle',
+      );
+    });
   });
 });

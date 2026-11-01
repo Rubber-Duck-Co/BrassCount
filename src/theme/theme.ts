@@ -94,8 +94,14 @@ export const sizes = {
   badge: 26,
   /** An empty state's mark box. */
   markBox: 40,
-  removeButton: 32,
-  moveButton: 40,
+  /** A drill editor step's par box; a minimum width. */
+  parBoxMin: 84,
+  /** The editor's Add step row; a minimum. */
+  addRowMin: 52,
+  /** A preset in the par sheet's grid; a minimum. */
+  parTileMin: 64,
+  /** The par sheet's Set button. */
+  parSetWidth: 96,
   iconSm: 12,
   iconMd: 16,
   iconLg: 18,

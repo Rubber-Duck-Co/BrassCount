@@ -257,10 +257,13 @@ const stepCount = (tree: ReactTestRenderer): number => {
   return count;
 };
 
-/** The type each step's dropdown shows, top to bottom. */
+/**
+ * The type of each step, top to bottom, read from the name its row shows
+ * without the number a repeated type is given ("Shot 2" is a Shot).
+ */
 const stepTypes = (tree: ReactTestRenderer): string[] =>
   Array.from({ length: stepCount(tree) }, (_, i) =>
-    textOf(tree, `select-step-${i}`),
+    textOf(tree, `text-step-label-${i}`).replace(/ \d+$/, ''),
   );
 
 /** Rendering a full drill takes ~2s alone, more with every worker busy. */
@@ -272,9 +275,9 @@ const stepPars = (tree: ReactTestRenderer): string[] =>
     textOf(tree, `btn-par-step-${i}`),
   );
 
-/** The types on offer in the open dropdown of the step at `position`. */
-const offeredTypes = (tree: ReactTestRenderer, position: number): string[] => {
-  const prefix = `select-step-${position}-option-`;
+/** The types on offer in the open step type sheet. */
+const offeredTypes = (tree: ReactTestRenderer): string[] => {
+  const prefix = 'select-step-type-option-';
   const values = tree.root
     .findAll(
       node =>
@@ -298,7 +301,7 @@ const chooseType = async (
   stepType: string,
 ) => {
   await press(tree, `select-step-${position}`);
-  await press(tree, `select-step-${position}-option-${stepType}`);
+  await press(tree, `select-step-type-option-${stepType}`);
 };
 
 const choosePreset = async (
@@ -321,6 +324,19 @@ const typeCustomPar = async (
 
 const parPickerIsOpen = (tree: ReactTestRenderer): boolean =>
   has(tree, 'text-par-heading');
+
+const typeSheetIsOpen = (tree: ReactTestRenderer): boolean =>
+  has(tree, 'select-step-type-options');
+
+/** The title row of the open sheet, as a screen reader hears it. */
+const sheetTitle = (tree: ReactTestRenderer): string | undefined =>
+  tree.root.findAll(
+    node =>
+      typeof node.type === 'string' &&
+      node.props.accessibilityRole === 'header' &&
+      typeof node.props.accessibilityLabel === 'string' &&
+      / (par|type)$/.test(node.props.accessibilityLabel),
+  )[0]?.props.accessibilityLabel;
 
 /** The subtitle under the screen title: the line after it. */
 const subtitle = (tree: ReactTestRenderer): string => {
@@ -404,13 +420,32 @@ describe('SequenceEditorScreen', () => {
       expect(spokenLabel(tree, 'btn-par-step-1')).toBe('Set par for step 2');
     });
 
-    it('numbers the steps in order', async () => {
+    it('numbers the steps in order for a screen reader', async () => {
       const { tree } = await renderEditor();
 
       await addSteps(tree, 3);
 
-      expect(textsUnder(first(tree, 'row-step-0'))[0]).toBe('1');
-      expect(textsUnder(first(tree, 'row-step-2'))[0]).toBe('3');
+      expect(spokenLabel(tree, 'select-step-0')).toMatch(/^Step 1, /);
+      expect(spokenLabel(tree, 'select-step-2')).toMatch(/^Step 3, /);
+    });
+
+    it('heads the steps with how many there are', async () => {
+      const { tree } = await renderEditor();
+      expect(allText(tree)).toContain('Steps');
+
+      await addSteps(tree, 3);
+
+      expect(allText(tree)).toContain('Steps · 3');
+      expect(allText(tree)).not.toContain('Steps');
+    });
+
+    it('says how a par works under the Steps heading', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 1);
+
+      expect(allText(tree)).toContain(
+        'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.',
+      );
     });
 
     it('counts the steps and shots under the title', async () => {
@@ -484,13 +519,71 @@ describe('SequenceEditorScreen', () => {
 
       await press(tree, 'select-step-0');
 
-      expect(offeredTypes(tree, 0)).toEqual([
+      expect(offeredTypes(tree)).toEqual([
         'draw',
         'shot',
         'reload',
         'rack',
         'holster',
       ]);
+    });
+
+    it('opens one sheet titled for the step pressed, its type ticked', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 3);
+      expect(typeSheetIsOpen(tree)).toBe(false);
+
+      await press(tree, 'select-step-1');
+
+      expect(sheetTitle(tree)).toBe('Step 2 type');
+      expect(byTestId(tree, 'select-step-type-options').length).toBeGreaterThan(
+        0,
+      );
+      expect(
+        withProp(tree, 'select-step-type-option-shot', 'accessibilityState')
+          .props.accessibilityState,
+      ).toEqual({ selected: true });
+      expect(
+        withProp(tree, 'select-step-type-option-draw', 'accessibilityState')
+          .props.accessibilityState,
+      ).toEqual({ selected: false });
+    });
+
+    it('explains each type in the sheet', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 1);
+
+      await press(tree, 'select-step-0');
+
+      expect(allText(tree)).toEqual(
+        expect.arrayContaining([
+          'From the holster',
+          'One round downrange',
+          'Magazine change',
+          'Cycle the slide',
+          'Make safe',
+        ]),
+      );
+    });
+
+    it('closes the sheet once a type is chosen', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 2);
+
+      await chooseType(tree, 1, 'reload');
+
+      expect(typeSheetIsOpen(tree)).toBe(false);
+    });
+
+    it('closes the sheet without a change from its close button', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 2);
+
+      await press(tree, 'select-step-1');
+      await press(tree, 'select-step-type-close');
+
+      expect(typeSheetIsOpen(tree)).toBe(false);
+      expect(stepTypes(tree)).toEqual(['Draw', 'Shot']);
     });
 
     it('changes only the step that was picked', async () => {
@@ -523,9 +616,22 @@ describe('SequenceEditorScreen', () => {
 
       await press(tree, 'btn-par-step-1');
 
-      expect(textOf(tree, 'text-par-heading')).toBe('STEP 2 PAR');
-      expect(allText(tree)).toContain(
+      expect(sheetTitle(tree)).toBe('Step 2 par');
+      expect(textOf(tree, 'text-par-heading')).toBe(
         'Max time from the previous step to this one.',
+      );
+    });
+
+    it('shows the presets before the custom field', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 1);
+
+      await press(tree, 'btn-par-step-0');
+
+      const texts = allText(tree);
+      expect(texts.indexOf('No par')).toBeGreaterThanOrEqual(0);
+      expect(texts.indexOf('No par')).toBeLessThan(
+        texts.indexOf('Custom par · seconds'),
       );
     });
 
@@ -611,7 +717,7 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-par-custom-set');
       expect(parPickerIsOpen(tree)).toBe(true);
       expect(textOf(tree, 'text-par-custom-hint')).toBe(
-        'Enter a time from 0.01 to 60 seconds.',
+        'From 0.01 to 60 seconds.',
       );
     });
 
@@ -708,15 +814,27 @@ describe('SequenceEditorScreen', () => {
       }
     });
 
-    it('closes from a backdrop that is announced as a button', async () => {
+    it('closes from a close button that is announced as one', async () => {
       const { tree } = await renderEditor();
       await addSteps(tree, 1);
 
       await press(tree, 'btn-par-step-0');
 
-      const backdrop = withProp(tree, 'btn-par-close', 'onPress');
-      expect(backdrop.props.accessibilityRole).toBe('button');
-      expect(backdrop.props.accessibilityLabel).toBe('Close par picker');
+      const close = withProp(tree, 'btn-par-close', 'onPress');
+      expect(close.props.accessibilityRole).toBe('button');
+      expect(close.props.accessibilityLabel).toBe('Close par picker');
+      await press(tree, 'btn-par-close');
+      expect(parPickerIsOpen(tree)).toBe(false);
+    });
+
+    it('closes from the backdrop too', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 1);
+
+      await press(tree, 'btn-par-step-0');
+      await press(tree, 'btn-par-backdrop');
+
+      expect(parPickerIsOpen(tree)).toBe(false);
     });
 
     it('clears the par with "No par"', async () => {
@@ -763,7 +881,7 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-remove-step-0');
 
       expect(stepTypes(tree)).toEqual(['Reload', 'Shot']);
-      expect(textsUnder(first(tree, 'row-step-0'))[0]).toBe('1');
+      expect(spokenLabel(tree, 'select-step-0')).toMatch(/^Step 1, /);
     });
 
     it('leaves the type and par of the steps around it', async () => {
@@ -978,8 +1096,8 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-move-down-step-0');
       await press(tree, 'btn-move-down-step-1');
 
-      expect(textsUnder(first(tree, 'row-step-2'))[0]).toBe('3');
-      expect(textOf(tree, 'select-step-2')).toBe('Draw');
+      expect(spokenLabel(tree, 'select-step-2')).toMatch(/^Step 3, /);
+      expect(textOf(tree, 'text-step-label-2')).toBe('Draw');
       expect(textOf(tree, 'text-preview')).toBe(
         'Shot 1 (0.25s)  →  Shot 2  →  Draw (1.50s)',
       );
@@ -1710,7 +1828,7 @@ describe('SequenceEditorScreen', () => {
       const { tree } = await renderEditor(drill.id);
 
       await press(tree, 'select-step-1');
-      expect(offeredTypes(tree, 1)).toEqual([
+      expect(offeredTypes(tree)).toEqual([
         'draw',
         'shot',
         'reload',
@@ -1720,7 +1838,7 @@ describe('SequenceEditorScreen', () => {
       ]);
 
       await press(tree, 'select-step-0');
-      expect(offeredTypes(tree, 0)).not.toContain('transition');
+      expect(offeredTypes(tree)).not.toContain('transition');
     });
 
     it('starts over when pointed at another drill', async () => {

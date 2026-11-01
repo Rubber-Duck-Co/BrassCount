@@ -8,115 +8,78 @@ import {
 } from 'react-native';
 
 import type { Theme } from '@/theme/theme';
-import type { DrillStep, DrillStepType } from '@/types/drill';
+import type { DrillStep } from '@/types/drill';
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
-import { stepTypeLabel } from '@utils/drill';
-import { stepTypeChoices } from '@utils/drillDraft';
+import { stepTypeDescription } from '@utils/drill';
 import { formatSeconds, spokenSeconds } from '@utils/format';
 
 import { Icon } from './Icon';
-import { Select, type SelectOption } from './Select';
 import { Typography } from './Typography';
-
-/** The hint under each step type in the open dropdown. */
-const STEP_TYPE_DESCRIPTIONS: Record<DrillStepType, string> = {
-  draw: 'From the holster',
-  shot: 'One round downrange',
-  reload: 'Magazine change',
-  rack: 'Cycle the slide',
-  transition: 'Move to the next target',
-  holster: 'Make safe',
-};
-
-const stepTypeOptions = (
-  current: DrillStepType,
-): SelectOption<DrillStepType>[] =>
-  stepTypeChoices(current).map(type => ({
-    value: type,
-    label: stepTypeLabel(type),
-    description: STEP_TYPE_DESCRIPTIONS[type],
-  }));
-
-/**
- * Extra touch area around the small controls of a step row, taking each
- * up to the 48dp minimum without growing the row. The remove button is a
- * 32dp circle; the par pill is wide enough but about 26dp tall; a move
- * button is 40dp, and its slop stops where its neighbour's starts.
- */
-const REMOVE_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 };
-const PAR_HIT_SLOP = { top: 11, bottom: 11 };
-const MOVE_HIT_SLOP = { top: 4, bottom: 4, left: 4, right: 4 };
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
+    // Wraps, so large text drops the controls after the step's name to a
+    // line of their own instead of squeezing the name.
     row: {
       flexDirection: 'row',
       flexWrap: 'wrap',
       alignItems: 'center',
-      // Sends the controls after the dropdown to the right edge when large
-      // text drops them to a second line.
+      // Sends the controls to the right edge when they wrap.
       justifyContent: 'flex-end',
-      gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      columnGap: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
+      paddingLeft: theme.spacing.inset,
+      paddingRight: theme.spacing.xs,
+      borderBottomWidth: theme.sizes.rule,
       borderBottomColor: theme.colors.border,
     },
-    badge: {
-      minWidth: theme.sizes.badge,
-      minHeight: theme.sizes.badge,
-      paddingHorizontal: theme.spacing.xs,
-      borderRadius: theme.radius.badge,
-      alignItems: 'center',
+    typeTrigger: {
+      flexGrow: 1,
+      flexShrink: 1,
+      flexBasis: 0,
       justifyContent: 'center',
-      backgroundColor: theme.colors.primarySoft,
+      minHeight: theme.sizes.touchTarget,
+      gap: theme.spacing.xxs,
     },
-    select: { flexGrow: 1, flexShrink: 1 },
-    controls: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-    },
-    parChip: {
+    nameLine: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: theme.spacing.xs,
-      paddingVertical: theme.spacing.xs,
+    },
+    name: { flexShrink: 1 },
+    controls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+    },
+    // A minimum on both sides, so a par set in large text grows the box.
+    parBox: {
+      minWidth: theme.sizes.parBoxMin,
+      minHeight: theme.sizes.touchTarget,
       paddingHorizontal: theme.spacing.sm,
-      borderRadius: theme.radius.pill,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surfaceElevated,
-    },
-    parChipSet: {
-      backgroundColor: theme.colors.primarySoft,
-      borderColor: theme.colors.primary,
-    },
-    roundButton: {
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.surfaceElevated,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
     },
-    removeButton: {
-      width: theme.sizes.removeButton,
-      height: theme.sizes.removeButton,
-      borderRadius: theme.sizes.removeButton / 2,
+    iconButton: {
+      width: theme.sizes.touchTarget,
+      height: theme.sizes.touchTarget,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     moveButton: {
-      width: theme.sizes.moveButton,
-      height: theme.sizes.moveButton,
-      borderRadius: theme.sizes.moveButton / 2,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
+      borderRadius: theme.radius.none,
     },
-    moveButtonDisabled: { opacity: 0.4 },
-    // Rotating a glyph turns the plus into a cross and the chevron up or
-    // down. The rotation sits inside the button, not on it: Android stops
-    // delivering presses to a touchable that is both rotated and given a
-    // `hitSlop`.
-    removeGlyph: { transform: [{ rotate: '45deg' }] },
-    upGlyph: { transform: [{ rotate: '-90deg' }] },
+    moveButtonDisabled: { borderColor: theme.colors.disabled },
+    // Rotating the glyph points the chevron down, up or down. The rotation
+    // sits inside the button, not on it: Android stops delivering presses
+    // to a touchable that is both rotated and given a `hitSlop`.
     downGlyph: { transform: [{ rotate: '90deg' }] },
+    upGlyph: { transform: [{ rotate: '-90deg' }] },
   });
 
 type MoveButtonProps = {
@@ -146,16 +109,19 @@ const MoveButton = ({
       accessibilityRole="button"
       accessibilityLabel={`Move step ${position + 1}, ${label}, ${direction}`}
       accessibilityState={{ disabled }}
-      hitSlop={MOVE_HIT_SLOP}
       style={[
-        styles.roundButton,
+        styles.iconButton,
         styles.moveButton,
         disabled && styles.moveButtonDisabled,
       ]}
       testID={`btn-move-${direction}-step-${position}`}
     >
       <View style={direction === 'up' ? styles.upGlyph : styles.downGlyph}>
-        <Icon name="chevron" size={sizes.iconLg} color="textSecondary" />
+        <Icon
+          name="chevron"
+          size={sizes.iconLg}
+          color={disabled ? 'disabled' : 'textPrimary'}
+        />
       </View>
     </TouchableOpacity>
   );
@@ -174,9 +140,10 @@ type DrillStepRowProps = {
    * controls.
    */
   reordering: boolean;
-  /** Narrowest the dropdown may get before the row wraps. */
-  selectMinWidth: number;
-  onChangeType: (id: string, type: DrillStepType) => void;
+  /** Narrowest the step's name may get before the row wraps. */
+  labelMinWidth: number;
+  /** Open the step type sheet for the step with this id. */
+  onEditType: (id: string) => void;
   /** Open the par picker for the step with this id. */
   onEditPar: (id: string) => void;
   onRemove: (id: string) => void;
@@ -193,10 +160,12 @@ type DrillStepRowProps = {
 };
 
 /**
- * One step of the drill editor: its number, type dropdown, and either its
- * par and remove controls or, while the list is being reordered, a button
- * to move it up and one to move it down. Memoised so typing the drill's
- * name, or changing one step, does not draw every other row again.
+ * One step of the drill editor, a ruled row in the steps box: its name
+ * ("Shot 2") over what its type means, which opens the step type sheet;
+ * then either its par box and a remove button or, while the list is being
+ * reordered, a button to move it up and one to move it down. Memoised so
+ * typing the drill's name, or changing one step, does not draw every
+ * other row again.
  */
 export const DrillStepRow = memo(
   ({
@@ -205,8 +174,8 @@ export const DrillStepRow = memo(
     last,
     label,
     reordering,
-    selectMinWidth,
-    onChangeType,
+    labelMinWidth,
+    onEditType,
     onEditPar,
     onRemove,
     onMove,
@@ -215,7 +184,6 @@ export const DrillStepRow = memo(
     const styles = useThemedStyles(createStyles);
     const { sizes } = useTheme();
     const number = position + 1;
-    const hasPar = step.par !== undefined;
     const stepId = step.id;
     const removeRef = useCallback(
       (node: ElementRef<typeof TouchableOpacity> | null) =>
@@ -240,21 +208,29 @@ export const DrillStepRow = memo(
 
     return (
       <View style={styles.row} testID={`row-step-${position}`}>
-        <View style={styles.badge}>
-          <Typography variant="overline" color="primary">
-            {String(number)}
+        <TouchableOpacity
+          onPress={() => onEditType(step.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`Step ${number}, ${label}. Change type`}
+          style={[styles.typeTrigger, { minWidth: labelMinWidth }]}
+          testID={`select-step-${position}`}
+        >
+          <View style={styles.nameLine}>
+            <Typography
+              variant="bodyStrong"
+              style={styles.name}
+              testID={`text-step-label-${position}`}
+            >
+              {label}
+            </Typography>
+            <View style={styles.downGlyph}>
+              <Icon name="chevron" size={sizes.iconSm} color="textPrimary" />
+            </View>
+          </View>
+          <Typography variant="label" color="textSecondary">
+            {stepTypeDescription(step.type)}
           </Typography>
-        </View>
-
-        <View style={[styles.select, { minWidth: selectMinWidth }]}>
-          <Select
-            value={step.type}
-            options={stepTypeOptions(step.type)}
-            onChange={next => onChangeType(step.id, next)}
-            sheetTitle={`Step ${number}`}
-            testID={`select-step-${position}`}
-          />
-        </View>
+        </TouchableOpacity>
 
         {reordering ? (
           <View style={styles.controls}>
@@ -285,18 +261,12 @@ export const DrillStepRow = memo(
                       step.par,
                     )}`
               }
-              hitSlop={PAR_HIT_SLOP}
-              style={[styles.parChip, hasPar && styles.parChipSet]}
+              style={styles.parBox}
               testID={`btn-par-step-${position}`}
             >
-              <Icon
-                name="timer"
-                size={sizes.iconSm}
-                color={hasPar ? 'primary' : 'textTertiary'}
-              />
               <Typography
-                variant="label"
-                color={hasPar ? 'primary' : 'textTertiary'}
+                variant="metricSmall"
+                color={step.par === undefined ? 'textSecondary' : 'textPrimary'}
               >
                 {step.par === undefined ? '+ par' : formatSeconds(step.par)}
               </Typography>
@@ -313,13 +283,10 @@ export const DrillStepRow = memo(
               }}
               accessibilityRole="button"
               accessibilityLabel={`Remove step ${number}, ${label}`}
-              hitSlop={REMOVE_HIT_SLOP}
-              style={[styles.roundButton, styles.removeButton]}
+              style={styles.iconButton}
               testID={`btn-remove-step-${position}`}
             >
-              <View style={styles.removeGlyph}>
-                <Icon name="plus" size={sizes.iconMd} color="textSecondary" />
-              </View>
+              <Icon name="close" size={sizes.iconMd} color="textSecondary" />
             </TouchableOpacity>
           </View>
         )}
