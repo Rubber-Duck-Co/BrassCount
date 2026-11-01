@@ -132,6 +132,10 @@ export const sizes = {
   splitDeltaColumn: 76,
   /** The Log's ACTUAL column, which its caption needs wider than TIME. */
   splitActualColumn: 60,
+  /** A row of the run comparison's step table; a minimum. */
+  compareRowMin: 36,
+  /** Each figure column of the comparison table: EARLIER needs the most. */
+  compareFigureColumn: 64,
 } as const;
 
 export type Spacing = typeof spacing;
@@ -278,6 +282,12 @@ export const typography = {
     fontSize: 15,
     lineHeight: 20,
     fontFamily: fontFamilies.monoMedium,
+  },
+  /** A run's total in a sheet's list row, e.g. the run picker. */
+  metricRow: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontFamily: fontFamilies.monoSemibold,
   },
   /** A figure in the Timer's splits table. */
   splitFigure: {

@@ -203,6 +203,9 @@ export const HistoryDetailScreen = () => {
   const { state, reload } = useDrillRuns(drillId);
 
   const ready = state.status === 'ready';
+  // The name the list passed until the drill itself has been read: it may
+  // have been renamed while this screen sat behind another tab.
+  const shownName = ready ? state.drillName : drillName;
   // An error takes the place of the loading line, which TalkBack does not
   // announce on its own.
   useAnnounce(state.status === 'error' ? ERROR_TITLE : null);
@@ -227,6 +230,7 @@ export const HistoryDetailScreen = () => {
     [runs, compareFrom],
   );
   const picking = pickerOpen && compareCandidates.length < runs.length;
+  const compareFromRun = runs.find(run => run.session.id === compareFrom);
 
   const openPicker = useCallback((sessionId: string) => {
     pickedRef.current = false;
@@ -251,9 +255,10 @@ export const HistoryDetailScreen = () => {
       navigation.navigate('RunComparison', {
         drillId,
         runIds: [compareFrom, otherId],
+        drillName: shownName,
       });
     },
-    [compareFrom, drillId, navigation],
+    [compareFrom, drillId, navigation, shownName],
   );
 
   const toggle = useCallback(
@@ -280,9 +285,7 @@ export const HistoryDetailScreen = () => {
 
   return (
     <Screen
-      // The name the list passed until the drill itself has been read: it
-      // may have been renamed while this screen sat behind another tab.
-      title={ready ? state.drillName : drillName}
+      title={shownName}
       subtitle={ready ? `${pluralize(runs.length, 'run')} logged` : 'Run log'}
       onBack={navigation.goBack}
       backLabel="Log"
@@ -315,6 +318,7 @@ export const HistoryDetailScreen = () => {
 
       <RunPickerSheet
         visible={picking}
+        from={compareFromRun?.session}
         runs={compareCandidates}
         onSelect={compareWith}
         onClose={closePicker}

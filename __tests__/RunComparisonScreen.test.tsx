@@ -36,7 +36,11 @@ import { formatDateTime, spokenDateTime } from '../src/utils/format';
  * it for, so it stays mounted while it is out of sight.
  */
 type TestTabParamList = {
-  RunComparison: { drillId: string; runIds: [string, string] };
+  RunComparison: {
+    drillId: string;
+    runIds: [string, string];
+    drillName?: string;
+  };
   Elsewhere: undefined;
 };
 
@@ -100,22 +104,33 @@ const settle = async (): Promise<void> => {
 type Harness = {
   tree: ReactTestRenderer;
   goTo: (tab: keyof TestTabParamList) => Promise<void>;
+  /** The tab on screen. */
+  currentRoute: () => string | undefined;
 };
 
 const mounted: ReactTestRenderer[] = [];
 
-const mountScreen = (drillId: string, runIds: [string, string]): Harness => {
+const mountScreen = (
+  drillId: string,
+  runIds: [string, string],
+  drillName?: string,
+): Harness => {
   const navigationRef = createNavigationContainerRef<TestTabParamList>();
   let tree: ReactTestRenderer | undefined;
   act(() => {
     tree = create(
       <SafeAreaProvider initialMetrics={metrics}>
         <NavigationContainer ref={navigationRef}>
-          <Tab.Navigator screenOptions={{ headerShown: false }}>
+          {/* Back returns to the tab left last, as back from the
+              comparison returns to the runs it was opened from. */}
+          <Tab.Navigator
+            backBehavior="history"
+            screenOptions={{ headerShown: false }}
+          >
             <Tab.Screen
               name="RunComparison"
               component={RunComparisonScreen}
-              initialParams={{ drillId, runIds }}
+              initialParams={{ drillId, runIds, drillName }}
             />
             <Tab.Screen name="Elsewhere" component={Blank} />
           </Tab.Navigator>
@@ -135,19 +150,25 @@ const mountScreen = (drillId: string, runIds: [string, string]): Harness => {
         if (tab === 'Elsewhere') {
           navigationRef.navigate('Elsewhere');
         } else {
-          navigationRef.navigate('RunComparison', { drillId, runIds });
+          navigationRef.navigate('RunComparison', {
+            drillId,
+            runIds,
+            drillName,
+          });
         }
       });
       await settle();
     },
+    currentRoute: () => navigationRef.getCurrentRoute()?.name,
   };
 };
 
 const renderScreen = async (
   drillId: string,
   runIds: [string, string],
+  drillName?: string,
 ): Promise<Harness> => {
-  const harness = mountScreen(drillId, runIds);
+  const harness = mountScreen(drillId, runIds, drillName);
   await settle();
   return harness;
 };
@@ -300,18 +321,18 @@ describe('RunComparisonScreen', () => {
       expect(textsOf(tree, 'run-earlier')).toEqual([
         'EARLIER',
         formatDateTime(older.createdAt),
-        '2.05s',
+        '2.05',
       ]);
       expect(textsOf(tree, 'run-later')).toEqual([
         'LATER',
-        formatDateTime(newer.createdAt),
-        '1.97s',
-        // The quicker of the drill's two runs.
+        // The quicker of the drill's two runs, beside its caption.
         'PB',
+        formatDateTime(newer.createdAt),
+        '1.97',
       ]);
     });
 
-    it('says how much faster the later run was in total, in green', async () => {
+    it('says how much faster the later run was in total', async () => {
       const drill = await seedDrill('Bill Drill');
       const older = await seedSession(
         drill.id,
@@ -326,19 +347,15 @@ describe('RunComparisonScreen', () => {
 
       const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
 
-      expect(textOf(tree, 'text-comparison-difference')).toBe('-0.08s');
-      expect(textsOf(tree, 'comparison-difference')).toContain(
+      expect(textsOf(tree, 'comparison-difference')).toEqual([
         '0.08s faster than the earlier run',
-      );
-      expect(colorOf(tree, 'text-comparison-difference')).toBe(
-        lightTheme.colors.success,
-      );
+      ]);
       expect(spokenOf(tree, 'comparison-difference')).toBe(
         'Total time: later run 0.08 seconds faster',
       );
     });
 
-    it('says how much slower the later run was in total, in red', async () => {
+    it('says how much slower the later run was in total', async () => {
       const drill = await seedDrill('Bill Drill');
       const older = await seedSession(
         drill.id,
@@ -353,12 +370,11 @@ describe('RunComparisonScreen', () => {
 
       const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
 
-      expect(textOf(tree, 'text-comparison-difference')).toBe('+0.08s');
-      expect(textsOf(tree, 'comparison-difference')).toContain(
+      expect(textsOf(tree, 'comparison-difference')).toEqual([
         '0.08s slower than the earlier run',
-      );
-      expect(colorOf(tree, 'text-comparison-difference')).toBe(
-        lightTheme.colors.danger,
+      ]);
+      expect(spokenOf(tree, 'comparison-difference')).toBe(
+        'Total time: later run 0.08 seconds slower',
       );
     });
 
@@ -377,10 +393,9 @@ describe('RunComparisonScreen', () => {
 
       const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
 
-      expect(textOf(tree, 'text-comparison-difference')).toBe('0.00s');
-      expect(textsOf(tree, 'comparison-difference')).toContain(
+      expect(textsOf(tree, 'comparison-difference')).toEqual([
         'The same time as the earlier run',
-      );
+      ]);
       expect(spokenOf(tree, 'comparison-difference')).toBe(
         'Total time: the same in both runs',
       );
@@ -402,7 +417,6 @@ describe('RunComparisonScreen', () => {
 
       const { tree } = await renderScreen(drill.id, [older.id, stopped.id]);
 
-      expect(textOf(tree, 'text-comparison-difference')).toBe('—');
       expect(textsOf(tree, 'comparison-difference').join(' ')).toMatch(
         /not compared/,
       );
@@ -442,7 +456,7 @@ describe('RunComparisonScreen', () => {
   });
 
   describe('the steps', () => {
-    it('shows each step’s time in both runs and the difference', async () => {
+    it('shows each step’s time in both runs and the difference, in plain figures', async () => {
       const drill = await seedDrill('Bill Drill');
       const older = await seedSession(
         drill.id,
@@ -458,10 +472,39 @@ describe('RunComparisonScreen', () => {
       const { tree } = await renderScreen(drill.id, [newer.id, older.id]);
 
       expect(stepRows(tree)).toEqual([
-        ['Draw', '1.50s', '1.40s', '-0.10s'],
-        ['Shot 1', '0.30s', '0.32s', '+0.02s'],
-        ['Shot 2', '0.25s', '0.25s', '0.00s'],
+        ['Draw', '1.50', '1.40', '−0.10'],
+        ['Shot 1', '0.30', '0.32', '+0.02'],
+        ['Shot 2', '0.25', '0.25', '0.00'],
       ]);
+    });
+
+    it('marks a slower step in Signal, and a faster or equal one in Ink', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const older = await seedSession(
+        drill.id,
+        '2026-10-05T12:00:00Z',
+        splits(1.5, 0.3, 0.25),
+      );
+      const newer = await seedSession(
+        drill.id,
+        '2026-10-10T12:00:00Z',
+        splits(1.4, 0.32, 0.25),
+      );
+
+      const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
+
+      expect(colorOf(tree, 'text-comparison-step-2-delta')).toBe(
+        lightTheme.colors.warning,
+      );
+      expect(colorOf(tree, 'text-comparison-step-1-delta')).toBe(
+        lightTheme.colors.textPrimary,
+      );
+      expect(colorOf(tree, 'text-comparison-step-3-delta')).toBe(
+        lightTheme.colors.textPrimary,
+      );
+      expect(screenTexts(tree)).toContain(
+        'Orange: slower than the earlier run.',
+      );
     });
 
     it('reads each step out in words', async () => {
@@ -503,68 +546,84 @@ describe('RunComparisonScreen', () => {
       const { tree } = await renderScreen(drill.id, [stopped.id, newer.id]);
 
       expect(stepRows(tree)).toEqual([
-        ['Draw', '1.50s', '1.40s', '-0.10s'],
-        ['Shot 1', '0.30s', '0.32s', '+0.02s'],
-        ['Shot 2', '—', '0.25s', '—'],
+        ['Draw', '1.50', '1.40', '−0.10'],
+        ['Shot 1', '0.30', '0.32', '+0.02'],
+        ['Shot 2', '—', '0.25', '—'],
       ]);
       expect(spokenSteps(tree)[2]).toBe(
         'Shot 2, not heard in the earlier run, later run 0.25 seconds',
       );
     });
 
-    it('sets the steps out in columns under one row of captions at the default text size', async () => {
-      const drill = await seedDrill('Bill Drill');
-      const older = await seedSession(
-        drill.id,
-        '2026-10-05T12:00:00Z',
-        splits(1.5, 0.3, 0.25),
-      );
-      const newer = await seedSession(
-        drill.id,
-        '2026-10-10T12:00:00Z',
-        splits(1.4, 0.32, 0.25),
-      );
-      setFontScale(1);
+    it.each([1, 2])(
+      'keeps the figures in columns under one row of captions at font scale %d',
+      async fontScale => {
+        const drill = await seedDrill('Bill Drill');
+        const older = await seedSession(
+          drill.id,
+          '2026-10-05T12:00:00Z',
+          splits(1.5, 0.3, 0.25),
+        );
+        const newer = await seedSession(
+          drill.id,
+          '2026-10-10T12:00:00Z',
+          splits(1.4, 0.32, 0.25),
+        );
+        setFontScale(fontScale);
 
-      const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
+        const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
 
-      const table = textsOf(tree, 'table-comparison');
-      expect(table.slice(0, 4)).toEqual(['STEP', 'EARLIER', 'LATER', 'Δ']);
-      expect(table.filter(text => text === 'EARLIER')).toHaveLength(1);
-    });
-
-    it('captions each step’s figures at a large text size', async () => {
-      const drill = await seedDrill('Bill Drill');
-      const older = await seedSession(
-        drill.id,
-        '2026-10-05T12:00:00Z',
-        splits(1.5, 0.3, 0.25),
-      );
-      const newer = await seedSession(
-        drill.id,
-        '2026-10-10T12:00:00Z',
-        splits(1.4, 0.32, 0.25),
-      );
-      setFontScale(2);
-
-      const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
-
-      const table = textsOf(tree, 'table-comparison');
-      expect(table).not.toContain('STEP');
-      expect(table.filter(text => text === 'EARLIER')).toHaveLength(3);
-      expect(stepRows(tree)[0]).toEqual([
-        'Draw',
-        'EARLIER',
-        '1.50s',
-        'LATER',
-        '1.40s',
-        'Δ',
-        '-0.10s',
-      ]);
-    });
+        const table = textsOf(tree, 'table-comparison');
+        expect(table.slice(0, 4)).toEqual(['STEP', 'EARLIER', 'LATER', 'Δ']);
+        expect(table.filter(text => text === 'EARLIER')).toHaveLength(1);
+        expect(stepRows(tree)[0]).toEqual(['Draw', '1.50', '1.40', '−0.10']);
+      },
+    );
   });
 
   describe('the name of the drill', () => {
+    it('links back to the drill’s runs by its name', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const older = await seedSession(
+        drill.id,
+        '2026-10-05T12:00:00Z',
+        splits(1.5, 0.3, 0.25),
+      );
+      const newer = await seedSession(
+        drill.id,
+        '2026-10-10T12:00:00Z',
+        splits(1.4, 0.32, 0.25),
+      );
+
+      const { tree } = await renderScreen(drill.id, [older.id, newer.id]);
+
+      expect(textsOf(tree, 'btn-back')).toContain('BILL DRILL');
+      expect(spokenOf(tree, 'btn-back')).toBe('Back to Bill Drill');
+    });
+
+    it('shows the name it was opened with until the drill has been read', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const older = await seedSession(
+        drill.id,
+        '2026-10-05T12:00:00Z',
+        splits(1.5, 0.3, 0.25),
+      );
+      const newer = await seedSession(
+        drill.id,
+        '2026-10-10T12:00:00Z',
+        splits(1.4, 0.32, 0.25),
+      );
+
+      const { tree } = mountScreen(drill.id, [older.id, newer.id], 'Old Name');
+
+      expect(has(tree, 'text-comparison-loading')).toBe(true);
+      expect(textsOf(tree, 'btn-back')).toContain('OLD NAME');
+
+      await settle();
+
+      expect(textsOf(tree, 'btn-back')).toContain('BILL DRILL');
+    });
+
     it('shows the name the drill has now when the screen comes back', async () => {
       const drill = await seedDrill('Bill Drill');
       const older = await seedSession(
@@ -652,6 +711,56 @@ describe('RunComparisonScreen', () => {
       const { tree } = await renderScreen(drill.id, [run.id, 'gone']);
 
       expect(has(tree, 'state-comparison-missing')).toBe(true);
+      expect(textsOf(tree, 'state-comparison-missing')).toEqual(
+        expect.arrayContaining([
+          'These runs are not here',
+          'One of the runs could not be found for this drill.',
+        ]),
+      );
+    });
+
+    it('says so when a run is deleted while the comparison is open', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const older = await seedSession(
+        drill.id,
+        '2026-10-05T12:00:00Z',
+        splits(1.5, 0.3, 0.25),
+      );
+      const newer = await seedSession(
+        drill.id,
+        '2026-10-10T12:00:00Z',
+        splits(1.4, 0.32, 0.25),
+      );
+      const { tree, goTo } = await renderScreen(drill.id, [older.id, newer.id]);
+
+      await goTo('Elsewhere');
+      await SessionStorageService.deleteById(newer.id);
+      await goTo('RunComparison');
+
+      expect(has(tree, 'state-comparison-missing')).toBe(true);
+      expect(has(tree, 'card-comparison-totals')).toBe(false);
+    });
+
+    it('goes back to the runs from Back to runs', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const run = await seedSession(
+        drill.id,
+        '2026-10-05T12:00:00Z',
+        splits(1.5, 0.3, 0.25),
+      );
+      const { tree, goTo, currentRoute } = await renderScreen(drill.id, [
+        run.id,
+        'gone',
+      ]);
+      // Opened from another screen, as it is from the drill's runs.
+      await goTo('Elsewhere');
+      await goTo('RunComparison');
+
+      await act(async () => {
+        tree.root.findAllByProps({ label: 'Back to runs' })[0].props.onPress();
+      });
+
+      expect(currentRoute()).toBe('Elsewhere');
     });
   });
 
