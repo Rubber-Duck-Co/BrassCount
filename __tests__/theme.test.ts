@@ -53,6 +53,7 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     primary: '#C2410C',
     primaryBorder: '#1B1B17',
     disabled: '#8C8778',
+    meterTrack: '#DDD5C0',
     overlay: 'rgba(27, 27, 23, 0.55)',
   },
   dark: {
@@ -68,6 +69,7 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     primaryBorder: '#E8692F',
     textOnPrimary: '#1F1E1B',
     disabled: '#6B675B',
+    meterTrack: '#35342E',
     overlay: 'rgba(0, 0, 0, 0.6)',
   },
 };
@@ -137,6 +139,34 @@ describe('Range Card palettes', () => {
       expect(orangeRoles).toEqual(expected);
     },
   );
+
+  it.each(themesByMode)(
+    'keeps the meter fill, tick and outline at 3:1 against the meter track in %s mode',
+    (_mode, { colors }) => {
+      // The track sits close to the card it is drawn on, so the outline is
+      // what marks the meter's edge; it has to stand out from the card.
+      const pairs: [string, string][] = [
+        [colors.primary, colors.meterTrack],
+        [colors.textPrimary, colors.meterTrack],
+        [colors.outline, colors.surface],
+      ];
+      pairs.forEach(([fg, bg]) => {
+        expect(contrast(fg, bg)).toBeGreaterThanOrEqual(3);
+      });
+    },
+  );
+
+  it('keeps the meter track hexes out of every file but the theme', () => {
+    const srcDir = path.join(__dirname, '..', 'src');
+    const themeFile = path.join(srcDir, 'theme', 'theme.ts');
+    const offenders = (fs.readdirSync(srcDir, { recursive: true }) as string[])
+      .map(file => path.join(srcDir, file))
+      .filter(file => /\.(ts|tsx)$/.test(file) && file !== themeFile)
+      .filter(file =>
+        /#(DDD5C0|35342E)\b/i.test(fs.readFileSync(file, 'utf8')),
+      );
+    expect(offenders).toEqual([]);
+  });
 
   it('sets the main action and the small stencil in Big Shoulders Stencil', () => {
     expect(typography.mainAction).toMatchObject({
