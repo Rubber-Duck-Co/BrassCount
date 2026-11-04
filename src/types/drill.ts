@@ -57,9 +57,11 @@ export interface Drill {
   /** Steps in the order they are performed. */
   steps: DrillStep[];
   /**
-   * Sum of every step's par, in seconds. `null` when any step is untimed,
-   * so "no drill par" stays distinct from a par that happens to be short.
-   * Derived from `steps` by the storage service; never set by a caller.
+   * Sum of every step's par, in seconds, leaving out the step that ends a
+   * draw, whose par is not used (`drillParSteps`). `null` when any other
+   * step is untimed, so "no drill par" stays distinct from a par that
+   * happens to be short. Derived from `steps` by the storage service;
+   * never set by a caller.
    */
   totalPar: number | null;
   /** Number of `shot` steps. Derived from `steps` like `totalPar`. */

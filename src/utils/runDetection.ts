@@ -14,7 +14,7 @@ import type {
   StepResult,
 } from '@/types/run';
 
-import { roundPar } from './drill';
+import { drawEndPosition, roundPar } from './drill';
 import { splitDelta } from './session';
 
 /**
@@ -44,6 +44,9 @@ import { splitDelta } from './session';
  *   wireless speaker) is not recognised and is counted as a step.
  * - A silent step's par is added to the next heard step, whether or not
  *   that step has a par of its own (see `planRun`).
+ * - A draw ends at the first sound heard after the beep, so it can only be
+ *   timed against the step that follows it; how long the shooter took to
+ *   clear the holster and how long to press the first shot are one figure.
  */
 
 /** The margins the rules below work to. All can be overridden per run. */
@@ -143,18 +146,42 @@ const isCalibrationSound = (type: string): type is CalibrationSound =>
 /**
  * The steps of a drill a run can hear, in order.
  *
- * A step with no calibrated sound (draw, transition, holster) cannot be
+ * A draw in first place is timed from the start signal to the first step
+ * that can be heard (`drawEndPosition`): that sound ends the draw. So the
+ * draw is planned with that step's sound and its own par, and the step
+ * itself is left out, its par unused. Draw 1.50 s, shot 0.25 s, shot 0.20 s
+ * plans the draw due 1.50 s after the start and the second shot 0.20 s
+ * after the first.
+ *
+ * Any other step with no calibrated sound (transition, holster, or a draw
+ * a drill stored before the editor held it to first place) cannot be
  * detected, so it is not timed on its own: its par is counted towards the
- * next step that can be. A draw of 1.50 s in front of a shot of 0.25 s
- * makes that shot due 1.75 s after the start. A heard step is untimed only
- * when neither it nor any silent step counted towards it has a par, and a
- * silent step with nothing heard after it is dropped.
+ * next step that can be, or towards the draw when it comes before the
+ * draw's end. A heard step is untimed only when neither it nor any silent
+ * step counted towards it has a par, and a silent step with nothing heard
+ * after it is dropped.
  */
 export const planRun = (steps: readonly DrillStep[]): RunStep[] => {
   const plan: RunStep[] = [];
+  const drawEnd = drawEndPosition(steps);
   let carriedPar: number | undefined;
 
-  for (const step of steps) {
+  for (const [position, step] of steps.entries()) {
+    // `drawEndPosition` only ever points at a heard step; the type check
+    // is what lets its sound be read as one.
+    if (position === drawEnd && isCalibrationSound(step.type)) {
+      // The sound that ends the draw is the draw's; the step's own par is
+      // not used.
+      const drawId = steps[0].id;
+      plan.push(
+        carriedPar === undefined
+          ? { stepId: drawId, sound: step.type }
+          : { stepId: drawId, sound: step.type, par: carriedPar },
+      );
+      carriedPar = undefined;
+      continue;
+    }
+
     const par =
       step.par === undefined
         ? carriedPar

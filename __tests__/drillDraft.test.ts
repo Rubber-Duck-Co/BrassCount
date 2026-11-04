@@ -9,6 +9,7 @@ import {
   EDITOR_STEP_TYPES,
   addStep,
   canAddStep,
+  canMoveStep,
   changeStepType,
   drillDraftProblems,
   moveStep,
@@ -29,6 +30,9 @@ const DRAW: DrillStep = { id: 'a', type: 'draw', par: 1.5 };
 const FIRST_SHOT: DrillStep = { id: 'b', type: 'shot', par: 0.25 };
 const SECOND_SHOT: DrillStep = { id: 'c', type: 'shot' };
 const STEPS: readonly DrillStep[] = [DRAW, FIRST_SHOT, SECOND_SHOT];
+/** A drill with no draw, whose steps can go in any order. */
+const RELOAD: DrillStep = { id: 'a', type: 'reload', par: 2 };
+const MOVABLE: readonly DrillStep[] = [RELOAD, FIRST_SHOT, SECOND_SHOT];
 
 const fullDrill = (): DrillStep[] =>
   Array.from({ length: MAX_DRILL_STEPS }, (_, i) => ({
@@ -55,14 +59,33 @@ describe('EDITOR_STEP_TYPES', () => {
 });
 
 describe('stepTypeChoices', () => {
-  it('is the editor list for a type that is on it', () => {
-    expect(stepTypeChoices('reload')).toEqual(EDITOR_STEP_TYPES);
+  it('is the editor list for the first step', () => {
+    expect(stepTypeChoices('reload', 0)).toEqual(EDITOR_STEP_TYPES);
+  });
+
+  it('offers a draw only for the first step', () => {
+    expect(stepTypeChoices('shot', 1)).toEqual([
+      'shot',
+      'reload',
+      'rack',
+      'holster',
+    ]);
   });
 
   it('adds the type of a stored step the editor no longer offers', () => {
-    expect(stepTypeChoices('transition')).toEqual([
+    expect(stepTypeChoices('transition', 0)).toEqual([
       ...EDITOR_STEP_TYPES,
       'transition',
+    ]);
+  });
+
+  it('keeps the type of a draw stored past the first step', () => {
+    expect(stepTypeChoices('draw', 2)).toEqual([
+      'shot',
+      'reload',
+      'rack',
+      'holster',
+      'draw',
     ]);
   });
 });
@@ -158,26 +181,38 @@ describe('removeStep', () => {
 
 describe('moveStep', () => {
   it('moves a step up to an earlier position', () => {
-    expect(moveStep(STEPS, 'c', 0)).toEqual([SECOND_SHOT, DRAW, FIRST_SHOT]);
+    expect(moveStep(MOVABLE, 'c', 0)).toEqual([
+      SECOND_SHOT,
+      RELOAD,
+      FIRST_SHOT,
+    ]);
   });
 
   it('moves a step down to a later position', () => {
-    expect(moveStep(STEPS, 'a', 1)).toEqual([FIRST_SHOT, DRAW, SECOND_SHOT]);
+    expect(moveStep(MOVABLE, 'a', 1)).toEqual([
+      FIRST_SHOT,
+      RELOAD,
+      SECOND_SHOT,
+    ]);
   });
 
   it('moves a step to the end of the list', () => {
-    expect(moveStep(STEPS, 'a', 2)).toEqual([FIRST_SHOT, SECOND_SHOT, DRAW]);
+    expect(moveStep(MOVABLE, 'a', 2)).toEqual([
+      FIRST_SHOT,
+      SECOND_SHOT,
+      RELOAD,
+    ]);
   });
 
   it('keeps the id, type and par of the step it moves', () => {
-    expect(moveStep(STEPS, 'a', 2)[2]).toBe(DRAW);
+    expect(moveStep(MOVABLE, 'a', 2)[2]).toBe(RELOAD);
   });
 
   it('moves only one of two steps that look the same', () => {
     const twins: readonly DrillStep[] = [
       { id: 'x', type: 'shot', par: 0.2 },
       { id: 'y', type: 'shot', par: 0.2 },
-      DRAW,
+      RELOAD,
     ];
 
     expect(moveStep(twins, 'y', 2).map(step => step.id)).toEqual([
@@ -188,26 +223,60 @@ describe('moveStep', () => {
   });
 
   it('changes nothing when the step is already at that position', () => {
-    expect(moveStep(STEPS, 'b', 1)).toEqual(STEPS);
+    expect(moveStep(MOVABLE, 'b', 1)).toEqual(MOVABLE);
   });
 
   it('changes nothing for an id that is not in the list', () => {
-    expect(moveStep(STEPS, 'missing', 0)).toEqual(STEPS);
+    expect(moveStep(MOVABLE, 'missing', 0)).toEqual(MOVABLE);
   });
 
   it.each([-1, 3, 1.5, Number.NaN])(
     'changes nothing for a position the list does not have (%p)',
     position => {
-      expect(moveStep(STEPS, 'a', position)).toEqual(STEPS);
+      expect(moveStep(MOVABLE, 'a', position)).toEqual(MOVABLE);
     },
   );
 
+  it('will not move the draw out of first place', () => {
+    expect(moveStep(STEPS, 'a', 1)).toBe(STEPS);
+    expect(moveStep(STEPS, 'a', 2)).toBe(STEPS);
+  });
+
+  it('will not move a step above the draw', () => {
+    expect(moveStep(STEPS, 'c', 0)).toBe(STEPS);
+  });
+
+  it('still moves the steps after the draw among themselves', () => {
+    expect(moveStep(STEPS, 'c', 1)).toEqual([DRAW, SECOND_SHOT, FIRST_SHOT]);
+  });
+
   it('leaves the list it was given untouched', () => {
-    const steps: readonly DrillStep[] = [DRAW, FIRST_SHOT, SECOND_SHOT];
+    const steps: readonly DrillStep[] = [RELOAD, FIRST_SHOT, SECOND_SHOT];
 
     moveStep(steps, 'a', 2);
 
-    expect(steps).toEqual([DRAW, FIRST_SHOT, SECOND_SHOT]);
+    expect(steps).toEqual([RELOAD, FIRST_SHOT, SECOND_SHOT]);
+  });
+});
+
+describe('canMoveStep', () => {
+  it('is true for a move moveStep would make', () => {
+    expect(canMoveStep(MOVABLE, 'c', 0)).toBe(true);
+    expect(canMoveStep(STEPS, 'b', 2)).toBe(true);
+  });
+
+  it('is false for a move that would take the draw out of first place', () => {
+    expect(canMoveStep(STEPS, 'a', 1)).toBe(false);
+    expect(canMoveStep(STEPS, 'b', 0)).toBe(false);
+  });
+
+  it('is false for a position the list does not have, or an unknown id', () => {
+    expect(canMoveStep(MOVABLE, 'c', 3)).toBe(false);
+    expect(canMoveStep(MOVABLE, 'missing', 0)).toBe(false);
+  });
+
+  it('is false for a step already at that position', () => {
+    expect(canMoveStep(MOVABLE, 'b', 1)).toBe(false);
   });
 });
 
@@ -228,6 +297,18 @@ describe('changeStepType', () => {
 
   it('changes nothing for an id that is not in the list', () => {
     expect(changeStepType(STEPS, 'missing', 'rack')).toEqual(STEPS);
+  });
+
+  it('makes the first step a draw', () => {
+    expect(changeStepType(MOVABLE, 'a', 'draw')[0]).toEqual({
+      id: 'a',
+      type: 'draw',
+      par: 2,
+    });
+  });
+
+  it('will not make a later step a draw', () => {
+    expect(changeStepType(STEPS, 'b', 'draw')).toBe(STEPS);
   });
 });
 

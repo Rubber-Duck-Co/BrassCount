@@ -51,6 +51,8 @@ import {
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import {
   countShots,
+  drawEndPosition,
+  drillParSteps,
   stepLabel,
   stepTypeDescription,
   stepTypeLabel,
@@ -58,6 +60,7 @@ import {
 } from '@utils/drill';
 import {
   canAddStep,
+  canMoveStep,
   nextStepType,
   stepTypeChoices,
   type DrillDraftProblem,
@@ -91,7 +94,7 @@ const describeSteps = (steps: readonly DrillStep[]): string => {
     countShots(steps),
     'shot',
   )}`;
-  const par = totalPar(steps);
+  const par = totalPar(drillParSteps(steps));
   return par === null ? counts : `${counts} · Par ${formatSeconds(par)}`;
 };
 
@@ -139,30 +142,41 @@ const saveFailureMessage = (
 };
 
 /**
- * The types the step type sheet offers a step of type `current`, each
- * with what it means; none while the sheet is closed.
+ * The types the step type sheet offers a step of type `current` at
+ * `position`, each with what it means; none while the sheet is closed.
  */
 const typeOptions = (
   current: DrillStepType | undefined,
+  position: number,
 ): SelectOption<DrillStepType>[] =>
   current === undefined
     ? []
-    : stepTypeChoices(current).map(type => ({
+    : stepTypeChoices(current, position).map(type => ({
         value: type,
         label: stepTypeLabel(type),
         description: stepTypeDescription(type),
       }));
 
+/**
+ * The par each step is timed against in the sequence, in order: its own,
+ * except for the step that ends the draw, whose par is not used.
+ */
+const usedPars = (steps: readonly DrillStep[]): (number | undefined)[] => {
+  const drawEnd = drawEndPosition(steps);
+  return steps.map((step, i) => (i === drawEnd ? undefined : step.par));
+};
+
 /** The whole sequence in one sentence, for the Preview box's reader label. */
-const spokenPreview = (steps: readonly DrillStep[]): string =>
-  steps
-    .map((step, i) => {
+const spokenPreview = (steps: readonly DrillStep[]): string => {
+  const pars = usedPars(steps);
+  return steps
+    .map((_, i) => {
       const label = stepLabel(steps, i);
-      return step.par === undefined
-        ? label
-        : `${label}, ${spokenSeconds(step.par)}`;
+      const par = pars[i];
+      return par === undefined ? label : `${label}, ${spokenSeconds(par)}`;
     })
     .join('; then ');
+};
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
@@ -216,6 +230,7 @@ type StepPreviewProps = {
  */
 const StepPreview = memo(({ steps }: StepPreviewProps) => {
   const styles = useThemedStyles(createStyles);
+  const pars = usedPars(steps);
 
   return (
     <View>
@@ -229,21 +244,24 @@ const StepPreview = memo(({ steps }: StepPreviewProps) => {
           style={styles.summary}
           testID="text-preview"
         >
-          {steps.map((step, i) => (
-            <Typography key={step.id} variant="rowLabel">
-              {stepLabel(steps, i)}
-              {step.par === undefined ? null : (
-                <Typography variant="rowLabel" color="textSecondary">
-                  {` (${formatSeconds(step.par)})`}
-                </Typography>
-              )}
-              {i < steps.length - 1 ? (
-                <Typography variant="rowLabel" color="textSecondary">
-                  {'  →  '}
-                </Typography>
-              ) : null}
-            </Typography>
-          ))}
+          {steps.map((step, i) => {
+            const par = pars[i];
+            return (
+              <Typography key={step.id} variant="rowLabel">
+                {stepLabel(steps, i)}
+                {par === undefined ? null : (
+                  <Typography variant="rowLabel" color="textSecondary">
+                    {` (${formatSeconds(par)})`}
+                  </Typography>
+                )}
+                {i < steps.length - 1 ? (
+                  <Typography variant="rowLabel" color="textSecondary">
+                    {'  →  '}
+                  </Typography>
+                ) : null}
+              </Typography>
+            );
+          })}
         </View>
       </View>
     </View>
@@ -539,6 +557,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
 
   const parPosition = steps.findIndex(step => step.id === parStepId);
   const typePosition = steps.findIndex(step => step.id === typeStepId);
+  const drawEnd = drawEndPosition(steps);
   const typeStep = steps[typePosition];
   const hasRoom = canAddStep(steps);
   const canReorder = steps.length > 1;
@@ -597,7 +616,9 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
         <Typography variant="label" color="textSecondary" style={styles.hint}>
           {reordering
             ? 'Use the arrows to move a step. Tap Done when the order is right.'
-            : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
+            : drawEnd !== null
+              ? 'Tap a par to cap how long a step can take from the one before. The draw’s par runs from the beep to the first shot.'
+              : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
         </Typography>
 
         <Card flush>
@@ -618,7 +639,9 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
                 key={step.id}
                 step={step}
                 position={i}
-                last={i === steps.length - 1}
+                canMoveUp={canMoveStep(steps, step.id, i - 1)}
+                canMoveDown={canMoveStep(steps, step.id, i + 1)}
+                endsDraw={i === drawEnd}
                 label={stepLabel(steps, i)}
                 reordering={reordering}
                 labelMinWidth={STEP_LABEL_MIN_WIDTH * fontScale}
@@ -688,7 +711,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
         visible={typeStep !== undefined}
         onClose={closeTypePicker}
         value={typeStep?.type ?? nextStepType(steps)}
-        options={typeOptions(typeStep?.type)}
+        options={typeOptions(typeStep?.type, typePosition)}
         onChoose={type => {
           if (typeStepId !== null) {
             changeStepType(typeStepId, type);

@@ -5,8 +5,11 @@
  *
  * A step the timer listens for (a shot, reload or rack) is judged against
  * its planned par: its own plus that of every silent step before it (see
- * `planRun`). A silent step (draw, transition, holster) is never timed; its
- * Δ column says whether its par is carried into the next heard step.
+ * `planRun`). A draw in first place is timed from the beep to the first
+ * step heard, which ends it: that step, and any silent step before it,
+ * reads "with draw". Any other silent step (transition, holster, a draw
+ * stored out of first place) is never timed; its Δ column says whether its
+ * par is carried into the next heard step.
  *
  * Under, on or over par is decided as the figure reads to the hundredth
  * (`shownDeltaSign`), so a row is never toned over par while it shows 0.00.
@@ -20,7 +23,7 @@ import type { DrillStep } from '@/types/drill';
 import type { RunStep, StepResult } from '@/types/run';
 import type { SessionSplit } from '@/types/session';
 
-import { stepLabel } from './drill';
+import { drawEndPosition, stepLabel } from './drill';
 import { spokenSeconds } from './format';
 import { shownDeltaSign } from './history';
 
@@ -62,6 +65,7 @@ type DescribeSplitsInput = {
 export const NO_FIGURE = '—';
 
 export const WITH_NEXT = 'with next';
+export const WITH_DRAW = 'with draw';
 export const LISTENING = 'listening';
 export const NOT_HEARD = 'not heard';
 export const NOT_TIMED = 'not timed';
@@ -103,6 +107,17 @@ const silentRow = (
     spoken: `${label}, not timed. Its par of ${speak(step.par)} counts towards the next step`,
   };
 };
+
+/** A step timed as part of the draw in front of it: see `planRun`. */
+const withDrawRow = (label: string, step: DrillStep): SplitRow => ({
+  stepId: step.id,
+  label,
+  par: NO_FIGURE,
+  time: NO_FIGURE,
+  delta: WITH_DRAW,
+  deltaTone: 'note',
+  spoken: `${label}, timed with the draw`,
+});
 
 /** Δ and its wording for a step that was heard. */
 const againstPar = (
@@ -228,9 +243,13 @@ export const describeSplits = ({
   const heardIds = new Set(results.map(item => item.stepId));
   // The first planned step not yet heard is the one being listened for.
   const nextId = plan.find(item => !heardIds.has(item.stepId))?.stepId;
+  const drawEnd = drawEndPosition(steps);
 
   return steps.map((step, i) => {
     const label = stepLabel(steps, i);
+    if (drawEnd !== null && i > 0 && i <= drawEnd) {
+      return withDrawRow(label, step);
+    }
     const planned = plan.find(item => item.stepId === step.id);
     if (planned === undefined) {
       const countsTowardsNext = steps

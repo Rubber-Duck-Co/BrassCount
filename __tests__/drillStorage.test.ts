@@ -124,7 +124,8 @@ describe('drillStorage service', () => {
           { id: 'id-3', type: 'shot', par: 0.25 },
           { id: 'id-4', type: 'shot', par: 0.2 },
         ],
-        totalPar: 1.95,
+        // The first shot ends the draw, so its own 0.25 s is not used.
+        totalPar: 1.7,
         shotCount: 2,
         createdAt: CREATED_AT,
         updatedAt: CREATED_AT,
@@ -165,14 +166,30 @@ describe('drillStorage service', () => {
       const saved = await saveDrill(
         {
           name: 'Mozambique',
-          steps: [{ type: 'draw', par: 1.5 }, { type: 'shot' }],
+          steps: [{ type: 'shot', par: 1.5 }, { type: 'shot' }],
         },
         fakes(),
       );
 
       expect(saved.totalPar).toBeNull();
-      expect(saved.shotCount).toBe(1);
+      expect(saved.shotCount).toBe(2);
       expect(saved.steps[1]).toEqual({ id: 'id-3', type: 'shot' });
+    });
+
+    it('leaves the par of the shot that ends a draw out of the total par', async () => {
+      const saved = await saveDrill(
+        {
+          name: 'Failure to Stop',
+          steps: [
+            { type: 'draw', par: 1.5 },
+            { type: 'shot' },
+            { type: 'shot', par: 0.25 },
+          ],
+        },
+        fakes(),
+      );
+
+      expect(saved.totalPar).toBe(1.75);
     });
 
     it('keeps a step id the caller supplies', async () => {

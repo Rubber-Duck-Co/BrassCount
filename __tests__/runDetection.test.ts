@@ -154,16 +154,60 @@ describe('planRun', () => {
     ]);
   });
 
-  it('counts the par of a silent step towards the next heard step', () => {
+  it('plans a leading draw with the sound and timing of the first heard step', () => {
     const plan = planRun([
       step('d', 'draw', 1.5),
       step('s1', 'shot', 0.25),
       step('s2', 'shot', 0.2),
     ]);
 
+    // The first shot ends the draw: it is listened for as the draw, judged
+    // against the draw's own par, and the next shot is timed from it.
     expect(plan).toEqual([
-      { stepId: 's1', sound: 'shot', par: 1.75 },
+      { stepId: 'd', sound: 'shot', par: 1.5 },
       { stepId: 's2', sound: 'shot', par: 0.2 },
+    ]);
+  });
+
+  it('leaves the step that ends the draw out of the plan', () => {
+    const plan = planRun([step('d', 'draw', 1.5), step('s1', 'shot', 0.25)]);
+
+    expect(plan.map(planned => planned.stepId)).toEqual(['d']);
+  });
+
+  it('times the draw by whatever heard step ends it', () => {
+    const plan = planRun([step('d', 'draw', 2), step('r', 'reload', 1)]);
+
+    expect(plan).toEqual([{ stepId: 'd', sound: 'reload', par: 2 }]);
+  });
+
+  it('counts a silent step between the draw and the first shot towards the draw', () => {
+    const plan = planRun([
+      step('d', 'draw', 1.5),
+      step('t', 'transition', 0.4),
+      step('s1', 'shot', 0.25),
+    ]);
+
+    expect(plan).toEqual([{ stepId: 'd', sound: 'shot', par: 1.9 }]);
+  });
+
+  it('leaves the draw untimed when it has no par, whatever the first shot has', () => {
+    const plan = planRun([step('d', 'draw'), step('s1', 'shot', 1.5)]);
+
+    expect(plan).toEqual([{ stepId: 'd', sound: 'shot' }]);
+    expect(plan[0]).not.toHaveProperty('par');
+  });
+
+  it('keeps a draw that is not first as a silent step carried into the next', () => {
+    const plan = planRun([
+      step('s1', 'shot', 0.3),
+      step('d', 'draw', 1.5),
+      step('s2', 'shot', 0.25),
+    ]);
+
+    expect(plan).toEqual([
+      { stepId: 's1', sound: 'shot', par: 0.3 },
+      { stepId: 's2', sound: 'shot', par: 1.75 },
     ]);
   });
 
@@ -179,28 +223,37 @@ describe('planRun', () => {
 
   it('adds up several silent steps in a row', () => {
     const plan = planRun([
-      step('d', 'draw', 1.5),
+      step('s1', 'shot', 0.3),
       step('t', 'transition', 0.4),
-      step('s1', 'shot', 0.25),
+      step('h', 'holster', 0.5),
+      step('s2', 'shot', 0.25),
     ]);
 
-    expect(plan).toEqual([{ stepId: 's1', sound: 'shot', par: 2.15 }]);
+    expect(plan.map(planned => planned.par)).toEqual([0.3, 1.15]);
   });
 
   it('gives a heard step its own par when the silent step before it is untimed', () => {
-    const plan = planRun([step('d', 'draw'), step('s1', 'shot', 1.5)]);
+    const plan = planRun([
+      step('s1', 'shot'),
+      step('t', 'transition'),
+      step('s2', 'shot', 1.5),
+    ]);
 
-    expect(plan).toEqual([{ stepId: 's1', sound: 'shot', par: 1.5 }]);
+    expect(plan[1]).toEqual({ stepId: 's2', sound: 'shot', par: 1.5 });
   });
 
   it('gives an untimed heard step the par of the silent step before it', () => {
-    const plan = planRun([step('d', 'draw', 1.5), step('s1', 'shot')]);
+    const plan = planRun([
+      step('s1', 'shot'),
+      step('t', 'transition', 1.5),
+      step('s2', 'shot'),
+    ]);
 
-    expect(plan).toEqual([{ stepId: 's1', sound: 'shot', par: 1.5 }]);
+    expect(plan[1]).toEqual({ stepId: 's2', sound: 'shot', par: 1.5 });
   });
 
   it('leaves a step untimed when nothing counted towards it has a par', () => {
-    const plan = planRun([step('d', 'draw'), step('s1', 'shot')]);
+    const plan = planRun([step('t', 'transition'), step('s1', 'shot')]);
 
     expect(plan).toEqual([{ stepId: 's1', sound: 'shot' }]);
     expect(plan[0]).not.toHaveProperty('par');
@@ -213,7 +266,11 @@ describe('planRun', () => {
   });
 
   it('keeps float error out of an added par', () => {
-    const plan = planRun([step('d', 'draw', 0.1), step('s1', 'shot', 0.2)]);
+    const plan = planRun([
+      step('d', 'draw', 0.1),
+      step('t', 'transition', 0.2),
+      step('s1', 'shot'),
+    ]);
 
     expect(plan[0].par).toBe(0.3);
   });

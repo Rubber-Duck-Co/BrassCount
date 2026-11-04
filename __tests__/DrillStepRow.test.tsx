@@ -29,7 +29,8 @@ const renderRow = (props: Partial<RowProps> = {}) => {
       <DrillStepRow
         step={SHOT}
         position={1}
-        last={false}
+        canMoveUp
+        canMoveDown
         label="Shot 1"
         reordering={false}
         labelMinWidth={112}
@@ -185,11 +186,12 @@ describe('DrillStepRow', () => {
     );
   });
 
-  it('cannot move the first step up or the last step down', () => {
+  it('cannot move a way it is told it cannot go', () => {
     const { tree, onMove } = renderRow({
       reordering: true,
       position: 0,
-      last: true,
+      canMoveUp: false,
+      canMoveDown: false,
     });
 
     const up = pressable(tree, 'btn-move-up-step-0');
@@ -203,6 +205,31 @@ describe('DrillStepRow', () => {
     press(tree, 'btn-move-down-step-0');
     expect(onMove).not.toHaveBeenCalled();
     expect(announce).not.toHaveBeenCalled();
+  });
+
+  it('can move one way and not the other', () => {
+    const { tree, onMove } = renderRow({
+      reordering: true,
+      position: 1,
+      canMoveUp: false,
+    });
+
+    press(tree, 'btn-move-up-step-1');
+    press(tree, 'btn-move-down-step-1');
+
+    expect(onMove.mock.calls).toEqual([['step-b', 2]]);
+  });
+
+  it('says the step that ends the draw is timed with it, offering no par', () => {
+    const { tree, onEditPar } = renderRow({ endsDraw: true });
+
+    expect(has(tree, 'btn-par-step-1')).toBe(false);
+    const box = byTestId(tree, 'text-par-step-1')[0];
+    expect(textsUnder(box).join('')).toBe('with draw');
+    expect(box.props.accessibilityLabel).toBe(
+      'Step 2 is timed with the draw; its par is not used',
+    );
+    expect(onEditPar).not.toHaveBeenCalled();
   });
 
   it('hands the screen its remove button, and takes it back when it goes', () => {

@@ -36,7 +36,10 @@ const calibration = (
   ...overrides,
 });
 
-/** Draw, two shots: the first shot is due 1.75 s after the start. */
+/**
+ * Draw, two shots: the first shot ends the draw, which is due 1.50 s after
+ * the start.
+ */
 const DRILL: DrillStep[] = [
   { id: 'draw', type: 'draw', par: 1.5 },
   { id: 'shot-1', type: 'shot', par: 0.25 },
@@ -189,11 +192,11 @@ const startedRun = async (
 };
 
 describe('createDrillRun', () => {
-  it('plans around the steps it cannot hear', () => {
+  it('plans the first shot as the end of the draw', () => {
     const run = createDrillRun({ steps: DRILL, calibration: calibration() });
 
     expect(run.steps).toEqual([
-      { stepId: 'shot-1', sound: 'shot', par: 1.75 },
+      { stepId: 'draw', sound: 'shot', par: 1.5 },
       { stepId: 'shot-2', sound: 'shot', par: 0.2 },
     ]);
   });
@@ -560,9 +563,9 @@ describe('a run', () => {
 
     expect(recorded.steps).toEqual([
       {
-        stepId: 'shot-1',
+        stepId: 'draw',
         timestamp: ZERO + 1402,
-        result: { stepId: 'shot-1', par: 1.75, actual: 1.402, delta: -0.348 },
+        result: { stepId: 'draw', par: 1.5, actual: 1.402, delta: -0.098 },
       },
     ]);
     expect(recorded.completions).toEqual([]);
@@ -575,15 +578,12 @@ describe('a run', () => {
     fake.hear(ZERO + 1425, ROOM_DB);
     fake.hear(ZERO + 1633, -5);
 
-    expect(recorded.steps.map(step => step.stepId)).toEqual([
-      'shot-1',
-      'shot-2',
-    ]);
+    expect(recorded.steps.map(step => step.stepId)).toEqual(['draw', 'shot-2']);
     expect(recorded.completions).toEqual([
       {
         completed: true,
         results: [
-          { stepId: 'shot-1', par: 1.75, actual: 1.402, delta: -0.348 },
+          { stepId: 'draw', par: 1.5, actual: 1.402, delta: -0.098 },
           { stepId: 'shot-2', par: 0.2, actual: 0.231, delta: 0.031 },
         ],
         totalTime: 1.633,
@@ -604,7 +604,7 @@ describe('a run', () => {
     fake.hear(ZERO + 1425, ROOM_DB);
     fake.hear(ZERO + 1633, -5);
 
-    expect(order).toEqual(['shot-1', 'shot-2', 'complete']);
+    expect(order).toEqual(['draw', 'shot-2', 'complete']);
   });
 
   it('closes the microphone and stops listening when the run completes', async () => {
@@ -701,7 +701,7 @@ describe('a run', () => {
 
     fake.emit(WELL_FORMED);
 
-    expect(recorded.steps.map(step => step.stepId)).toEqual(['shot-1']);
+    expect(recorded.steps.map(step => step.stepId)).toEqual(['draw']);
   });
 
   it('takes only the fields it knows from a reading', async () => {
@@ -711,9 +711,9 @@ describe('a run', () => {
 
     expect(recorded.steps).toEqual([
       {
-        stepId: 'shot-1',
+        stepId: 'draw',
         timestamp: ZERO + 1402,
-        result: { stepId: 'shot-1', par: 1.75, actual: 1.402, delta: -0.348 },
+        result: { stepId: 'draw', par: 1.5, actual: 1.402, delta: -0.098 },
       },
     ]);
   });
@@ -734,7 +734,7 @@ describe('a run', () => {
     expect(fake.listenerCount()).toBe(0);
     await expect(run.stop()).resolves.toMatchObject({
       completed: true,
-      results: [{ stepId: 'shot-1' }, { stepId: 'shot-2' }],
+      results: [{ stepId: 'draw' }, { stepId: 'shot-2' }],
     });
   });
 
@@ -791,7 +791,7 @@ describe('a stream that stops on its own', () => {
 
     await expect(run.stop()).resolves.toMatchObject({
       completed: false,
-      results: [{ stepId: 'shot-1', actual: 1.402 }],
+      results: [{ stepId: 'draw', actual: 1.402 }],
     });
   });
 
@@ -821,7 +821,7 @@ describe('stop', () => {
 
     expect(result).toEqual({
       completed: false,
-      results: [{ stepId: 'shot-1', par: 1.75, actual: 1.402, delta: -0.348 }],
+      results: [{ stepId: 'draw', par: 1.5, actual: 1.402, delta: -0.098 }],
       totalTime: 1.402,
       zeroSource: 'beep',
       beepDelayMs: 84,

@@ -9,7 +9,7 @@ import {
   type DrillStep,
   type DrillStepType,
 } from '@/types/drill';
-import { countShots, isStepPar, totalPar } from '@utils/drill';
+import { countShots, drillParSteps, isStepPar, totalPar } from '@utils/drill';
 import { isNonEmptyString, isRecord, isTimestamp } from '@utils/guards';
 import { generateId as defaultGenerateId } from '@utils/id';
 import { createSerialQueue } from '@utils/serialQueue';
@@ -197,7 +197,7 @@ const buildDrill = (
   id: fields.id,
   name: fields.name,
   steps: fields.steps,
-  totalPar: totalPar(fields.steps),
+  totalPar: totalPar(drillParSteps(fields.steps)),
   shotCount: countShots(fields.steps),
   createdAt: fields.createdAt,
   updatedAt: fields.updatedAt,

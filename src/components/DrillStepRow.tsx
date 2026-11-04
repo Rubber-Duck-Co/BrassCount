@@ -12,6 +12,7 @@ import type { DrillStep } from '@/types/drill';
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import { stepTypeDescription } from '@utils/drill';
 import { formatSeconds, spokenSeconds } from '@utils/format';
+import { WITH_DRAW } from '@utils/splitRows';
 
 import { Icon } from './Icon';
 import { Typography } from './Typography';
@@ -63,6 +64,9 @@ const createStyles = (theme: Theme) =>
       borderColor: theme.colors.outline,
       borderRadius: theme.radius.none,
     },
+    // Not pressable: the outline drops to the disabled tone, as a disabled
+    // move button's does.
+    parBoxOff: { borderColor: theme.colors.disabled },
     iconButton: {
       width: theme.sizes.touchTarget,
       height: theme.sizes.touchTarget,
@@ -131,8 +135,18 @@ type DrillStepRowProps = {
   step: DrillStep;
   /** Where the step sits in the drill, counted from 0. */
   position: number;
-  /** Whether this is the drill's last step, so it cannot move down. */
-  last: boolean;
+  /**
+   * Whether the step can move one place up, or down: not past either end
+   * of the list, and never so a draw leaves first place (`canMoveStep`).
+   */
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  /**
+   * Whether this step's sound ends the draw before it. The draw is timed
+   * to it, so it takes no time of its own and its par is not used: the par
+   * box says so instead of offering a par.
+   */
+  endsDraw?: boolean;
   /** What the step is called in the sequence, e.g. "Shot 2". */
   label: string;
   /**
@@ -162,16 +176,19 @@ type DrillStepRowProps = {
 /**
  * One step of the drill editor, a ruled row in the steps box: its name
  * ("Shot 2") over what its type means, which opens the step type sheet;
- * then either its par box and a remove button or, while the list is being
- * reordered, a button to move it up and one to move it down. Memoised so
- * typing the drill's name, or changing one step, does not draw every
- * other row again.
+ * then either its par box (or, for the step that ends the draw, a box
+ * saying it is timed with the draw) and a remove button or, while the
+ * list is being reordered, a button to move it up and one to move it
+ * down. Memoised so typing the drill's name, or changing one step, does
+ * not draw every other row again.
  */
 export const DrillStepRow = memo(
   ({
     step,
     position,
-    last,
+    canMoveUp,
+    canMoveDown,
+    endsDraw = false,
     label,
     reordering,
     labelMinWidth,
@@ -193,9 +210,9 @@ export const DrillStepRow = memo(
 
     const move = (direction: 'up' | 'down') => {
       const to = direction === 'up' ? position - 1 : position + 1;
-      // The button is disabled at either end; this keeps a stray press
-      // from announcing a move that did not happen.
-      if (to < 0 || (direction === 'down' && last)) {
+      // The button is disabled when the step cannot go that way; this
+      // keeps a stray press from announcing a move that did not happen.
+      if (!(direction === 'up' ? canMoveUp : canMoveDown)) {
         return;
       }
       onMove(step.id, to);
@@ -236,14 +253,14 @@ export const DrillStepRow = memo(
           <View style={styles.controls}>
             <MoveButton
               direction="up"
-              disabled={position === 0}
+              disabled={!canMoveUp}
               position={position}
               label={label}
               onPress={() => move('up')}
             />
             <MoveButton
               direction="down"
-              disabled={last}
+              disabled={!canMoveDown}
               position={position}
               label={label}
               onPress={() => move('down')}
@@ -251,26 +268,41 @@ export const DrillStepRow = memo(
           </View>
         ) : (
           <View style={styles.controls}>
-            <TouchableOpacity
-              onPress={() => onEditPar(step.id)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                step.par === undefined
-                  ? `Set par for step ${number}`
-                  : `Change par for step ${number}, currently ${spokenSeconds(
-                      step.par,
-                    )}`
-              }
-              style={styles.parBox}
-              testID={`btn-par-step-${position}`}
-            >
-              <Typography
-                variant="metricSmall"
-                color={step.par === undefined ? 'textSecondary' : 'textPrimary'}
+            {endsDraw ? (
+              <View
+                accessible
+                accessibilityLabel={`Step ${number} is timed with the draw; its par is not used`}
+                style={[styles.parBox, styles.parBoxOff]}
+                testID={`text-par-step-${position}`}
               >
-                {step.par === undefined ? '+ par' : formatSeconds(step.par)}
-              </Typography>
-            </TouchableOpacity>
+                <Typography variant="label" color="textSecondary">
+                  {WITH_DRAW}
+                </Typography>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => onEditPar(step.id)}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  step.par === undefined
+                    ? `Set par for step ${number}`
+                    : `Change par for step ${number}, currently ${spokenSeconds(
+                        step.par,
+                      )}`
+                }
+                style={styles.parBox}
+                testID={`btn-par-step-${position}`}
+              >
+                <Typography
+                  variant="metricSmall"
+                  color={
+                    step.par === undefined ? 'textSecondary' : 'textPrimary'
+                  }
+                >
+                  {step.par === undefined ? '+ par' : formatSeconds(step.par)}
+                </Typography>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               ref={removeRef}
