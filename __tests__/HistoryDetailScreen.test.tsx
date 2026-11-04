@@ -41,7 +41,11 @@ type TestTabParamList = {
   Elsewhere: undefined;
   HistoryDetail: { drillId: string; drillName: string };
   Timer: undefined;
-  RunComparison: { drillId: string; runIds: [string, string] };
+  RunComparison: {
+    drillId: string;
+    runIds: [string, string];
+    drillName?: string;
+  };
 };
 
 const metrics = {
@@ -177,6 +181,10 @@ const byTestId = (tree: ReactTestRenderer, testID: string) =>
 
 const has = (tree: ReactTestRenderer, testID: string): boolean =>
   byTestId(tree, testID).length > 0;
+
+/** Whether the run picker is drawn: its sheet frame is always mounted. */
+const sheetUp = (tree: ReactTestRenderer): boolean =>
+  byTestId(tree, 'sheet-compare').some(node => typeof node.type === 'string');
 
 /** Every string rendered under `node`, in the order it is shown. */
 const textsUnder = (node: ReactTestInstance): string[] =>
@@ -935,12 +943,26 @@ describe('HistoryDetailScreen', () => {
       const oldest = await seedSession(drill.id, 3.2, '2026-10-05T12:00:00Z');
       await seedSession(other.id, 2, '2026-10-09T12:00:00Z');
       const { tree } = await renderScreen(drill);
-      expect(has(tree, 'sheet-compare')).toBe(false);
+      expect(sheetUp(tree)).toBe(false);
 
       await press(tree, `btn-compare-${newest.id}`);
 
-      expect(has(tree, 'sheet-compare')).toBe(true);
+      expect(sheetUp(tree)).toBe(true);
       expect(offered(tree)).toEqual([middle.id, oldest.id]);
+    });
+
+    it('names the run the picked one is set against', async () => {
+      const drill = await seedDrill('Bill Drill');
+      await seedSession(drill.id, 3, '2026-10-10T12:00:00Z');
+      const older = await seedSession(drill.id, 3.2, '2026-10-05T12:00:00Z');
+      const { tree } = await renderScreen(drill);
+      await pressToggle(tree, older);
+
+      await press(tree, `btn-compare-${older.id}`);
+
+      expect(textsOf(tree, 'text-compare-from')).toEqual([
+        `Pick a run to set against the run on ${formatDateTime(older.createdAt)}.`,
+      ]);
     });
 
     it('opens the comparison of the two runs when one is picked', async () => {
@@ -956,8 +978,9 @@ describe('HistoryDetailScreen', () => {
       expect(comparisonsOpened.at(-1)).toEqual({
         drillId: drill.id,
         runIds: [newest.id, older.id],
+        drillName: 'Bill Drill',
       });
-      expect(has(tree, 'sheet-compare')).toBe(false);
+      expect(sheetUp(tree)).toBe(false);
     });
 
     it('opens one comparison, of the run picked first, on a double tap', async () => {
@@ -980,6 +1003,7 @@ describe('HistoryDetailScreen', () => {
       expect(comparisonsOpened.at(-1)).toEqual({
         drillId: drill.id,
         runIds: [newest.id, middle.id],
+        drillName: 'Bill Drill',
       });
     });
 
@@ -993,7 +1017,7 @@ describe('HistoryDetailScreen', () => {
       await press(tree, 'btn-compare-close');
       await settle();
 
-      expect(has(tree, 'sheet-compare')).toBe(false);
+      expect(sheetUp(tree)).toBe(false);
       expect(comparisonsOpened).toEqual([]);
     });
 

@@ -5,6 +5,7 @@ import {
   formatElapsed,
   formatLevel,
   formatSeconds,
+  formatSignedFigure,
   formatSignedSeconds,
   formatTimeAgo,
   pluralize,
@@ -115,6 +116,23 @@ describe('formatSignedSeconds', () => {
   it('never shows a signed zero for a difference too small to show', () => {
     expect(formatSignedSeconds(-0.004)).toBe('0.00s');
     expect(formatSignedSeconds(0.004)).toBe('0.00s');
+  });
+});
+
+describe('formatSignedFigure', () => {
+  it('shows a longer time with a plus and a shorter one with a true minus', () => {
+    expect(formatSignedFigure(0.11)).toBe('+0.11');
+    expect(formatSignedFigure(-0.01)).toBe('−0.01');
+    expect(formatSignedFigure(12.346)).toBe('+12.35');
+  });
+
+  it('shows no difference without a sign', () => {
+    expect(formatSignedFigure(0)).toBe('0.00');
+  });
+
+  it('never shows a signed zero for a difference too small to show', () => {
+    expect(formatSignedFigure(-0.004)).toBe('0.00');
+    expect(formatSignedFigure(0.004)).toBe('0.00');
   });
 });
 

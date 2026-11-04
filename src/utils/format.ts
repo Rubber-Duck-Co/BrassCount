@@ -105,6 +105,22 @@ export const formatSignedSeconds = (seconds: number): string => {
   return `${value > 0 ? '+' : ''}${shown}s`;
 };
 
+/** A true minus sign, so signed figures line up in a column and read as one. */
+const MINUS = '−';
+
+/**
+ * A difference in seconds as a table figure, with no unit: `+0.11`,
+ * `−0.01` with a true minus. One that rounds to nothing reads `0.00`.
+ */
+export const formatSignedFigure = (seconds: number): string => {
+  const shown = Math.abs(seconds).toFixed(2);
+
+  if (Number(shown) === 0) {
+    return shown;
+  }
+  return `${seconds > 0 ? '+' : MINUS}${shown}`;
+};
+
 /** The time of day of a valid date, in the device's own 12 or 24 hour form. */
 const timeOfDay = (date: Date): string =>
   date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
