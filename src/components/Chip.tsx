@@ -5,7 +5,8 @@ import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
 import { Typography } from './Typography';
 
-type ChipTone = 'neutral' | 'primary' | 'success' | 'danger' | 'inverse';
+type ChipTone =
+  'neutral' | 'primary' | 'success' | 'danger' | 'inverse' | 'signal';
 
 type ChipProps = {
   label: string;
@@ -21,6 +22,7 @@ const toneText: Record<ChipTone, keyof SemanticColors> = {
   success: 'success',
   danger: 'danger',
   inverse: 'textOnInverse',
+  signal: 'textOnWarning',
 };
 
 const createStyles = (theme: Theme) =>
@@ -45,13 +47,19 @@ const createStyles = (theme: Theme) =>
       backgroundColor: theme.colors.inverse,
       borderColor: theme.colors.inverse,
     },
+    // A Signal badge for something happening now: a sound being listened for.
+    signal: {
+      backgroundColor: theme.colors.warning,
+      borderColor: theme.colors.warning,
+    },
   });
 
 /**
  * Compact status/filter pill.
  *
  * `selected` promotes a neutral chip to the brass treatment, but an explicit
- * `tone` always wins. `inverse` is an Ink badge with Paper text (PB).
+ * `tone` always wins. `inverse` is an Ink badge with Paper text (PB);
+ * `signal` is the same badge filled in Signal (Listening).
  */
 export const Chip = ({
   label,
@@ -74,7 +82,9 @@ export const Chip = ({
     selected && resolvedTone === 'primary' && styles.selected,
     resolvedTone === 'inverse'
       ? styles.inverse
-      : resolvedTone !== 'neutral' && { borderColor: theme.colors[color] },
+      : resolvedTone === 'signal'
+        ? styles.signal
+        : resolvedTone !== 'neutral' && { borderColor: theme.colors[color] },
   ];
 
   const content = (

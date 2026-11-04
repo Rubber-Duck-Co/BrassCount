@@ -7,7 +7,6 @@ import {
   PermissionsAndroid,
   Platform,
   StyleSheet,
-  Text,
 } from 'react-native';
 
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -26,6 +25,7 @@ import {
 } from 'react-test-renderer';
 
 import { useCalibration } from '../src/hooks/useCalibration';
+import { LIVE_LEVEL_INTERVAL_MS } from '../src/hooks/useCalibrationCapture';
 import { CalibrationScreen } from '../src/screens/CalibrationScreen';
 import {
   AUDIO_AMPLITUDE_EVENT,
@@ -231,19 +231,13 @@ const renderScreen = ({
   };
 };
 
-/** The two labels under the meter, left end first. */
-const scaleLabels = (
-  tree: ReactTestRenderer,
-  sound: CalibrationSound,
-): string[] =>
-  tree.root
-    .findAllByProps({ testID: `scale-calibration-${sound}` })[0]
-    .findAllByType(Text)
-    .map(node => node.props.children);
-
 const chipLabel = (tree: ReactTestRenderer, sound: CalibrationSound): string =>
   tree.root.findAllByProps({ testID: `chip-calibration-${sound}` })[0].props
     .label;
+
+const chipTone = (tree: ReactTestRenderer, sound: CalibrationSound): string =>
+  tree.root.findAllByProps({ testID: `chip-calibration-${sound}` })[0].props
+    .tone;
 
 const thresholdText = (
   tree: ReactTestRenderer,
@@ -266,26 +260,27 @@ const spokenSummary = (
   tree.root.findAllByProps({ testID: `summary-calibration-${sound}` })[0].props
     .accessibilityLabel;
 
+/** How far the meter's bar is filled: the live level, else the last test. */
 const meterFillWidth = (
   tree: ReactTestRenderer,
   sound: CalibrationSound,
 ): unknown =>
   StyleSheet.flatten(
-    tree.root.findAllByProps({ testID: `meter-calibration-${sound}` })[0].props
-      .style,
+    tree.root.findAllByProps({ testID: `meter-calibration-${sound}-fill` })[0]
+      .props.style,
   ).width;
 
-/** Where the last-test tick sits along the meter, or `null` when there is none. */
-const markerPosition = (
+/** Where the threshold tick sits along the meter, or `null` when there is none. */
+const thresholdPosition = (
   tree: ReactTestRenderer,
   sound: CalibrationSound,
 ): unknown => {
-  const markers = tree.root.findAllByProps({
-    testID: `marker-last-test-${sound}`,
+  const ticks = tree.root.findAllByProps({
+    testID: `meter-calibration-${sound}-threshold`,
   });
-  return markers.length === 0
+  return ticks.length === 0
     ? null
-    : StyleSheet.flatten(markers[0].props.style).left;
+    : StyleSheet.flatten(ticks[0].props.style).left;
 };
 
 const buttonLabel = (tree: ReactTestRenderer, testID: string): string =>
@@ -535,10 +530,10 @@ describe('CalibrationScreen', () => {
     });
 
     expect(lastTestText(tree, 'shot')).toBe('—');
-    expect(markerPosition(tree, 'shot')).toBeNull();
+    expect(meterFillWidth(tree, 'shot')).toBe('0%');
   });
 
-  it('shows the last test reading and marks it on the meter', () => {
+  it('shows the last test reading and fills the meter to it', () => {
     const { tree, store } = renderScreen();
     act(() => {
       store().setSample('shot', -24);
@@ -549,9 +544,9 @@ describe('CalibrationScreen', () => {
     });
 
     expect(lastTestText(tree, 'shot')).toBe('-15 dBFS');
-    expect(markerPosition(tree, 'shot')).toBe('75%');
-    // The bar still shows the threshold, not the reading.
-    expect(meterFillWidth(tree, 'shot')).toBe('50%');
+    expect(meterFillWidth(tree, 'shot')).toBe('75%');
+    // The threshold is the tick the bar is measured against.
+    expect(thresholdPosition(tree, 'shot')).toBe('50%');
     expect(thresholdText(tree, 'shot')).toBe('-30 dBFS');
   });
 
@@ -565,7 +560,7 @@ describe('CalibrationScreen', () => {
       store().recordTestReading('rack', -Infinity);
     });
 
-    expect(markerPosition(tree, 'rack')).toBe('0%');
+    expect(meterFillWidth(tree, 'rack')).toBe('0%');
     expect(lastTestText(tree, 'rack')).toBe('-160 dBFS');
   });
 
@@ -583,7 +578,7 @@ describe('CalibrationScreen', () => {
     });
 
     expect(lastTestText(tree, 'shot')).toBe('—');
-    expect(markerPosition(tree, 'shot')).toBeNull();
+    expect(meterFillWidth(tree, 'shot')).toBe('0%');
   });
 
   it('shows a last test reading only on the sound that was tested', () => {
@@ -598,34 +593,71 @@ describe('CalibrationScreen', () => {
     });
 
     expect(lastTestText(tree, 'reload')).toBe('—');
-    expect(markerPosition(tree, 'reload')).toBeNull();
+    expect(meterFillWidth(tree, 'reload')).toBe('0%');
   });
 
-  it('draws an empty meter until a sound is calibrated', () => {
+  it('draws an empty meter with no threshold mark until a sound is calibrated', () => {
     const { tree } = renderScreen();
 
     expect(meterFillWidth(tree, 'shot')).toBe('0%');
+    expect(thresholdPosition(tree, 'shot')).toBeNull();
   });
 
-  it('fills the meter in proportion to the threshold', () => {
+  it('marks the threshold along the meter in proportion to its level', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
       store().setSample('shot', -9);
     });
 
-    expect(meterFillWidth(tree, 'shot')).toBe('75%');
+    expect(thresholdPosition(tree, 'shot')).toBe('75%');
+    expect(meterFillWidth(tree, 'shot')).toBe('0%');
   });
 
-  it('draws an empty meter for a threshold below the meter floor', () => {
+  it('marks a threshold below the meter floor at the start of the bar', () => {
     const { tree, store } = renderScreen();
 
     act(() => {
       store().setSample('rack', -74);
     });
 
-    expect(meterFillWidth(tree, 'rack')).toBe('0%');
+    expect(thresholdPosition(tree, 'rack')).toBe('0%');
     expect(thresholdText(tree, 'rack')).toBe('-80 dBFS');
+  });
+
+  describe('status chip', () => {
+    it('outlines a sound still to calibrate in Signal', () => {
+      const { tree } = renderScreen();
+
+      expect(chipLabel(tree, 'shot')).toBe('Not calibrated');
+      expect(chipTone(tree, 'shot')).toBe('primary');
+    });
+
+    it('fills a calibrated sound and a passed test in Ink', () => {
+      const { tree, store } = renderScreen();
+
+      act(() => {
+        store().setSample('shot', -12);
+        store().setSample('reload', -12);
+        store().recordTestReading('reload', -10);
+      });
+
+      expect(chipTone(tree, 'shot')).toBe('inverse');
+      expect(chipLabel(tree, 'reload')).toBe('Test passed');
+      expect(chipTone(tree, 'reload')).toBe('inverse');
+    });
+
+    it('outlines a failed test in Signal', () => {
+      const { tree, store } = renderScreen();
+
+      act(() => {
+        store().setSample('shot', -12);
+        store().recordTestReading('shot', -40);
+      });
+
+      expect(chipLabel(tree, 'shot')).toBe('Test failed');
+      expect(chipTone(tree, 'shot')).toBe('primary');
+    });
   });
 
   it('shows every sound as not calibrated on a fresh launch', () => {
@@ -725,7 +757,6 @@ describe('CalibrationScreen', () => {
 
       expect(thresholdText(tree, 'shot')).toBe('70');
       expect(lastTestText(tree, 'shot')).toBe('79');
-      expect(scaleLabels(tree, 'shot')).toEqual(['0', '100']);
     });
 
     it('puts a reading below the meter floor at 0 on the level scale', () => {
@@ -765,7 +796,6 @@ describe('CalibrationScreen', () => {
       });
 
       expect(thresholdText(tree, 'shot')).toBe('-18 dBFS');
-      expect(scaleLabels(tree, 'shot')).toEqual(['-60', '0 dBFS']);
       expect(feedbackText(tree, 'shot')).toBe(
         'Threshold set to -18 dBFS. Run a test to check it.',
       );
@@ -787,14 +817,13 @@ describe('CalibrationScreen', () => {
 
       expect(thresholdText(tree, 'shot')).toBe('-18 dBFS');
       expect(lastTestText(tree, 'shot')).toBe('-12 dBFS');
-      expect(scaleLabels(tree, 'shot')).toEqual(['-60', '0 dBFS']);
 
       showLevelsIn('level');
 
       expect(thresholdText(tree, 'shot')).toBe('70');
       expect(lastTestText(tree, 'shot')).toBe('79');
       // The meter itself is drawn in dBFS whichever unit is shown.
-      expect(meterFillWidth(tree, 'shot')).toBe('70%');
+      expect(thresholdPosition(tree, 'shot')).toBe('70%');
     });
   });
 
@@ -910,6 +939,85 @@ describe('CalibrationScreen', () => {
         );
       });
 
+      it('fills the meter with the level it hears while listening', async () => {
+        const { tree } = renderScreen();
+        await press(tree, 'btn-recalibrate-shot');
+
+        hear(-30);
+        expect(meterFillWidth(tree, 'shot')).toBe('50%');
+
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(LIVE_LEVEL_INTERVAL_MS);
+        });
+        hear(-15);
+        expect(meterFillWidth(tree, 'shot')).toBe('75%');
+      });
+
+      it('redraws the live level at most once an interval', async () => {
+        const { tree } = renderScreen();
+        await press(tree, 'btn-recalibrate-shot');
+
+        hear(-30);
+        hear(-15);
+
+        expect(meterFillWidth(tree, 'shot')).toBe('50%');
+      });
+
+      it('shows the loudest level of an interval, not only the latest', async () => {
+        const { tree } = renderScreen();
+        await press(tree, 'btn-recalibrate-shot');
+        hear(-50);
+
+        // A shot's peak lands between redraws, followed by quieter readings.
+        hear(-6);
+        hear(-45);
+        await act(async () => {
+          await jest.advanceTimersByTimeAsync(LIVE_LEVEL_INTERVAL_MS);
+        });
+        hear(-48);
+
+        expect(meterFillWidth(tree, 'shot')).toBe('90%');
+      });
+
+      it('shows the live level only on the sound listening', async () => {
+        const { tree } = renderScreen();
+        await press(tree, 'btn-recalibrate-shot');
+
+        hear(-15);
+
+        expect(meterFillWidth(tree, 'reload')).toBe('0%');
+        expect(meterFillWidth(tree, 'rack')).toBe('0%');
+      });
+
+      it('keeps the live level out of the calibration store', async () => {
+        const { tree, store } = renderScreen();
+        const before = store().state;
+        await press(tree, 'btn-recalibrate-shot');
+
+        hear(-15);
+
+        expect(store().state).toEqual(before);
+      });
+
+      it('empties the live level once the sample is taken', async () => {
+        const { tree } = renderScreen();
+
+        await capture(tree, 'btn-recalibrate-shot', -15);
+
+        expect(meterFillWidth(tree, 'shot')).toBe('0%');
+        expect(thresholdPosition(tree, 'shot')).toBe('65%');
+      });
+
+      it('empties the live level when cancelled', async () => {
+        const { tree } = renderScreen();
+        await press(tree, 'btn-recalibrate-shot');
+        hear(-15);
+
+        await press(tree, 'btn-recalibrate-shot');
+
+        expect(meterFillWidth(tree, 'shot')).toBe('0%');
+      });
+
       it('closes the microphone once the sample is taken', async () => {
         const { tree } = renderScreen();
 
@@ -929,6 +1037,7 @@ describe('CalibrationScreen', () => {
         expect(feedbackText(tree, 'shot')).toBe(
           'No sound heard. Try again, closer to the microphone.',
         );
+        expect(has(tree, 'mark-failure-shot')).toBe(true);
       });
 
       it('keeps the previous threshold when nothing loud enough was heard', async () => {
@@ -1011,6 +1120,7 @@ describe('CalibrationScreen', () => {
         expect(feedbackText(tree, 'shot')).toBe(
           'Test passed. The sound reached the threshold.',
         );
+        expect(has(tree, 'mark-failure-shot')).toBe(false);
         expect(lastTestText(tree, 'shot')).toBe('-14 dBFS');
         expect(spokenSummary(tree, 'shot')).toBe(
           'Shot, calibrated, threshold minus 18 decibels full scale, last test minus 14 decibels full scale, test passed',
@@ -1052,6 +1162,18 @@ describe('CalibrationScreen', () => {
         expect(thresholdText(tree, 'shot')).toBe('-18 dBFS');
       });
 
+      it('fills the meter with the live level, not the last test, while testing', async () => {
+        const { tree } = renderScreen();
+        await capture(tree, 'btn-recalibrate-shot', -12);
+        await capture(tree, 'btn-test-shot', -6);
+        expect(meterFillWidth(tree, 'shot')).toBe('90%');
+
+        await press(tree, 'btn-test-shot');
+        hear(-30);
+
+        expect(meterFillWidth(tree, 'shot')).toBe('50%');
+      });
+
       it('replaces the previous result with the latest test', async () => {
         const { tree } = renderScreen();
         await capture(tree, 'btn-recalibrate-shot', -12);
@@ -1070,9 +1192,11 @@ describe('CalibrationScreen', () => {
         await press(tree, 'btn-test-reload');
 
         expect(chipLabel(tree, 'reload')).toBe('Listening');
+        expect(chipTone(tree, 'reload')).toBe('signal');
         expect(feedbackText(tree, 'reload')).toBe(
           'Listening. Change the magazine now.',
         );
+        expect(has(tree, 'mark-failure-reload')).toBe(false);
         expect(spokenSummary(tree, 'reload')).toBe(
           'Reload, listening, threshold minus 18 decibels full scale, not tested yet',
         );
@@ -1310,6 +1434,7 @@ describe('CalibrationScreen', () => {
         expect(feedbackText(tree, 'reload')).toBe(
           'Microphone access is turned off. Allow it in Settings, then try again.',
         );
+        expect(has(tree, 'mark-failure-reload')).toBe(true);
         expect(has(tree, 'btn-open-settings-shot')).toBe(false);
 
         await press(tree, 'btn-open-settings-reload');
@@ -1351,6 +1476,8 @@ describe('CalibrationScreen', () => {
         expect(feedbackText(tree, 'shot')).toBe(
           'Listening stopped because the app was left. Try again.',
         );
+        expect(has(tree, 'mark-failure-shot')).toBe(true);
+        expect(meterFillWidth(tree, 'shot')).toBe('0%');
         expect(chipLabel(tree, 'shot')).toBe('Not calibrated');
         expect(isDisabled(tree, 'btn-recalibrate-reload')).toBe(false);
       });
