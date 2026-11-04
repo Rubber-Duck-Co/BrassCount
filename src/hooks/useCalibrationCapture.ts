@@ -29,6 +29,15 @@ export type CalibrationCaptureNoticeKind =
   | 'interrupted'
   | 'failed';
 
+/**
+ * Shortest time between two redraws of the live meter. The microphone
+ * reports a level about every 23 ms; redrawing at that rate costs renders
+ * no eye can follow, so the meter shows at most one level per interval:
+ * the loudest heard since the last redraw, so a shot's brief peak is not
+ * skipped.
+ */
+export const LIVE_LEVEL_INTERVAL_MS = 50;
+
 export type CalibrationCaptureNotice = {
   sound: CalibrationSound;
   kind: CalibrationCaptureNoticeKind;
@@ -38,6 +47,12 @@ export type UseCalibrationCaptureResult = {
   active: ActiveCalibrationCapture | null;
   /** How the most recent capture fell short, until another one starts. */
   notice: CalibrationCaptureNotice | null;
+  /**
+   * The level the running capture last heard, in dBFS, for the live meter.
+   * `null` when nothing is listening or nothing has been heard yet. Kept
+   * here, never in the calibration store: it changes many times a second.
+   */
+  liveLevelDbfs: number | null;
   /** Capture a sample of the sound and set its threshold from it. */
   recalibrate: (sound: CalibrationSound) => void;
   /** Capture the sound and record its level as the sound's last test. */
@@ -67,8 +82,9 @@ const noticeKindFor = (err: unknown): CalibrationCaptureNoticeKind => {
  * their results to the calibration store.
  *
  * Only what the store does not hold lives here: which capture is running,
- * and why the last one fell short. A test's pass or fail is not state — it
- * follows from the stored threshold and last test (`testOutcome`).
+ * the level it is hearing, and why the last one fell short. A test's pass
+ * or fail is not state — it follows from the stored threshold and last
+ * test (`testOutcome`).
  *
  * A capture is cancelled when the screen loses focus or unmounts, so the
  * microphone is never left listening behind another tab.
@@ -77,6 +93,7 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
   const { setSample, recordTestReading } = useCalibration();
   const [active, setActive] = useState<ActiveCalibrationCapture | null>(null);
   const [notice, setNotice] = useState<CalibrationCaptureNotice | null>(null);
+  const [liveLevelDbfs, setLiveLevelDbfs] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Bumped by every capture and every cancel, so a capture that has been
   // superseded never writes its result.
@@ -87,6 +104,7 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
     abortRef.current?.abort();
     abortRef.current = null;
     setActive(null);
+    setLiveLevelDbfs(null);
   }, []);
 
   const run = useCallback(
@@ -98,10 +116,28 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
 
       setNotice(null);
       setActive({ sound, mode });
+      setLiveLevelDbfs(null);
+
+      let lastShownAt = -Infinity;
+      let loudestSinceShown = -Infinity;
+      const onLevel = (dbfs: number): void => {
+        if (runIdRef.current !== runId) {
+          return;
+        }
+        loudestSinceShown = Math.max(loudestSinceShown, dbfs);
+        const now = Date.now();
+        if (now - lastShownAt < LIVE_LEVEL_INTERVAL_MS) {
+          return;
+        }
+        lastShownAt = now;
+        setLiveLevelDbfs(loudestSinceShown);
+        loudestSinceShown = -Infinity;
+      };
 
       try {
         const { peakDbfs } = await CalibrationCaptureService.capture({
           signal: controller.signal,
+          onLevel,
         });
         if (runIdRef.current !== runId) {
           return;
@@ -124,6 +160,7 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
 
       abortRef.current = null;
       setActive(null);
+      setLiveLevelDbfs(null);
     },
     [recordTestReading, setSample],
   );
@@ -146,5 +183,5 @@ export const useCalibrationCapture = (): UseCalibrationCaptureResult => {
   // Returning `cancel` as the cleanup runs it on blur and on unmount.
   useFocusEffect(useCallback(() => cancel, [cancel]));
 
-  return { active, notice, recalibrate, test, cancel };
+  return { active, notice, liveLevelDbfs, recalibrate, test, cancel };
 };

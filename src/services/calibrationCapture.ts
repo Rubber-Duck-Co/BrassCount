@@ -19,7 +19,9 @@ import {
  * `src/utils/calibration.ts`).
  *
  * It asks for microphone permission when it is missing, and always leaves
- * the microphone closed again, however the capture ends.
+ * the microphone closed again, however the capture ends. While it listens
+ * it can pass each level it hears to `onLevel`, for a live meter; those
+ * levels are for display only and are never stored.
  */
 
 /**
@@ -77,6 +79,11 @@ export interface CalibrationCaptureOptions {
   durationMs?: number;
   /** Cancels the capture; it then rejects with `CalibrationCaptureAbortError`. */
   signal?: AbortSignal;
+  /**
+   * Called with each level heard while listening, in dBFS. Never called
+   * once the capture has settled.
+   */
+  onLevel?: (dbfs: number) => void;
   audio?: CalibrationCaptureAudio;
 }
 
@@ -126,6 +133,21 @@ function readPeakDbfs(reading: unknown): number | null {
     : null;
 }
 
+/**
+ * Pass a level to the live meter. The meter is only a display: a callback
+ * that throws is ignored, so it cannot cost the sample being measured.
+ */
+function reportLevel(
+  onLevel: ((dbfs: number) => void) | undefined,
+  level: number,
+): void {
+  try {
+    onLevel?.(level);
+  } catch {
+    // Deliberately ignored: see above.
+  }
+}
+
 async function ensureMicrophonePermission(
   audio: CalibrationCaptureAudio,
 ): Promise<void> {
@@ -164,6 +186,7 @@ function listenForPeak(
   audio: CalibrationCaptureAudio,
   durationMs: number,
   signal: AbortSignal | undefined,
+  onLevel: ((dbfs: number) => void) | undefined,
 ): Promise<number> {
   return new Promise<number>((resolve, reject) => {
     let peakDbfs = DBFS_MIN;
@@ -195,9 +218,13 @@ function listenForPeak(
       unsubscribers.push(
         audio.subscribeToAmplitude(reading => {
           const level = readPeakDbfs(reading);
-          if (level !== null && level > peakDbfs) {
+          if (level === null) {
+            return;
+          }
+          if (level > peakDbfs) {
             peakDbfs = level;
           }
+          reportLevel(onLevel, level);
         }),
       );
       unsubscribers.push(
@@ -243,6 +270,7 @@ export async function captureSample(
   const {
     durationMs = CALIBRATION_LISTEN_MS,
     signal,
+    onLevel,
     audio = AudioCaptureService,
   } = options;
 
@@ -258,7 +286,7 @@ export async function captureSample(
 
   let peakDbfs: number;
   try {
-    peakDbfs = await listenForPeak(audio, durationMs, signal);
+    peakDbfs = await listenForPeak(audio, durationMs, signal, onLevel);
   } catch (err) {
     // The failure that ended the capture is the one worth reporting; a
     // stop that fails as well would only hide it.

@@ -140,6 +140,13 @@ export const sizes = {
   compareRowMin: 36,
   /** Each figure column of the comparison table: EARLIER needs the most. */
   compareFigureColumn: 64,
+  /** A sound's letter box on the Calibration screen. */
+  soundBadge: 36,
+  /** The calibration meter's track. */
+  meterHeight: 10,
+  /** The threshold tick on the meter, and how far it stands above and below. */
+  meterTick: 3,
+  meterTickOverhang: 5,
 } as const;
 
 export type Spacing = typeof spacing;

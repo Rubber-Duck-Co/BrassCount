@@ -1,3 +1,5 @@
+import type { ComponentProps } from 'react';
+
 import { StyleSheet } from 'react-native';
 
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
@@ -6,7 +8,7 @@ import { Chip } from '../src/components/Chip';
 import { lightTheme } from '../src/theme/theme';
 
 const render = (
-  tone?: 'neutral' | 'primary' | 'success' | 'danger' | 'inverse',
+  tone?: ComponentProps<typeof Chip>['tone'],
 ): ReactTestRenderer => {
   let tree: ReactTestRenderer | undefined;
   act(() => {
@@ -46,6 +48,28 @@ describe('Chip', () => {
       node => node.props.variant === 'overline',
     );
     expect(label.props.color).toBe('textOnInverse');
+  });
+
+  it('fills a signal chip with Signal and sets its label on it', () => {
+    const tree = render('signal');
+
+    expect(boxOf(tree)).toMatchObject({
+      backgroundColor: lightTheme.colors.warning,
+      borderColor: lightTheme.colors.warning,
+    });
+    const [label] = tree.root.findAll(
+      node => node.props.variant === 'overline',
+    );
+    expect(label.props.color).toBe('textOnWarning');
+  });
+
+  it('outlines a primary chip in Signal on the Card fill', () => {
+    const tree = render('primary');
+
+    expect(boxOf(tree)).toMatchObject({
+      backgroundColor: lightTheme.colors.surfaceElevated,
+      borderColor: lightTheme.colors.primary,
+    });
   });
 
   it('leaves a neutral chip on the Card fill', () => {
