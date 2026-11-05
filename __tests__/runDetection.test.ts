@@ -13,6 +13,8 @@ import {
   planRun,
   summarizeRun,
   thresholdsFrom,
+  timedSteps,
+  withDrawEndResult,
   type DetectorEvent,
   type DetectorReading,
   type DetectorState,
@@ -181,14 +183,14 @@ describe('planRun', () => {
     expect(plan).toEqual([{ stepId: 'd', sound: 'reload', par: 2 }]);
   });
 
-  it('counts a silent step between the draw and the first shot towards the draw', () => {
+  it('keeps a silent step between the draw and the first shot off the draw’s par', () => {
     const plan = planRun([
       step('d', 'draw', 1.5),
       step('t', 'transition', 0.4),
       step('s1', 'shot', 0.25),
     ]);
 
-    expect(plan).toEqual([{ stepId: 'd', sound: 'shot', par: 1.9 }]);
+    expect(plan).toEqual([{ stepId: 'd', sound: 'shot', par: 1.5 }]);
   });
 
   it('leaves the draw untimed when it has no par, whatever the first shot has', () => {
@@ -267,17 +269,138 @@ describe('planRun', () => {
 
   it('keeps float error out of an added par', () => {
     const plan = planRun([
-      step('d', 'draw', 0.1),
-      step('t', 'transition', 0.2),
       step('s1', 'shot'),
+      step('t', 'transition', 0.1),
+      step('s2', 'shot', 0.2),
     ]);
 
-    expect(plan[0].par).toBe(0.3);
+    expect(plan[1].par).toBe(0.3);
   });
 
   it('plans nothing for a drill with no heard step', () => {
     expect(planRun([])).toEqual([]);
     expect(planRun([step('d', 'draw', 1.5), step('h', 'holster')])).toEqual([]);
+  });
+});
+
+describe('timedSteps', () => {
+  it('times the shot that ends the draw against its own par, after the draw', () => {
+    const timed = timedSteps([
+      step('d', 'draw', 1.5),
+      step('s1', 'shot', 1),
+      step('s2', 'shot', 0.2),
+    ]);
+
+    expect(timed).toEqual([
+      { stepId: 'd', sound: 'shot', par: 1.5 },
+      { stepId: 's1', sound: 'shot', par: 1 },
+      { stepId: 's2', sound: 'shot', par: 0.2 },
+    ]);
+  });
+
+  it('counts a silent step between the draw and the first shot towards that shot', () => {
+    const timed = timedSteps([
+      step('d', 'draw', 1.5),
+      step('t', 'transition', 0.4),
+      step('s1', 'shot', 0.25),
+    ]);
+
+    expect(timed.map(item => [item.stepId, item.par])).toEqual([
+      ['d', 1.5],
+      ['s1', 0.65],
+    ]);
+  });
+
+  it('lists a drill that does not open with a draw as the run plans it', () => {
+    const steps = [
+      step('s1', 'shot', 0.3),
+      step('d', 'draw', 1.5),
+      step('s2', 'shot', 0.25),
+    ];
+
+    expect(timedSteps(steps)).toEqual(planRun(steps));
+  });
+});
+
+describe('withDrawEndResult', () => {
+  const steps = [
+    step('d', 'draw', 1.5),
+    step('s1', 'shot', 1),
+    step('s2', 'shot', 0.2),
+  ];
+
+  it('gives the shot that ends the draw the draw’s time, judged against its own par', () => {
+    const results = withDrawEndResult(steps, [
+      { stepId: 'd', par: 1.5, actual: 1.2, delta: -0.3 },
+      { stepId: 's2', par: 0.2, actual: 0.25, delta: 0.05 },
+    ]);
+
+    expect(results).toEqual([
+      { stepId: 'd', par: 1.5, actual: 1.2, delta: -0.3 },
+      { stepId: 's1', par: 1, actual: 1.2, delta: 0.2 },
+      { stepId: 's2', par: 0.2, actual: 0.25, delta: 0.05 },
+    ]);
+  });
+
+  it('leaves the shot untimed when it has no par', () => {
+    const [, ended] = withDrawEndResult(
+      [step('d', 'draw', 1.5), step('s1', 'shot')],
+      [{ stepId: 'd', par: 1.5, actual: 1.2, delta: -0.3 }],
+    );
+
+    expect(ended).toEqual({ stepId: 's1', actual: 1.2, delta: null });
+  });
+
+  it('judges the shot against the par of a silent step before it as well', () => {
+    const [, ended] = withDrawEndResult(
+      [
+        step('d', 'draw', 1.5),
+        step('t', 'transition', 0.4),
+        step('s1', 'shot', 0.25),
+      ],
+      [{ stepId: 'd', par: 1.5, actual: 1.2, delta: -0.3 }],
+    );
+
+    expect(ended).toEqual({
+      stepId: 's1',
+      par: 0.65,
+      actual: 1.2,
+      delta: 0.55,
+    });
+  });
+
+  it('judges a shot with no par against a silent step’s before it', () => {
+    const [, ended] = withDrawEndResult(
+      [
+        step('d', 'draw', 1.5),
+        step('t', 'transition', 0.4),
+        step('s1', 'shot'),
+      ],
+      [{ stepId: 'd', par: 1.5, actual: 1.2, delta: -0.3 }],
+    );
+
+    expect(ended).toEqual({ stepId: 's1', par: 0.4, actual: 1.2, delta: 0.8 });
+  });
+
+  it('adds nothing when the first result is not the draw’s', () => {
+    const results = [{ stepId: 's2', par: 0.2, actual: 0.3, delta: 0.1 }];
+
+    expect(withDrawEndResult(steps, results)).toEqual(results);
+  });
+
+  it('adds nothing before the draw is heard', () => {
+    expect(withDrawEndResult(steps, [])).toEqual([]);
+  });
+
+  it('adds nothing to a drill that does not open with a draw', () => {
+    const results = [{ stepId: 's1', par: 0.3, actual: 0.3, delta: 0 }];
+
+    expect(
+      withDrawEndResult(
+        [step('s1', 'shot', 0.3), step('s2', 'shot', 0.25)],
+        results,
+      ),
+    ).toEqual(results);
   });
 });
 

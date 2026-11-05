@@ -56,32 +56,67 @@ describe('describeSplits', () => {
     });
   });
 
-  it('shows the shot that ends the draw as timed with it', () => {
+  it('shows the shot that ends the draw with its own par before it is heard', () => {
+    const [, shot] = rowsAt('listening');
+
+    // The draw is the one listened for: the same sound ends both.
+    expect(shot).toEqual({
+      stepId: 'shot-1',
+      label: 'Shot 1',
+      par: '0.25',
+      time: '—',
+      delta: '',
+      deltaTone: 'note',
+      spoken: 'Shot 1, par 0.25 seconds, not heard yet',
+    });
+  });
+
+  it('gives the shot that ends the draw the draw time, judged against its own par', () => {
     const [, shot] = rowsAt('finished', [DRAWN]);
 
     expect(shot).toEqual({
       stepId: 'shot-1',
       label: 'Shot 1',
-      par: '—',
-      time: '—',
-      delta: 'with draw',
-      deltaTone: 'note',
-      spoken: 'Shot 1, timed with the draw',
+      par: '0.25',
+      time: '1.40',
+      delta: '+1.15',
+      deltaTone: 'over',
+      spoken:
+        'Shot 1, par 0.25 seconds, took 1.4 seconds, 1.15 seconds over par',
     });
   });
 
-  it('shows a silent step between the draw and the first shot as timed with the draw', () => {
+  it('shows the shot that ends the draw as not heard when the draw was not', () => {
+    const [, shot] = rowsAt('finished');
+
+    expect(shot).toMatchObject({ time: '—', delta: 'not heard' });
+  });
+
+  it('gives a silent step before the end of the draw no time of its own', () => {
     const steps: DrillStep[] = [
       { id: 'draw', type: 'draw', par: 1.5 },
       { id: 'move', type: 'transition', par: 0.4 },
       { id: 'shot-1', type: 'shot' },
     ];
 
-    expect(rowsAt('before', [], steps).map(row => row.delta)).toEqual([
-      '',
-      'with draw',
-      'with draw',
+    expect(rowsAt('finished', [DRAWN], steps).map(row => row.time)).toEqual([
+      '1.40',
+      '—',
+      '1.40',
     ]);
+  });
+
+  it('counts a silent step between the draw and the first shot towards that shot', () => {
+    const steps: DrillStep[] = [
+      { id: 'draw', type: 'draw', par: 1.5 },
+      { id: 'move', type: 'transition', par: 0.4 },
+      { id: 'shot-1', type: 'shot' },
+    ];
+
+    const rows = rowsAt('before', [], steps);
+
+    expect(rows.map(row => row.delta)).toEqual(['', 'with next', '']);
+    expect(rows.map(row => row.par)).toEqual(['1.50', '0.40', '0.40']);
   });
 
   it('keeps a draw stored out of first place as counted with the next step', () => {
@@ -97,7 +132,7 @@ describe('describeSplits', () => {
     expect(rows[2].par).toBe('1.75');
   });
 
-  it('marks nothing as with the draw when nothing heard follows it', () => {
+  it('leaves a draw with nothing heard after it untimed', () => {
     const steps: DrillStep[] = [
       { id: 'draw', type: 'draw', par: 1.5 },
       { id: 'holster', type: 'holster' },

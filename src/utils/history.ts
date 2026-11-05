@@ -1,6 +1,6 @@
 import type { Drill } from '@/types/drill';
 import type { Session, SessionSplit } from '@/types/session';
-import { planRun } from '@utils/runDetection';
+import { timedSteps } from '@utils/runDetection';
 import { splitDelta } from '@utils/session';
 
 /**
@@ -105,7 +105,7 @@ export const summarizeDrillHistory = (
  * after the first runs reaches those runs too.
  *
  * The stored runs are never changed, only what is shown. Each step's par
- * comes from `planRun`, the way a run made now would be judged, so a
+ * comes from `timedSteps`, the way a run made now would be judged, so a
  * silent step's par counts towards the next heard step. Only a missing par
  * is filled: a step that had one keeps it, since that is what the shooter
  * was timed against, and a filled par goes again once the drill drops it.
@@ -123,7 +123,7 @@ export const fillMissingPars = (
   }
 
   const pars = new Map<string, number>();
-  for (const { stepId, par } of planRun(drill.steps)) {
+  for (const { stepId, par } of timedSteps(drill.steps)) {
     if (par !== undefined) {
       pars.set(stepId, par);
     }

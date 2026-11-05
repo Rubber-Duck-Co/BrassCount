@@ -269,15 +269,10 @@ const stepTypes = (tree: ReactTestRenderer): string[] =>
 /** Rendering a full drill takes ~2s alone, more with every worker busy. */
 const FULL_DRILL_TIMEOUT_MS = 15_000;
 
-/**
- * What each step's par control shows, top to bottom: the par box, or for
- * the step that ends the draw the box saying it is timed with it.
- */
+/** What each step's par control shows, top to bottom. */
 const stepPars = (tree: ReactTestRenderer): string[] =>
   Array.from({ length: stepCount(tree) }, (_, i) =>
-    has(tree, `btn-par-step-${i}`)
-      ? textOf(tree, `btn-par-step-${i}`)
-      : textsUnder(first(tree, `text-par-step-${i}`)).join(''),
+    textOf(tree, `btn-par-step-${i}`),
   );
 
 /** The types on offer in the open step type sheet. */
@@ -421,8 +416,8 @@ describe('SequenceEditorScreen', () => {
 
       await addSteps(tree, 3);
 
-      // The first shot ends the draw, so it is offered no par of its own.
-      expect(stepPars(tree)).toEqual(['+ par', 'with draw', '+ par']);
+      // The first shot ends the draw, and has a par of its own all the same.
+      expect(stepPars(tree)).toEqual(['+ par', '+ par', '+ par']);
       expect(spokenLabel(tree, 'btn-par-step-2')).toBe('Set par for step 3');
     });
 
@@ -455,12 +450,12 @@ describe('SequenceEditorScreen', () => {
       );
     });
 
-    it('says the draw’s par runs to the first shot when a shot ends the draw', async () => {
+    it('says the draw and the first shot both run from the beep when a shot ends the draw', async () => {
       const { tree } = await renderEditor();
       await addSteps(tree, 2);
 
       expect(allText(tree)).toContain(
-        'Tap a par to cap how long a step can take from the one before. The draw’s par runs from the beep to the first shot.',
+        'Tap a par to cap how long a step can take from the one before. The draw and the first shot both run from the beep.',
       );
     });
 
@@ -473,26 +468,13 @@ describe('SequenceEditorScreen', () => {
       );
     });
 
-    it('gives the shot its par back once the drill no longer opens with a draw', async () => {
+    it('takes a par for the shot that ends the draw', async () => {
       const { tree } = await renderEditor();
-      await addSteps(tree, 3);
-      await choosePreset(tree, 0, '1.5');
-      expect(has(tree, 'btn-par-step-1')).toBe(false);
+      await addSteps(tree, 2);
 
-      await chooseType(tree, 0, 'shot');
+      await choosePreset(tree, 1, '1.5');
 
-      expect(has(tree, 'text-par-step-1')).toBe(false);
-      expect(stepPars(tree)).toEqual(['1.50s', '+ par', '+ par']);
-    });
-
-    it('gives the shot its par back when the draw is removed', async () => {
-      const { tree } = await renderEditor();
-      await addSteps(tree, 3);
-
-      await press(tree, 'btn-remove-step-0');
-
-      expect(stepTypes(tree)).toEqual(['Shot', 'Shot']);
-      expect(stepPars(tree)).toEqual(['+ par', '+ par']);
+      expect(stepPars(tree)).toEqual(['+ par', '1.50s']);
     });
 
     it('counts the steps and shots under the title', async () => {
@@ -661,7 +643,7 @@ describe('SequenceEditorScreen', () => {
       await chooseType(tree, 2, 'rack');
 
       expect(stepTypes(tree)).toEqual(['Draw', 'Shot', 'Rack']);
-      expect(stepPars(tree)).toEqual(['+ par', 'with draw', '0.25s']);
+      expect(stepPars(tree)).toEqual(['+ par', '+ par', '0.25s']);
     });
   });
 
@@ -720,7 +702,7 @@ describe('SequenceEditorScreen', () => {
 
       await choosePreset(tree, 2, '0.25');
 
-      expect(stepPars(tree)).toEqual(['+ par', 'with draw', '0.25s']);
+      expect(stepPars(tree)).toEqual(['+ par', '+ par', '0.25s']);
       expect(spokenLabel(tree, 'btn-par-step-2')).toBe(
         'Change par for step 3, currently 0.25 seconds',
       );
@@ -922,11 +904,12 @@ describe('SequenceEditorScreen', () => {
       await addSteps(tree, 3);
 
       await choosePreset(tree, 0, '1.5');
+      await choosePreset(tree, 2, '0.25');
       expect(subtitle(tree)).toBe('3 steps · 2 shots');
 
-      // The first shot ends the draw: its par is not used, nor needed.
-      await choosePreset(tree, 2, '0.25');
-      expect(subtitle(tree)).toBe('3 steps · 2 shots · Par 1.75s');
+      // The draw and the shot that ends it are both counted.
+      await choosePreset(tree, 1, '1');
+      expect(subtitle(tree)).toBe('3 steps · 2 shots · Par 2.75s');
     });
   });
 
@@ -950,9 +933,8 @@ describe('SequenceEditorScreen', () => {
 
       await press(tree, 'btn-remove-step-1');
 
-      // The par is kept, though the shot now ends the draw and it is unused.
       expect(stepTypes(tree)).toEqual(['Draw', 'Shot']);
-      expect(stepPars(tree)).toEqual(['1.50s', 'with draw']);
+      expect(stepPars(tree)).toEqual(['1.50s', '0.25s']);
     });
 
     it('names the step it removes for a screen reader', async () => {
@@ -1408,14 +1390,14 @@ describe('SequenceEditorScreen', () => {
       const { tree } = await renderEditor();
       await buildBillDrill(tree, 'Bill Drill');
       await choosePreset(tree, 0, '1.5');
+      await choosePreset(tree, 1, '0.5');
       await choosePreset(tree, 2, '0.5');
 
       await press(tree, 'btn-save-drill');
       await settle();
 
-      // The first shot ends the draw, so it needs no par of its own.
       const [stored] = await loadDrills();
-      expect(stored.totalPar).toBe(2);
+      expect(stored.totalPar).toBe(2.5);
       expect(stored.shotCount).toBe(2);
     });
 
@@ -1702,11 +1684,10 @@ describe('SequenceEditorScreen', () => {
       expect(allText(tree)).toContain('Edit drill');
       expect(first(tree, 'input-drill-name').props.value).toBe('Bill Drill');
       expect(stepTypes(tree)).toEqual(['Draw', 'Shot', 'Shot']);
-      // Shot 1 ends the draw: its stored 0.25 s is kept but not used.
-      expect(stepPars(tree)).toEqual(['1.50s', 'with draw', '0.20s']);
-      expect(subtitle(tree)).toBe('3 steps · 2 shots · Par 1.70s');
+      expect(stepPars(tree)).toEqual(['1.50s', '0.25s', '0.20s']);
+      expect(subtitle(tree)).toBe('3 steps · 2 shots · Par 1.95s');
       expect(textOf(tree, 'text-preview')).toBe(
-        'Draw (1.50s)  →  Shot 1  →  Shot 2 (0.20s)',
+        'Draw (1.50s)  →  Shot 1 (0.25s)  →  Shot 2 (0.20s)',
       );
     });
 
@@ -1716,7 +1697,7 @@ describe('SequenceEditorScreen', () => {
       const { tree } = await renderEditor(drill.id);
 
       expect(subtitle(tree)).toBe('3 steps · 1 shot');
-      expect(stepPars(tree)).toEqual(['1.50s', 'with draw', '+ par']);
+      expect(stepPars(tree)).toEqual(['1.50s', '+ par', '+ par']);
     });
 
     it('reads SAVE, announced as "Save changes", and can be saved as it stands', async () => {
@@ -1739,7 +1720,7 @@ describe('SequenceEditorScreen', () => {
       await choosePreset(tree, 0, '2');
 
       expect(stepTypes(tree)).toEqual(['Draw', 'Shot', 'Holster']);
-      expect(stepPars(tree)).toEqual(['2.00s', 'with draw', '+ par']);
+      expect(stepPars(tree)).toEqual(['2.00s', '0.25s', '+ par']);
     });
 
     it('leaves the stored drill alone when left without saving', async () => {
@@ -1775,8 +1756,7 @@ describe('SequenceEditorScreen', () => {
           { id: drill.steps[0].id, type: 'draw', par: 2 },
           { id: drill.steps[1].id, type: 'shot', par: 0.25 },
         ],
-        // The shot ends the draw, so its 0.25 s is not counted.
-        totalPar: 2,
+        totalPar: 2.25,
         shotCount: 1,
         createdAt: drill.createdAt,
       });

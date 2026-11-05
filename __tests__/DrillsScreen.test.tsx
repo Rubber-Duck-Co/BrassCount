@@ -61,9 +61,8 @@ const Blank = () => null;
 const BILL_DRILL: DrillInput = {
   name: 'Bill Drill',
   steps: [
-    // The first shot ends the draw, so its par is the draw's.
-    { type: 'draw', par: 1.75 },
-    { type: 'shot' },
+    { type: 'draw', par: 1.5 },
+    { type: 'shot', par: 0.25 },
     { type: 'shot', par: 0.2 },
     { type: 'shot', par: 0.2 },
     { type: 'shot', par: 0.2 },
@@ -76,9 +75,8 @@ const BILL_DRILL: DrillInput = {
 const MOZAMBIQUE: DrillInput = {
   name: 'Mozambique',
   steps: [
-    // The first shot ends the draw, so its par is the draw's.
-    { type: 'draw', par: 1.75 },
-    { type: 'shot' },
+    { type: 'draw', par: 1.5 },
+    { type: 'shot', par: 0.25 },
     { type: 'shot', par: 0.25 },
     { type: 'shot', par: 0.5 },
     { type: 'holster' },
@@ -88,9 +86,8 @@ const MOZAMBIQUE: DrillInput = {
 const ONE_SHOT: DrillInput = {
   name: 'Draw and fire',
   steps: [
-    // The first shot ends the draw, so its par is the draw's.
-    { type: 'draw', par: 1.8 },
-    { type: 'shot' },
+    { type: 'draw', par: 1.5 },
+    { type: 'shot', par: 0.3 },
   ],
 };
 

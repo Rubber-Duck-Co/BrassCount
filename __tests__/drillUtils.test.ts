@@ -3,7 +3,6 @@ import {
   countShots,
   describeDrill,
   drawEndPosition,
-  drillParSteps,
   isStepPar,
   roundPar,
   stepLabel,
@@ -203,35 +202,12 @@ describe('drawEndPosition', () => {
   });
 });
 
-describe('drillParSteps', () => {
-  it('leaves out the step that ends the draw, whose par is not used', () => {
-    const steps = [
-      { id: 'd', type: 'draw', par: 1.5 },
-      { id: 's1', type: 'shot', par: 0.3 },
-      { id: 's2', type: 'shot', par: 0.25 },
-    ] as const;
-
-    expect(drillParSteps(steps).map(step => step.id)).toEqual(['d', 's2']);
+describe('totalPar of a drill that opens with a draw', () => {
+  it('adds the par of the shot that ends the draw to the draw’s', () => {
+    expect(totalPar([{ par: 1.5 }, { par: 1 }, { par: 0.25 }])).toBe(2.75);
   });
 
-  it('gives a total par to a drill whose first shot after the draw has none', () => {
-    expect(
-      totalPar(
-        drillParSteps([
-          { id: 'd', type: 'draw', par: 1.5 },
-          { id: 's1', type: 'shot' },
-          { id: 's2', type: 'shot', par: 0.25 },
-        ]),
-      ),
-    ).toBe(1.75);
-  });
-
-  it('keeps every step of a drill that does not open with a draw', () => {
-    const steps = [
-      { id: 's1', type: 'shot', par: 0.3 },
-      { id: 's2', type: 'shot', par: 0.25 },
-    ] as const;
-
-    expect(drillParSteps(steps)).toEqual(steps);
+  it('has no total par when the shot that ends the draw has none', () => {
+    expect(totalPar([{ par: 1.5 }, {}, { par: 0.25 }])).toBeNull();
   });
 });

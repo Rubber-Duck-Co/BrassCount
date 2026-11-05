@@ -769,22 +769,26 @@ describe('fillMissingPars', () => {
     ]);
   });
 
-  it('fills no par into the split of a shot that now ends a draw', () => {
-    // Saved before the draw was timed on its own: the first shot carried
-    // the run's time from the beep, and is no longer judged at all.
+  it('fills the split of the shot that ends a draw with its own par', () => {
+    // Timed from the beep, like the draw, so judged against its own par
+    // and nothing of the draw's.
     const run = runWith([
+      { stepId: 's1', label: 'Draw', actual: 1.62, delta: null },
       { stepId: 's2', label: 'Shot 1', actual: 1.62, delta: null },
     ]);
 
     const [filled] = fillMissingPars(
       [run],
       drillWith([
-        { id: 's1', type: 'draw', par: 1.5 },
-        { id: 's2', type: 'shot', par: 0.3 },
+        { id: 's1', type: 'draw' },
+        { id: 's2', type: 'shot', par: 1.5 },
       ]),
     );
 
-    expect(filled).toBe(run);
+    expect(filled.splits).toEqual([
+      { stepId: 's1', label: 'Draw', actual: 1.62, delta: null },
+      { stepId: 's2', label: 'Shot 1', par: 1.5, actual: 1.62, delta: 0.12 },
+    ]);
   });
 
   it('counts a silent step’s par added later towards the next heard step, as a run would', () => {

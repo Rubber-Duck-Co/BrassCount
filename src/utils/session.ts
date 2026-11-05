@@ -42,7 +42,8 @@ export const splitDelta = (
  *
  * A split carries the par the step was judged against, which already
  * counts any silent step in front of it, and no delta: the storage
- * service works that out.
+ * service works that out. A caller that wants the step ending a draw saved
+ * passes its result in (`withDrawEndResult`).
  *
  * `null` when there is nothing to save: no step was heard, or a result
  * points at a step the drill does not have (the drill is not the one that

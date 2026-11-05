@@ -13,8 +13,8 @@ import type { CalibrationSound } from './calibration';
  * happen, so their par is counted towards the next step that has one.
  *
  * A draw in first place is in a run, under its own id but with the sound of
- * the first heard step after it, which ends the draw; that step is not in
- * the run itself (see `planRun`).
+ * the first heard step after it, which ends the draw; that step is not
+ * listened for itself, and takes the draw's time (see `timedSteps`).
  */
 export interface RunStep {
   /** Id of the drill step this is. */
@@ -24,9 +24,8 @@ export interface RunStep {
   /**
    * Seconds allowed between the previous heard step (or the start signal,
    * for the first) and this one: the step's own par plus the par of every
-   * silent step in front of it. For a draw, the draw's par and that of any
-   * silent step before its end, but not the par of the step that ends it.
-   * Left off when none of them has a par.
+   * silent step in front of it. A draw in first place has only its own
+   * par. Left off when none of them has a par.
    */
   par?: number;
 }

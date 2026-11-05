@@ -50,7 +50,7 @@ import { useThemedStyles } from '@hooks/useTheme';
 import { useTimerSettings } from '@hooks/useTimerSettings';
 import { countShots, stepTypeLabel, totalPar } from '@utils/drill';
 import { pluralize, spokenSeconds } from '@utils/format';
-import { planRun } from '@utils/runDetection';
+import { planRun, timedSteps } from '@utils/runDetection';
 import { describeSplits, type SplitStage } from '@utils/splitRows';
 import { clockCaption, clockMeta, type ClockPhase } from '@utils/timerReadout';
 
@@ -233,6 +233,7 @@ export const TimerScreen = () => {
   const steps = drill?.steps ?? NO_STEPS;
   // The steps the run listens for, with the pars they are judged against.
   const plan = useMemo(() => planRun(steps), [steps]);
+  const timed = useMemo(() => timedSteps(steps), [steps]);
 
   const {
     session,
@@ -413,7 +414,9 @@ export const TimerScreen = () => {
     }
   }, [loadedDrillId, navigation, resetLocked, selectDrill]);
 
-  const drillPar = totalPar(plan);
+  // Every timed step's par, the step that ends the draw included: it is
+  // judged against its own par as well as the draw against the draw's.
+  const drillPar = totalPar(timed);
   const finished = phase === 'finished' && result !== null;
   const clockPhase: ClockPhase = pending
     ? 'pending'

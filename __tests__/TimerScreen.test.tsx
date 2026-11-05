@@ -112,10 +112,8 @@ const LIBRARY: DrillInput[] = [
   {
     name: 'Mozambique',
     steps: [
-      // The first shot ends the draw: the draw is timed to it, so it
-      // carries no par of its own.
-      { type: 'draw', par: 1.75 },
-      { type: 'shot' },
+      { type: 'draw', par: 1.5 },
+      { type: 'shot', par: 0.25 },
       { type: 'shot', par: 0.25 },
       { type: 'shot', par: 0.5 },
       { type: 'holster' },
@@ -124,10 +122,8 @@ const LIBRARY: DrillInput[] = [
   {
     name: 'Failure to Stop',
     steps: [
-      // The first shot ends the draw: the draw is timed to it, so it
-      // carries no par of its own.
-      { type: 'draw', par: 1.75 },
-      { type: 'shot' },
+      { type: 'draw', par: 1.5 },
+      { type: 'shot', par: 0.25 },
       { type: 'shot', par: 0.25 },
       { type: 'shot', par: 0.5 },
     ],
@@ -135,10 +131,8 @@ const LIBRARY: DrillInput[] = [
   {
     name: 'Bill Drill',
     steps: [
-      // The first shot ends the draw: the draw is timed to it, so it
-      // carries no par of its own.
-      { type: 'draw', par: 1.75 },
-      { type: 'shot' },
+      { type: 'draw', par: 1.5 },
+      { type: 'shot', par: 0.25 },
       { type: 'shot', par: 0.2 },
       { type: 'shot', par: 0.2 },
       { type: 'shot', par: 0.2 },
@@ -593,23 +587,22 @@ describe('TimerScreen', () => {
 
       expect(split(tree, 0)).toMatchObject({
         label: 'Draw',
-        par: '1.75',
+        par: '1.50',
         time: '—',
         delta: '',
-        accessibilityLabel: 'Draw, par 1.75 seconds, not heard yet',
+        accessibilityLabel: 'Draw, par 1.5 seconds, not heard yet',
       });
     });
 
-    it('shows the shot that ends the draw as timed with it', async () => {
+    it('shows the shot that ends the draw with its own par', async () => {
       const { tree } = await renderScreen();
 
       expect(split(tree, 1)).toMatchObject({
         label: 'Shot 1',
-        par: '—',
+        par: '0.25',
         time: '—',
-        delta: 'with draw',
-        deltaColor: 'textSecondary',
-        accessibilityLabel: 'Shot 1, timed with the draw',
+        delta: '',
+        accessibilityLabel: 'Shot 1, par 0.25 seconds, not heard yet',
       });
     });
 
@@ -958,14 +951,24 @@ describe('TimerScreen', () => {
       // The first shot ends the draw: the draw takes its time.
       expect(split(tree, 0)).toEqual({
         label: 'Draw',
-        par: '1.75',
+        par: '1.50',
         time: '1.40',
-        delta: `${MINUS}0.35`,
+        delta: `${MINUS}0.10`,
         deltaColor: 'textPrimary',
         accessibilityLabel:
-          'Draw, par 1.75 seconds, took 1.4 seconds, 0.35 seconds under par',
+          'Draw, par 1.5 seconds, took 1.4 seconds, 0.1 seconds under par',
       });
-      expect(split(tree, 1)).toMatchObject({ time: '—', delta: 'with draw' });
+      // The same shot ends the draw, so it has the draw's time as well,
+      // judged against its own par.
+      expect(split(tree, 1)).toEqual({
+        label: 'Shot 1',
+        par: '0.25',
+        time: '1.40',
+        delta: '+1.15',
+        deltaColor: 'warning',
+        accessibilityLabel:
+          'Shot 1, par 0.25 seconds, took 1.4 seconds, 1.15 seconds over par',
+      });
       expect(split(tree, 2)).toMatchObject({ time: '—', delta: 'listening' });
     });
 
@@ -992,20 +995,20 @@ describe('TimerScreen', () => {
       const { tree } = await renderScreen();
       await startRun(tree);
 
-      shoot(ZERO + 1750);
+      shoot(ZERO + 1500);
 
       expect(split(tree, 0)).toMatchObject({
-        time: '1.75',
+        time: '1.50',
         delta: '0.00',
         deltaColor: 'textPrimary',
-        accessibilityLabel: 'Draw, par 1.75 seconds, took 1.75 seconds, on par',
+        accessibilityLabel: 'Draw, par 1.5 seconds, took 1.5 seconds, on par',
       });
     });
 
     it('shows the time of a step that has no par', async () => {
       const { tree } = await renderScreen();
-      // Dot Torture: its shots have no par, so the first is judged against
-      // the draw's 1.50 s alone and the second against nothing.
+      // Dot Torture: its shots have no par. The first ends the draw, which
+      // is judged against its 1.50 s; the second is judged against nothing.
       await pick(tree, 'Dot Torture');
       await startRun(tree);
 
@@ -1732,7 +1735,9 @@ describe('TimerScreen', () => {
         totalTime: 2.2,
         completed: true,
         splits: [
-          { label: 'Draw', par: 1.75, actual: 1.4, delta: -0.35 },
+          { label: 'Draw', par: 1.5, actual: 1.4, delta: -0.1 },
+          // The shot that ended the draw, with the draw's time.
+          { label: 'Shot 1', par: 0.25, actual: 1.4, delta: 1.15 },
           { label: 'Shot 2', par: 0.25, actual: 0.3, delta: 0.05 },
           { label: 'Shot 3', par: 0.5, actual: 0.5, delta: 0 },
         ],
@@ -1791,7 +1796,10 @@ describe('TimerScreen', () => {
       expect(session).toMatchObject({
         totalTime: 1.4,
         completed: false,
-        splits: [{ label: 'Draw', actual: 1.4 }],
+        splits: [
+          { label: 'Draw', actual: 1.4 },
+          { label: 'Shot 1', actual: 1.4 },
+        ],
       });
       expect(textsOf(tree, 'text-run-saved')).toEqual([
         'Saved to History as incomplete',
@@ -2019,6 +2027,7 @@ describe('TimerScreen', () => {
       const [session] = await loadSessions();
       expect(session.splits.map(item => item.label)).toEqual([
         'Draw',
+        'Shot 1',
         'Shot 2',
         'Shot 3',
       ]);

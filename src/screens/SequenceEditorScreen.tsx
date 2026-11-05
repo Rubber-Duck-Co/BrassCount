@@ -52,7 +52,6 @@ import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import {
   countShots,
   drawEndPosition,
-  drillParSteps,
   stepLabel,
   stepTypeDescription,
   stepTypeLabel,
@@ -94,7 +93,7 @@ const describeSteps = (steps: readonly DrillStep[]): string => {
     countShots(steps),
     'shot',
   )}`;
-  const par = totalPar(drillParSteps(steps));
+  const par = totalPar(steps);
   return par === null ? counts : `${counts} · Par ${formatSeconds(par)}`;
 };
 
@@ -157,26 +156,16 @@ const typeOptions = (
         description: stepTypeDescription(type),
       }));
 
-/**
- * The par each step is timed against in the sequence, in order: its own,
- * except for the step that ends the draw, whose par is not used.
- */
-const usedPars = (steps: readonly DrillStep[]): (number | undefined)[] => {
-  const drawEnd = drawEndPosition(steps);
-  return steps.map((step, i) => (i === drawEnd ? undefined : step.par));
-};
-
 /** The whole sequence in one sentence, for the Preview box's reader label. */
-const spokenPreview = (steps: readonly DrillStep[]): string => {
-  const pars = usedPars(steps);
-  return steps
-    .map((_, i) => {
+const spokenPreview = (steps: readonly DrillStep[]): string =>
+  steps
+    .map((step, i) => {
       const label = stepLabel(steps, i);
-      const par = pars[i];
-      return par === undefined ? label : `${label}, ${spokenSeconds(par)}`;
+      return step.par === undefined
+        ? label
+        : `${label}, ${spokenSeconds(step.par)}`;
     })
     .join('; then ');
-};
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
@@ -230,7 +219,6 @@ type StepPreviewProps = {
  */
 const StepPreview = memo(({ steps }: StepPreviewProps) => {
   const styles = useThemedStyles(createStyles);
-  const pars = usedPars(steps);
 
   return (
     <View>
@@ -244,24 +232,21 @@ const StepPreview = memo(({ steps }: StepPreviewProps) => {
           style={styles.summary}
           testID="text-preview"
         >
-          {steps.map((step, i) => {
-            const par = pars[i];
-            return (
-              <Typography key={step.id} variant="rowLabel">
-                {stepLabel(steps, i)}
-                {par === undefined ? null : (
-                  <Typography variant="rowLabel" color="textSecondary">
-                    {` (${formatSeconds(par)})`}
-                  </Typography>
-                )}
-                {i < steps.length - 1 ? (
-                  <Typography variant="rowLabel" color="textSecondary">
-                    {'  →  '}
-                  </Typography>
-                ) : null}
-              </Typography>
-            );
-          })}
+          {steps.map((step, i) => (
+            <Typography key={step.id} variant="rowLabel">
+              {stepLabel(steps, i)}
+              {step.par === undefined ? null : (
+                <Typography variant="rowLabel" color="textSecondary">
+                  {` (${formatSeconds(step.par)})`}
+                </Typography>
+              )}
+              {i < steps.length - 1 ? (
+                <Typography variant="rowLabel" color="textSecondary">
+                  {'  →  '}
+                </Typography>
+              ) : null}
+            </Typography>
+          ))}
         </View>
       </View>
     </View>
@@ -617,7 +602,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
           {reordering
             ? 'Use the arrows to move a step. Tap Done when the order is right.'
             : drawEnd !== null
-              ? 'Tap a par to cap how long a step can take from the one before. The draw’s par runs from the beep to the first shot.'
+              ? 'Tap a par to cap how long a step can take from the one before. The draw and the first shot both run from the beep.'
               : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
         </Typography>
 
@@ -641,7 +626,6 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
                 position={i}
                 canMoveUp={canMoveStep(steps, step.id, i - 1)}
                 canMoveDown={canMoveStep(steps, step.id, i + 1)}
-                endsDraw={i === drawEnd}
                 label={stepLabel(steps, i)}
                 reordering={reordering}
                 labelMinWidth={STEP_LABEL_MIN_WIDTH * fontScale}

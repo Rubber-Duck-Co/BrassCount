@@ -219,8 +219,7 @@ describe('useDrillEditor saving', () => {
           { type: 'draw', par: 1.5 },
           { type: 'shot', par: 0.25 },
         ],
-        // The shot ends the draw, so its own par is not used.
-        totalPar: 1.5,
+        totalPar: 1.75,
         shotCount: 1,
       });
       expect(await loadDrills()).toEqual([saved]);
@@ -229,9 +228,8 @@ describe('useDrillEditor saving', () => {
     it('has no total par when a step is untimed', async () => {
       const editor = await renderEditor();
       buildDraft(editor);
-      // The draw is left untimed; the shot's par is not used.
       act(() => {
-        editor.current().setStepPar(editor.current().steps[1].id, 0.25);
+        editor.current().setStepPar(editor.current().steps[0].id, 1.5);
       });
 
       const saved = await editor.save();
@@ -277,8 +275,7 @@ describe('useDrillEditor saving', () => {
         id: drill.id,
         name: 'Bill Drill, short',
         createdAt: drill.createdAt,
-        // The shot ends the draw, so its own par is not used.
-        totalPar: 1.5,
+        totalPar: 1.75,
         shotCount: 1,
       });
       expect(await loadDrills()).toEqual([saved]);
