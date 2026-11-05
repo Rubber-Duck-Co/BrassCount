@@ -18,7 +18,7 @@ paths:
 ## Versioning
 
 - The app version is bumped automatically on merge to `main` (`package.json`, `package-lock.json`, `VERSION.txt`, plus a `v*` tag). Never edit these by hand; steer the bump with `#minor` / `#major` in the PR title.
-- Android's `versionName` and `versionCode` are derived in `android/app/build.gradle` from the repo-root version file (`versionCode = major*10000 + minor*100 + patch`), so they follow the same bump. Do not hardcode either.
+- Android's `versionName` and `versionCode` are derived from the repo-root `VERSION.txt` by `android/app/version.gradle` (`versionCode = major*10000000 + minor*10000 + patch`; minor up to 999, patch up to 9,999), so they follow the same bump. A missing or malformed file, or a field past its width, fails the build, and the CI build checks the APK's version against `VERSION.txt`. Do not hardcode either.
 
 ## Configuration
 
