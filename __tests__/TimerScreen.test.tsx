@@ -1751,8 +1751,8 @@ describe('TimerScreen', () => {
 
       await press(tree, 'btn-save-run');
 
-      expect(textsOf(tree, 'text-run-saved')).toEqual(['Saved to History']);
-      expect(announce).toHaveBeenCalledWith('Run saved to History');
+      expect(textsOf(tree, 'text-run-saved')).toEqual(['Saved to Log']);
+      expect(announce).toHaveBeenCalledWith('Run saved to Log');
       // The run stays on show, and Start is back under the saved line.
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
       expect(buttonLabel(tree)).toBe('Start timer');
@@ -1802,11 +1802,44 @@ describe('TimerScreen', () => {
         ],
       });
       expect(textsOf(tree, 'text-run-saved')).toEqual([
-        'Saved to History as incomplete',
+        'Saved to Log as incomplete',
       ]);
-      expect(announce).toHaveBeenCalledWith(
-        'Run saved to History as incomplete',
-      );
+      expect(announce).toHaveBeenCalledWith('Run saved to Log as incomplete');
+    });
+
+    it('asks before saving a run stopped early, then opens it in Log', async () => {
+      const { tree, navigationRef, stackIn } = await renderScreen();
+      await stoppedRun(tree);
+
+      expect(offersSave(tree)).toBe(true);
+      expect(has(tree, 'btn-discard-run')).toBe(true);
+      expect(has(tree, 'btn-view-run')).toBe(false);
+      expect(await loadSessions()).toEqual([]);
+
+      await press(tree, 'btn-save-run');
+      expect(textsOf(tree, 'text-run-saved')).toEqual([
+        'Saved to Log as incomplete',
+      ]);
+      await act(async () => {
+        first(tree, 'btn-view-run').props.onPress();
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigationRef.getCurrentRoute()).toMatchObject({
+        name: 'HistoryDetail',
+        params: {
+          drillId: drillIds['Failure to Stop'],
+          drillName: 'Failure to Stop',
+        },
+      });
+      expect(stackIn('Log')).toEqual(['HistoryList', 'HistoryDetail']);
+
+      await act(async () => {
+        navigationRef.goBack();
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigationRef.getCurrentRoute()?.name).toBe('HistoryList');
     });
 
     it('offers to save a run ended by leaving the tab, once back', async () => {
@@ -1983,7 +2016,7 @@ describe('TimerScreen', () => {
       await goTo('Timer');
       await settle();
 
-      expect(textsOf(tree, 'text-run-saved')).toEqual(['Saved to History']);
+      expect(textsOf(tree, 'text-run-saved')).toEqual(['Saved to Log']);
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
     });
 

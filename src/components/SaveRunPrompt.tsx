@@ -15,7 +15,7 @@ type SaveRunPromptProps = {
   failure: RunSaveFailure | null;
   onSave: () => void;
   onDiscard: () => void;
-  /** Opens the saved run's drill in History. */
+  /** Opens the saved run's drill in Log. */
   onView: () => void;
 };
 
@@ -61,7 +61,9 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       gap: theme.spacing.sm,
     },
-    savedLabel: { flexShrink: 1 },
+    // Fills the bar rather than shrinking to its measured width: at exactly
+    // that width a re-render can wrap the last word onto a line the bar hides.
+    savedLabel: { flex: 1 },
     view: {
       minWidth: theme.sizes.touchTarget,
       minHeight: theme.sizes.touchTarget,
@@ -78,7 +80,7 @@ const failureMessage = (failure: RunSaveFailure): string =>
     : 'Could not save this run. Try again.';
 
 /**
- * Whether a finished run goes into History, as the Timer's main action:
+ * Whether a finished run goes into Log, as the Timer's main action:
  * Save run, with Discard beside it. Nothing is stored until Save is
  * pressed; Discard drops the run. Once saved, an Ink bar says so, with a
  * link to the drill's runs, and the screen puts Start back under it.
@@ -106,13 +108,13 @@ export const SaveRunPrompt = ({
             color="textOnInverse"
             style={styles.savedLabel}
           >
-            {completed ? 'Saved to History' : 'Saved to History as incomplete'}
+            {completed ? 'Saved to Log' : 'Saved to Log as incomplete'}
           </Typography>
         </View>
         <Pressable
           onPress={onView}
           accessibilityRole="button"
-          accessibilityLabel="View in History"
+          accessibilityLabel="View in Log"
           style={styles.view}
           testID="btn-view-run"
         >

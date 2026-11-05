@@ -164,7 +164,7 @@ describe('SaveRunPrompt', () => {
     const onView = jest.fn();
     const tree = render({ status: 'saved', onView });
 
-    expect(textsUnder(tree, 'text-run-saved')).toEqual(['Saved to History']);
+    expect(textsUnder(tree, 'text-run-saved')).toEqual(['Saved to Log']);
     expect(has(tree, 'btn-save-run')).toBe(false);
     expect(has(tree, 'btn-discard-run')).toBe(false);
 
@@ -172,15 +172,44 @@ describe('SaveRunPrompt', () => {
     expect(onView).toHaveBeenCalledTimes(1);
     expect(first(tree, 'btn-view-run').props).toMatchObject({
       accessibilityRole: 'button',
-      accessibilityLabel: 'View in History',
+      accessibilityLabel: 'View in Log',
     });
+  });
+
+  it.each([
+    ['not saved yet', { status: 'unsaved', failure: null }],
+    ['saving', { status: 'saving', failure: null }],
+    ['the save failed', { status: 'unsaved', failure: 'failed' }],
+    ['storage turned the run down', { status: 'unsaved', failure: 'invalid' }],
+  ] as const)('offers no way to view the run while %s', (_state, props) => {
+    const tree = render(props);
+
+    expect(has(tree, 'btn-view-run')).toBe(false);
+  });
+
+  it('lets the saved line fill the bar, so a re-render cannot wrap away its last word', () => {
+    const tree = render({ status: 'saved' });
+
+    const label = first(tree, 'text-run-saved').findAll(
+      node => node.props.children === 'Saved to Log',
+    )[0];
+
+    expect(StyleSheet.flatten(label.props.style).flex).toBe(1);
+  });
+
+  it('gives the view action a 48dp touch target', () => {
+    const tree = render({ status: 'saved' });
+
+    expect(
+      StyleSheet.flatten(first(tree, 'btn-view-run').props.style),
+    ).toMatchObject({ minWidth: 48, minHeight: 48 });
   });
 
   it('says a run stopped early was saved as incomplete', () => {
     const tree = render({ status: 'saved', completed: false });
 
     expect(textsUnder(tree, 'text-run-saved')).toEqual([
-      'Saved to History as incomplete',
+      'Saved to Log as incomplete',
     ]);
   });
 });
