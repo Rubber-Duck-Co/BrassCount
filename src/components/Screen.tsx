@@ -2,6 +2,7 @@ import type { ReactNode, Ref } from 'react';
 
 import {
   ScrollView,
+  type ScrollViewProps,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -51,6 +52,15 @@ type ScreenProps = {
   scrollable?: boolean;
   /** The ScrollView of a `scrollable` screen, to scroll it from the screen. */
   scrollRef?: Ref<ScrollView>;
+  /** Further props for the ScrollView of a `scrollable` screen. */
+  scrollProps?: Pick<
+    ScrollViewProps,
+    | 'scrollEnabled'
+    | 'scrollEventThrottle'
+    | 'onScroll'
+    | 'onLayout'
+    | 'onContentSizeChange'
+  >;
   contentStyle?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -239,6 +249,7 @@ export const Screen = ({
   centered = false,
   scrollable = false,
   scrollRef,
+  scrollProps,
   contentStyle,
   testID,
 }: ScreenProps) => {
@@ -267,6 +278,7 @@ export const Screen = ({
       {header}
       {scrollable ? (
         <ScrollView
+          {...scrollProps}
           ref={scrollRef}
           style={styles.scroll}
           contentContainerStyle={[
