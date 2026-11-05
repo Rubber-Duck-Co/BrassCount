@@ -76,7 +76,9 @@
     "@istanbuljs/load-nyc-config/js-yaml": "^4.1.0",
     "launch-editor": "^2.14.2",
     "body-parser": "^2.4.0",
-    "zod": "^4.6.6"
+    "zod": "^4.6.6",
+    "@typescript-eslint/typescript-estree/minimatch": "^11.0.1",
+    "babel-plugin-module-resolver/glob": "^14.0.2"
   },
   "overrides": {
     "@react-native/eslint-config": {
@@ -89,6 +91,12 @@
     },
     "launch-editor": "^2.14.2",
     "body-parser": "^2.4.0",
-    "zod": "^4.6.6"
+    "zod": "^4.6.6",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.1"
+    },
+    "babel-plugin-module-resolver": {
+      "glob": "^14.0.2"
+    }
   }
 }
