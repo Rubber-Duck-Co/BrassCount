@@ -1,8 +1,10 @@
 // Babel config: the React Native preset, path aliases and `.env` inlining.
+// No `root` option: the plugin expands it with glob's default export, which
+// glob 10+ no longer has, and package.json overrides its glob to a patched
+// major. Imports use the aliases below, never bare `src`-relative paths.
 const moduleResolver = [
   'module-resolver',
   {
-    root: ['./src'],
     extensions: [
       '.android.ts',
       '.ts',
