@@ -33,6 +33,7 @@ import {
 } from '@/types/drill';
 import type { DrillsStackParamList } from '@/types/navigation';
 import { Card } from '@components/Card';
+import { DraggableStep, StepDropSlot } from '@components/DraggableStep';
 import { DrillStepRow } from '@components/DrillStepRow';
 import { EmptyState } from '@components/EmptyState';
 import { Icon } from '@components/Icon';
@@ -48,6 +49,7 @@ import {
   type DrillSaveFailure,
   type DrillSaveState,
 } from '@hooks/useDrillEditor';
+import { useStepDrag } from '@hooks/useStepDrag';
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import {
   countShots,
@@ -60,11 +62,13 @@ import {
 import {
   canAddStep,
   canMoveStep,
+  moveStep as moveStepInList,
   nextStepType,
   stepTypeChoices,
   type DrillDraftProblem,
 } from '@utils/drillDraft';
 import { formatSeconds, pluralize, spokenSeconds } from '@utils/format';
+import { stepShift } from '@utils/stepDrag';
 
 type Nav = NativeStackNavigationProp<DrillsStackParamList, 'SequenceEditor'>;
 type EditorRoute = RouteProp<DrillsStackParamList, 'SequenceEditor'>;
@@ -170,6 +174,8 @@ const spokenPreview = (steps: readonly DrillStep[]): string =>
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     hint: { marginBottom: theme.spacing.sm },
+    // A dragged row reaches past the box's sides, so the box must not clip it.
+    stepsCard: { overflow: 'visible' },
     // A minimum height, so the label grows the row at a large font.
     addRow: {
       flexDirection: 'row',
@@ -403,9 +409,17 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
   const [parStepId, setParStepId] = useState<string | null>(null);
   // The step whose type is being picked, by id for the same reason.
   const [typeStepId, setTypeStepId] = useState<string | null>(null);
-  // Whether the rows show move buttons in place of their par and remove
-  // controls. Only offered while there are two steps to swap.
-  const [reorderRequested, setReorderRequested] = useState(false);
+
+  const scrollRef = useRef<ScrollView>(null);
+  const {
+    drag,
+    dragY,
+    beginDrag,
+    updateDrag,
+    endDrag,
+    measureRow,
+    scrollProps,
+  } = useStepDrag({ steps, onMove: moveStep, scrollRef });
 
   const closeParPicker = useCallback(() => setParStepId(null), []);
   const closeTypePicker = useCallback(() => setTypeStepId(null), []);
@@ -426,7 +440,6 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
   // rows are not drawn again on every edit.
   const stepsRef = useRef(steps);
   stepsRef.current = steps;
-  const scrollRef = useRef<ScrollView>(null);
 
   // Save sits in the header and can be pressed from anywhere down the
   // form, but why it failed is said at the top: go there.
@@ -493,11 +506,6 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
     [removeStep],
   );
 
-  const toggleReorder = useCallback(
-    () => setReorderRequested(previous => !previous),
-    [],
-  );
-
   const addAndAnnounceStep = () => {
     // Nothing else tells a screen reader the list grew: the button keeps
     // its label and the new row appears above it.
@@ -545,8 +553,6 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
   const drawEnd = drawEndPosition(steps);
   const typeStep = steps[typePosition];
   const hasRoom = canAddStep(steps);
-  const canReorder = steps.length > 1;
-  const reordering = reorderRequested && canReorder;
 
   return (
     <Screen
@@ -567,6 +573,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
       actionDisabled={!canSave || saveState !== 'idle'}
       scrollable
       scrollRef={scrollRef}
+      scrollProps={scrollProps}
       testID="screen-drill-editor"
     >
       <SaveStatus
@@ -589,24 +596,20 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
       <View>
         <SectionHeader
           title={steps.length > 0 ? `Steps · ${steps.length}` : 'Steps'}
-          actionLabel={
-            canReorder ? (reordering ? 'Done' : 'Reorder') : undefined
+          status={
+            drag === null
+              ? undefined
+              : `Moving ${stepLabel(steps, drag.from)} · Let go to drop`
           }
-          actionAccessibilityLabel={
-            reordering ? 'Done reordering' : 'Reorder steps'
-          }
-          onActionPress={toggleReorder}
-          actionTestID="btn-reorder-steps"
+          testID="header-steps"
         />
         <Typography variant="label" color="textSecondary" style={styles.hint}>
-          {reordering
-            ? 'Use the arrows to move a step. Tap Done when the order is right.'
-            : drawEnd !== null
-              ? 'Tap a par to cap how long a step can take from the one before. The draw and the first shot both run from the beep.'
-              : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
+          {drawEnd !== null
+            ? 'Tap a par to cap how long a step can take from the one before. The draw and the first shot both run from the beep.'
+            : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
         </Typography>
 
-        <Card flush>
+        <Card flush style={styles.stepsCard}>
           {steps.length === 0 ? (
             <View style={styles.emptyRow} testID="state-steps-empty">
               <Typography variant="bodyStrong" color="textSecondary">
@@ -619,23 +622,60 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
           ) : (
             // Mapped, not virtualised: a drill holds at most
             // `MAX_DRILL_STEPS` rows, and they sit inside the card.
-            steps.map((step, i) => (
-              <DrillStepRow
-                key={step.id}
-                step={step}
-                position={i}
-                canMoveUp={canMoveStep(steps, step.id, i - 1)}
-                canMoveDown={canMoveStep(steps, step.id, i + 1)}
-                label={stepLabel(steps, i)}
-                reordering={reordering}
-                labelMinWidth={STEP_LABEL_MIN_WIDTH * fontScale}
-                onEditType={setTypeStepId}
-                onEditPar={setParStepId}
-                onRemove={removeStepAndRefocus}
-                onMove={moveStep}
-                registerRemove={registerRemoveButton}
-              />
-            ))
+            <View>
+              {drag === null ? null : (
+                <StepDropSlot
+                  top={drag.slotTop}
+                  height={drag.height}
+                  number={drag.to + 1}
+                />
+              )}
+              {steps.map((step, i) => {
+                const canMoveUp = canMoveStep(steps, step.id, i - 1);
+                const canMoveDown = canMoveStep(steps, step.id, i + 1);
+                const lifted = drag?.id === step.id;
+                return (
+                  <DraggableStep
+                    key={step.id}
+                    id={step.id}
+                    position={i}
+                    enabled={saveState === 'idle' && (canMoveUp || canMoveDown)}
+                    lifted={lifted}
+                    shift={
+                      drag === null
+                        ? 0
+                        : stepShift({
+                            position: i,
+                            from: drag.from,
+                            to: drag.to,
+                            draggedHeight: drag.height,
+                          })
+                    }
+                    dragging={drag !== null}
+                    dragY={dragY}
+                    onBegin={beginDrag}
+                    onUpdate={updateDrag}
+                    onEnd={endDrag}
+                    onMeasure={measureRow}
+                  >
+                    <DrillStepRow
+                      step={step}
+                      position={i}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      label={stepLabel(steps, i)}
+                      lifted={lifted}
+                      labelMinWidth={STEP_LABEL_MIN_WIDTH * fontScale}
+                      onEditType={setTypeStepId}
+                      onEditPar={setParStepId}
+                      onRemove={removeStepAndRefocus}
+                      onMove={moveStep}
+                      registerRemove={registerRemoveButton}
+                    />
+                  </DraggableStep>
+                );
+              })}
+            </View>
           )}
 
           <TouchableOpacity
@@ -676,7 +716,14 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
         </Card>
       </View>
 
-      {steps.length > 0 ? <StepPreview steps={steps} /> : null}
+      {steps.length > 0 ? (
+        <StepPreview
+          // Shows the order the drag would leave, before it is let go.
+          steps={
+            drag === null ? steps : moveStepInList(steps, drag.id, drag.to)
+          }
+        />
+      ) : null}
 
       <ParPickerSheet
         visible={parPosition >= 0}

@@ -16,6 +16,10 @@ import { formatSeconds, spokenSeconds } from '@utils/format';
 import { Icon } from './Icon';
 import { Typography } from './Typography';
 
+/** The accessibility actions that move a step one place. */
+const MOVE_UP = 'moveUp';
+const MOVE_DOWN = 'moveDown';
+
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     // Wraps, so large text drops the controls after the step's name to a
@@ -28,10 +32,15 @@ const createStyles = (theme: Theme) =>
       justifyContent: 'flex-end',
       columnGap: theme.spacing.sm,
       paddingVertical: theme.spacing.xs,
-      paddingLeft: theme.spacing.inset,
+      paddingLeft: theme.spacing.xxs,
       paddingRight: theme.spacing.xs,
       borderBottomWidth: theme.sizes.rule,
       borderBottomColor: theme.colors.border,
+    },
+    grip: {
+      width: theme.sizes.gripWidth,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     typeTrigger: {
       flexGrow: 1,
@@ -69,63 +78,11 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    moveButton: {
-      borderWidth: theme.sizes.border,
-      borderColor: theme.colors.outline,
-      borderRadius: theme.radius.none,
-    },
-    moveButtonDisabled: { borderColor: theme.colors.disabled },
-    // Rotating the glyph points the chevron down, up or down. The rotation
-    // sits inside the button, not on it: Android stops delivering presses
-    // to a touchable that is both rotated and given a `hitSlop`.
+    // Rotating the glyph points the chevron down. The rotation sits inside
+    // the button, not on it: Android stops delivering presses to a touchable
+    // that is both rotated and given a `hitSlop`.
     downGlyph: { transform: [{ rotate: '90deg' }] },
-    upGlyph: { transform: [{ rotate: '-90deg' }] },
   });
-
-type MoveButtonProps = {
-  direction: 'up' | 'down';
-  disabled: boolean;
-  /** Where the step sits now, counted from 0. */
-  position: number;
-  label: string;
-  onPress: () => void;
-};
-
-/** Moves its step one place up or down the list. */
-const MoveButton = ({
-  direction,
-  disabled,
-  position,
-  label,
-  onPress,
-}: MoveButtonProps) => {
-  const styles = useThemedStyles(createStyles);
-  const { sizes } = useTheme();
-
-  return (
-    <TouchableOpacity
-      onPress={onPress}
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={`Move step ${position + 1}, ${label}, ${direction}`}
-      accessibilityState={{ disabled }}
-      style={[
-        styles.iconButton,
-        styles.moveButton,
-        disabled && styles.moveButtonDisabled,
-      ]}
-      testID={`btn-move-${direction}-step-${position}`}
-    >
-      <View style={direction === 'up' ? styles.upGlyph : styles.downGlyph}>
-        <Icon
-          name="chevron"
-          size={sizes.iconLg}
-          color={disabled ? 'disabled' : 'textPrimary'}
-        />
-      </View>
-    </TouchableOpacity>
-  );
-};
 
 type DrillStepRowProps = {
   step: DrillStep;
@@ -139,11 +96,8 @@ type DrillStepRowProps = {
   canMoveDown: boolean;
   /** What the step is called in the sequence, e.g. "Shot 2". */
   label: string;
-  /**
-   * Whether the row shows move buttons in place of its par and remove
-   * controls.
-   */
-  reordering: boolean;
+  /** Whether the row is the one being dragged. */
+  lifted?: boolean;
   /** Narrowest the step's name may get before the row wraps. */
   labelMinWidth: number;
   /** Open the step type sheet for the step with this id. */
@@ -166,8 +120,9 @@ type DrillStepRowProps = {
 /**
  * One step of the drill editor, a ruled row in the steps box: its name
  * ("Shot 2") over what its type means, which opens the step type sheet;
- * then either its par box and a remove button or, while the list is
- * being reordered, a button to move it up and one to move it down.
+ * then its par box and a remove button. A step that can move shows a grip:
+ * `DraggableStep` around the row does the dragging, and the same moves are
+ * accessibility actions here, for a screen reader.
  * Memoised so typing the drill's name, or changing one step, does not draw
  * every other row again.
  */
@@ -178,7 +133,7 @@ export const DrillStepRow = memo(
     canMoveUp,
     canMoveDown,
     label,
-    reordering,
+    lifted = false,
     labelMinWidth,
     onEditType,
     onEditPar,
@@ -196,13 +151,13 @@ export const DrillStepRow = memo(
       [registerRemove, stepId],
     );
 
+    const moveActions = [
+      ...(canMoveUp ? [{ name: MOVE_UP, label: 'Move up' }] : []),
+      ...(canMoveDown ? [{ name: MOVE_DOWN, label: 'Move down' }] : []),
+    ];
+
     const move = (direction: 'up' | 'down') => {
       const to = direction === 'up' ? position - 1 : position + 1;
-      // The button is disabled when the step cannot go that way; this
-      // keeps a stray press from announcing a move that did not happen.
-      if (!(direction === 'up' ? canMoveUp : canMoveDown)) {
-        return;
-      }
       onMove(step.id, to);
       // The row is redrawn in its new place and its number changes under
       // the reader's focus: say where it went.
@@ -213,10 +168,32 @@ export const DrillStepRow = memo(
 
     return (
       <View style={styles.row} testID={`row-step-${position}`}>
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.grip}
+          testID={`grip-step-${position}`}
+        >
+          {canMoveUp || canMoveDown ? (
+            <Icon
+              name="grip"
+              size={sizes.iconMd}
+              color={lifted ? 'primary' : 'textSecondary'}
+            />
+          ) : null}
+        </View>
+
         <TouchableOpacity
           onPress={() => onEditType(step.id)}
           accessibilityRole="button"
           accessibilityLabel={`Step ${number}, ${label}. Change type`}
+          accessibilityActions={moveActions}
+          onAccessibilityAction={event => {
+            const action = event.nativeEvent.actionName;
+            if (action === MOVE_UP || action === MOVE_DOWN) {
+              move(action === MOVE_UP ? 'up' : 'down');
+            }
+          }}
           style={[styles.typeTrigger, { minWidth: labelMinWidth }]}
           testID={`select-step-${position}`}
         >
@@ -237,64 +214,45 @@ export const DrillStepRow = memo(
           </Typography>
         </TouchableOpacity>
 
-        {reordering ? (
-          <View style={styles.controls}>
-            <MoveButton
-              direction="up"
-              disabled={!canMoveUp}
-              position={position}
-              label={label}
-              onPress={() => move('up')}
-            />
-            <MoveButton
-              direction="down"
-              disabled={!canMoveDown}
-              position={position}
-              label={label}
-              onPress={() => move('down')}
-            />
-          </View>
-        ) : (
-          <View style={styles.controls}>
-            <TouchableOpacity
-              onPress={() => onEditPar(step.id)}
-              accessibilityRole="button"
-              accessibilityLabel={
-                step.par === undefined
-                  ? `Set par for step ${number}`
-                  : `Change par for step ${number}, currently ${spokenSeconds(
-                      step.par,
-                    )}`
-              }
-              style={styles.parBox}
-              testID={`btn-par-step-${position}`}
+        <View style={styles.controls}>
+          <TouchableOpacity
+            onPress={() => onEditPar(step.id)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              step.par === undefined
+                ? `Set par for step ${number}`
+                : `Change par for step ${number}, currently ${spokenSeconds(
+                    step.par,
+                  )}`
+            }
+            style={styles.parBox}
+            testID={`btn-par-step-${position}`}
+          >
+            <Typography
+              variant="metricSmall"
+              color={step.par === undefined ? 'textSecondary' : 'textPrimary'}
             >
-              <Typography
-                variant="metricSmall"
-                color={step.par === undefined ? 'textSecondary' : 'textPrimary'}
-              >
-                {step.par === undefined ? '+ par' : formatSeconds(step.par)}
-              </Typography>
-            </TouchableOpacity>
+              {step.par === undefined ? '+ par' : formatSeconds(step.par)}
+            </Typography>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              ref={removeRef}
-              onPress={() => {
-                onRemove(step.id);
-                // The row, and the reader's focus with it, is gone: say so.
-                AccessibilityInfo.announceForAccessibility(
-                  `Removed step ${number}, ${label}`,
-                );
-              }}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove step ${number}, ${label}`}
-              style={styles.iconButton}
-              testID={`btn-remove-step-${position}`}
-            >
-              <Icon name="close" size={sizes.iconMd} color="textSecondary" />
-            </TouchableOpacity>
-          </View>
-        )}
+          <TouchableOpacity
+            ref={removeRef}
+            onPress={() => {
+              onRemove(step.id);
+              // The row, and the reader's focus with it, is gone: say so.
+              AccessibilityInfo.announceForAccessibility(
+                `Removed step ${number}, ${label}`,
+              );
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove step ${number}, ${label}`}
+            style={styles.iconButton}
+            testID={`btn-remove-step-${position}`}
+          >
+            <Icon name="close" size={sizes.iconMd} color="textSecondary" />
+          </TouchableOpacity>
+        </View>
       </View>
     );
   },

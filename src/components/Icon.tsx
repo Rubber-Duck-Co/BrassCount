@@ -17,7 +17,8 @@ export type IconName =
   | 'pencil'
   | 'refresh'
   | 'settings'
-  | 'warning';
+  | 'warning'
+  | 'grip';
 
 /** Angles of the gear's eight teeth, in degrees. */
 const GEAR_TEETH = [0, 45, 90, 135, 180, 225, 270, 315];
@@ -221,6 +222,33 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
               borderLeftColor: tint,
             }}
           />
+        </View>
+      );
+
+    case 'grip':
+      // Two columns of three dots, the mark of a row that can be dragged.
+      return (
+        <View key={name} style={box}>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              width: size * 0.55,
+              columnGap: size * 0.15,
+              rowGap: size * 0.15,
+            }}
+          >
+            {[0, 1, 2, 3, 4, 5].map(dot => (
+              <View
+                key={dot}
+                style={{
+                  width: size * 0.2,
+                  height: size * 0.2,
+                  backgroundColor: tint,
+                }}
+              />
+            ))}
+          </View>
         </View>
       );
 

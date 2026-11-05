@@ -8,6 +8,7 @@ import {
 } from 'react-test-renderer';
 
 import { DrillStepRow } from '../src/components/DrillStepRow';
+import { Icon } from '../src/components/Icon';
 import type { DrillStep } from '../src/types/drill';
 
 type RowProps = Parameters<typeof DrillStepRow>[0];
@@ -32,7 +33,6 @@ const renderRow = (props: Partial<RowProps> = {}) => {
         canMoveUp
         canMoveDown
         label="Shot 1"
-        reordering={false}
         labelMinWidth={112}
         {...callbacks}
         {...props}
@@ -154,31 +154,52 @@ describe('DrillStepRow', () => {
     expect(announce).toHaveBeenCalledWith('Removed step 2, Shot 1');
   });
 
-  it('shows move buttons in place of the par and remove while reordering', () => {
-    const { tree } = renderRow({ reordering: true });
-
-    expect(has(tree, 'btn-par-step-1')).toBe(false);
-    expect(has(tree, 'btn-remove-step-1')).toBe(false);
-    expect(pressable(tree, 'btn-move-up-step-1').props.accessibilityLabel).toBe(
-      'Move step 2, Shot 1, up',
+  /** The move actions a screen reader is offered on the step's name. */
+  const moveActions = (tree: ReactTestRenderer): string[] =>
+    pressable(tree, 'select-step-1').props.accessibilityActions.map(
+      (action: { label: string }) => action.label,
     );
-    expect(
-      pressable(tree, 'btn-move-down-step-1').props.accessibilityLabel,
-    ).toBe('Move step 2, Shot 1, down');
+
+  const hasGrip = (tree: ReactTestRenderer, position = 1): boolean =>
+    tree.root
+      .findAllByProps({ testID: `grip-step-${position}` })[0]
+      .findAllByType(Icon).length > 0;
+
+  it('keeps its par and remove controls, with no move buttons', () => {
+    const { tree } = renderRow();
+
+    expect(has(tree, 'btn-par-step-1')).toBe(true);
+    expect(has(tree, 'btn-remove-step-1')).toBe(true);
+    expect(has(tree, 'btn-move-up-step-1')).toBe(false);
+    expect(has(tree, 'btn-move-down-step-1')).toBe(false);
   });
 
-  it('still offers the type while reordering', () => {
-    const { tree, onEditType } = renderRow({ reordering: true });
+  it('offers a screen reader a move each way', () => {
+    const { tree } = renderRow();
 
-    press(tree, 'select-step-1');
-
-    expect(onEditType).toHaveBeenCalledWith('step-b');
+    expect(moveActions(tree)).toEqual(['Move up', 'Move down']);
   });
 
-  it('moves its step and says where it went', () => {
-    const { tree, onMove } = renderRow({ reordering: true });
+  it('offers no move up to a step that cannot go up', () => {
+    const { tree } = renderRow({ canMoveUp: false });
 
-    press(tree, 'btn-move-down-step-1');
+    expect(moveActions(tree)).toEqual(['Move down']);
+  });
+
+  it('offers no move down to a step that cannot go down', () => {
+    const { tree } = renderRow({ canMoveDown: false });
+
+    expect(moveActions(tree)).toEqual(['Move up']);
+  });
+
+  it('moves its step from the action and says where it went', () => {
+    const { tree, onMove } = renderRow();
+
+    act(() =>
+      pressable(tree, 'select-step-1').props.onAccessibilityAction({
+        nativeEvent: { actionName: 'moveDown' },
+      }),
+    );
 
     expect(onMove).toHaveBeenCalledWith('step-b', 2);
     expect(announce).toHaveBeenCalledWith(
@@ -186,38 +207,24 @@ describe('DrillStepRow', () => {
     );
   });
 
-  it('cannot move a way it is told it cannot go', () => {
-    const { tree, onMove } = renderRow({
-      reordering: true,
-      position: 0,
-      canMoveUp: false,
-      canMoveDown: false,
-    });
+  it('ignores an action that is not a move', () => {
+    const { tree, onMove } = renderRow();
 
-    const up = pressable(tree, 'btn-move-up-step-0');
-    const down = pressable(tree, 'btn-move-down-step-0');
-    expect(up.props.accessibilityState).toEqual({ disabled: true });
-    expect(down.props.accessibilityState).toEqual({ disabled: true });
-    expect(up.props.disabled).toBe(true);
-    expect(down.props.disabled).toBe(true);
+    act(() =>
+      pressable(tree, 'select-step-1').props.onAccessibilityAction({
+        nativeEvent: { actionName: 'activate' },
+      }),
+    );
 
-    press(tree, 'btn-move-up-step-0');
-    press(tree, 'btn-move-down-step-0');
     expect(onMove).not.toHaveBeenCalled();
     expect(announce).not.toHaveBeenCalled();
   });
 
-  it('can move one way and not the other', () => {
-    const { tree, onMove } = renderRow({
-      reordering: true,
-      position: 1,
-      canMoveUp: false,
-    });
-
-    press(tree, 'btn-move-up-step-1');
-    press(tree, 'btn-move-down-step-1');
-
-    expect(onMove.mock.calls).toEqual([['step-b', 2]]);
+  it('shows a grip only on a step that can move', () => {
+    expect(hasGrip(renderRow().tree)).toBe(true);
+    expect(
+      hasGrip(renderRow({ canMoveUp: false, canMoveDown: false }).tree),
+    ).toBe(false);
   });
 
   it('hands the screen its remove button, and takes it back when it goes', () => {
