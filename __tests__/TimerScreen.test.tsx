@@ -582,29 +582,27 @@ describe('TimerScreen', () => {
       expect(clockCaption(tree)).toBe('SECONDS');
     });
 
-    it('shows a silent step as counting towards the step after it', async () => {
+    it('shows the draw with the par it will be judged against', async () => {
       const { tree } = await renderScreen();
 
       expect(split(tree, 0)).toMatchObject({
         label: 'Draw',
         par: '1.50',
         time: '—',
-        delta: 'with next',
-        accessibilityLabel:
-          'Draw, not timed. Its par of 1.5 seconds counts towards the next step',
+        delta: '',
+        accessibilityLabel: 'Draw, par 1.5 seconds, not heard yet',
       });
     });
 
-    it('shows a heard step with the par it will be judged against', async () => {
+    it('shows the shot that ends the draw with its own par', async () => {
       const { tree } = await renderScreen();
 
-      // Its own 0.25 s plus the draw's 1.50 s.
       expect(split(tree, 1)).toMatchObject({
         label: 'Shot 1',
-        par: '1.75',
+        par: '0.25',
         time: '—',
         delta: '',
-        accessibilityLabel: 'Shot 1, par 1.75 seconds, not heard yet',
+        accessibilityLabel: 'Shot 1, par 0.25 seconds, not heard yet',
       });
     });
 
@@ -950,14 +948,26 @@ describe('TimerScreen', () => {
 
       shoot(ZERO + 1400);
 
-      expect(split(tree, 1)).toEqual({
-        label: 'Shot 1',
-        par: '1.75',
+      // The first shot ends the draw: the draw takes its time.
+      expect(split(tree, 0)).toEqual({
+        label: 'Draw',
+        par: '1.50',
         time: '1.40',
-        delta: `${MINUS}0.35`,
+        delta: `${MINUS}0.10`,
         deltaColor: 'textPrimary',
         accessibilityLabel:
-          'Shot 1, par 1.75 seconds, took 1.4 seconds, 0.35 seconds under par',
+          'Draw, par 1.5 seconds, took 1.4 seconds, 0.1 seconds under par',
+      });
+      // The same shot ends the draw, so it has the draw's time as well,
+      // judged against its own par.
+      expect(split(tree, 1)).toEqual({
+        label: 'Shot 1',
+        par: '0.25',
+        time: '1.40',
+        delta: '+1.15',
+        deltaColor: 'warning',
+        accessibilityLabel:
+          'Shot 1, par 0.25 seconds, took 1.4 seconds, 1.15 seconds over par',
       });
       expect(split(tree, 2)).toMatchObject({ time: '—', delta: 'listening' });
     });
@@ -985,21 +995,20 @@ describe('TimerScreen', () => {
       const { tree } = await renderScreen();
       await startRun(tree);
 
-      shoot(ZERO + 1750);
+      shoot(ZERO + 1500);
 
-      expect(split(tree, 1)).toMatchObject({
-        time: '1.75',
+      expect(split(tree, 0)).toMatchObject({
+        time: '1.50',
         delta: '0.00',
         deltaColor: 'textPrimary',
-        accessibilityLabel:
-          'Shot 1, par 1.75 seconds, took 1.75 seconds, on par',
+        accessibilityLabel: 'Draw, par 1.5 seconds, took 1.5 seconds, on par',
       });
     });
 
     it('shows the time of a step that has no par', async () => {
       const { tree } = await renderScreen();
-      // Dot Torture: its shots have no par, so the first is judged against
-      // the draw's 1.50 s alone and the second against nothing.
+      // Dot Torture: its shots have no par. The first ends the draw, which
+      // is judged against its 1.50 s; the second is judged against nothing.
       await pick(tree, 'Dot Torture');
       await startRun(tree);
 
@@ -1065,7 +1074,7 @@ describe('TimerScreen', () => {
       expect(subtitle(tree)).toBe('Run complete');
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
       expect(clockMeta(tree)).toBe('0.30 UNDER PAR');
-      expect([1, 2, 3].map(index => split(tree, index).time)).toEqual([
+      expect([0, 2, 3].map(index => split(tree, index).time)).toEqual([
         '1.40',
         '0.30',
         '0.50',
@@ -1166,7 +1175,7 @@ describe('TimerScreen', () => {
 
       expect(buttonLabel(tree)).toBe('Cancel start');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(split(tree, 1).time).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
       expect(timingNote(tree)).toBeNull();
     });
 
@@ -1219,7 +1228,7 @@ describe('TimerScreen', () => {
       expect(elapsedText(tree)).toBe(formatElapsed(1.4));
       expect(clockCaption(tree)).toBe('SECONDS · STOPPED EARLY');
       expect(clockMeta(tree)).toBe('1 OF 6 HEARD');
-      expect(split(tree, 1).time).toBe('1.40');
+      expect(split(tree, 0).time).toBe('1.40');
       expect(split(tree, 2)).toMatchObject({ time: '—', delta: 'not heard' });
       expect(mockedNativeAudioCapture.stop).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledTimes(1);
@@ -1235,7 +1244,7 @@ describe('TimerScreen', () => {
 
       shoot(ZERO + 1400);
 
-      expect(split(tree, 1).time).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
     });
 
     it('clears the run on Reset', async () => {
@@ -1249,7 +1258,7 @@ describe('TimerScreen', () => {
       expect(buttonLabel(tree)).toBe('Start timer');
       expect(subtitle(tree)).toBe('Ready when you are');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(split(tree, 1).time).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
       expect(timingNote(tree)).toBeNull();
       expect(mockedNativeAudioCapture.stop).toHaveBeenCalled();
     });
@@ -1323,7 +1332,7 @@ describe('TimerScreen', () => {
 
       expect(subtitle(tree)).toBe('Ready when you are');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(split(tree, 1).time).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
       expect(timingNote(tree)).toBeNull();
     });
 
@@ -1336,7 +1345,7 @@ describe('TimerScreen', () => {
       await pick(tree, 'Bill Drill');
 
       expect(subtitle(tree)).toBe('Run stopped early');
-      expect(split(tree, 1).time).toBe('1.40');
+      expect(split(tree, 0).time).toBe('1.40');
     });
 
     it('finishes the run once when Stop is pressed twice', async () => {
@@ -1393,7 +1402,7 @@ describe('TimerScreen', () => {
 
       expect(subtitle(tree)).toBe('The run stopped because the app was left');
       expect(offersSave(tree)).toBe(true);
-      expect(split(tree, 1).time).toBe('1.40');
+      expect(split(tree, 0).time).toBe('1.40');
       expect(elapsedText(tree)).toBe(formatElapsed(1.4));
     });
 
@@ -1409,7 +1418,7 @@ describe('TimerScreen', () => {
 
       await goTo('Timer');
       expect(subtitle(tree)).toBe('Run stopped early');
-      expect(split(tree, 1).time).toBe('1.40');
+      expect(split(tree, 0).time).toBe('1.40');
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
         'Run stopped early, 1 step heard. Save it or discard it',
@@ -1726,7 +1735,9 @@ describe('TimerScreen', () => {
         totalTime: 2.2,
         completed: true,
         splits: [
-          { label: 'Shot 1', par: 1.75, actual: 1.4, delta: -0.35 },
+          { label: 'Draw', par: 1.5, actual: 1.4, delta: -0.1 },
+          // The shot that ended the draw, with the draw's time.
+          { label: 'Shot 1', par: 0.25, actual: 1.4, delta: 1.15 },
           { label: 'Shot 2', par: 0.25, actual: 0.3, delta: 0.05 },
           { label: 'Shot 3', par: 0.5, actual: 0.5, delta: 0 },
         ],
@@ -1785,7 +1796,10 @@ describe('TimerScreen', () => {
       expect(session).toMatchObject({
         totalTime: 1.4,
         completed: false,
-        splits: [{ label: 'Shot 1', actual: 1.4 }],
+        splits: [
+          { label: 'Draw', actual: 1.4 },
+          { label: 'Shot 1', actual: 1.4 },
+        ],
       });
       expect(textsOf(tree, 'text-run-saved')).toEqual([
         'Saved to History as incomplete',
@@ -2012,6 +2026,7 @@ describe('TimerScreen', () => {
 
       const [session] = await loadSessions();
       expect(session.splits.map(item => item.label)).toEqual([
+        'Draw',
         'Shot 1',
         'Shot 2',
         'Shot 3',

@@ -2,6 +2,7 @@ import { DRILL_STEP_TYPES, MAX_STEP_PAR_SECONDS } from '../src/types/drill';
 import {
   countShots,
   describeDrill,
+  drawEndPosition,
   isStepPar,
   roundPar,
   stepLabel,
@@ -169,5 +170,44 @@ describe('describeDrill', () => {
     expect(
       describeDrill({ shotCount: 3, totalPar: 2.5 }, { markUntimed: true }),
     ).toBe('3 shots · Par 2.50s');
+  });
+});
+
+describe('drawEndPosition', () => {
+  it('is the first heard step after a draw in first place', () => {
+    expect(
+      drawEndPosition([{ type: 'draw' }, { type: 'shot' }, { type: 'shot' }]),
+    ).toBe(1);
+  });
+
+  it('skips the silent steps between the draw and the first heard one', () => {
+    expect(
+      drawEndPosition([
+        { type: 'draw' },
+        { type: 'transition' },
+        { type: 'reload' },
+      ]),
+    ).toBe(2);
+  });
+
+  it('is null when the drill does not open with a draw', () => {
+    expect(
+      drawEndPosition([{ type: 'shot' }, { type: 'draw' }, { type: 'shot' }]),
+    ).toBeNull();
+    expect(drawEndPosition([])).toBeNull();
+  });
+
+  it('is null when nothing heard follows the draw', () => {
+    expect(drawEndPosition([{ type: 'draw' }, { type: 'holster' }])).toBeNull();
+  });
+});
+
+describe('totalPar of a drill that opens with a draw', () => {
+  it('adds the par of the shot that ends the draw to the draw’s', () => {
+    expect(totalPar([{ par: 1.5 }, { par: 1 }, { par: 0.25 }])).toBe(2.75);
+  });
+
+  it('has no total par when the shot that ends the draw has none', () => {
+    expect(totalPar([{ par: 1.5 }, {}, { par: 0.25 }])).toBeNull();
   });
 });

@@ -7,6 +7,7 @@ import {
   SessionStorageError,
   SessionStorageService,
 } from '@services/sessionStorage';
+import { withDrawEndResult } from '@utils/runDetection';
 import { sessionFromRun } from '@utils/session';
 
 /**
@@ -80,7 +81,14 @@ export const useRunSave = (
 
   const session = useMemo(
     () =>
-      drill === null || result === null ? null : sessionFromRun(drill, result),
+      drill === null || result === null
+        ? null
+        : // The step that ends a draw is saved with the draw's time, as
+          // the Timer showed it.
+          sessionFromRun(drill, {
+            ...result,
+            results: withDrawEndResult(drill.steps, result.results),
+          }),
     [drill, result],
   );
   const current =

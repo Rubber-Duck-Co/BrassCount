@@ -16,6 +16,14 @@ const STEPS: DrillStep[] = [
   { id: 'holster', type: 'holster' },
 ];
 
+/** The first shot, which ends the draw, heard 1.4 s after the beep. */
+const DRAWN: StepResult = {
+  stepId: 'draw',
+  par: 1.5,
+  actual: 1.4,
+  delta: -0.1,
+};
+
 const rowsAt = (
   stage: SplitStage,
   results: StepResult[] = [],
@@ -23,7 +31,7 @@ const rowsAt = (
 ) => describeSplits({ steps, plan: planRun(steps), results, stage });
 
 describe('describeSplits', () => {
-  it('shows a silent step with a par as counted with the next step', () => {
+  it('judges the draw against its own par', () => {
     const [draw] = rowsAt('before');
 
     expect(draw).toEqual({
@@ -31,25 +39,131 @@ describe('describeSplits', () => {
       label: 'Draw',
       par: '1.50',
       time: '—',
-      delta: 'with next',
+      delta: '',
       deltaTone: 'note',
-      spoken:
-        'Draw, not timed. Its par of 1.5 seconds counts towards the next step',
+      spoken: 'Draw, par 1.5 seconds, not heard yet',
     });
   });
 
-  it('judges a heard step against its own par plus the silent steps before it', () => {
-    const [, shot] = rowsAt('before');
+  it('times the draw from the beep to the shot that ends it', () => {
+    const [draw] = rowsAt('listening', [DRAWN]);
+
+    expect(draw).toMatchObject({
+      time: '1.40',
+      delta: '−0.10',
+      deltaTone: 'figure',
+      spoken: 'Draw, par 1.5 seconds, took 1.4 seconds, 0.1 seconds under par',
+    });
+  });
+
+  it('shows the shot that ends the draw with its own par before it is heard', () => {
+    const [, shot] = rowsAt('listening');
+
+    // The draw is the one listened for: the same sound ends both.
+    expect(shot).toEqual({
+      stepId: 'shot-1',
+      label: 'Shot 1',
+      par: '0.25',
+      time: '—',
+      delta: '',
+      deltaTone: 'note',
+      spoken: 'Shot 1, par 0.25 seconds, not heard yet',
+    });
+  });
+
+  it('gives the shot that ends the draw the draw time, judged against its own par', () => {
+    const [, shot] = rowsAt('finished', [DRAWN]);
 
     expect(shot).toEqual({
       stepId: 'shot-1',
       label: 'Shot 1',
-      par: '1.75',
-      time: '—',
-      delta: '',
-      deltaTone: 'note',
-      spoken: 'Shot 1, par 1.75 seconds, not heard yet',
+      par: '0.25',
+      time: '1.40',
+      delta: '+1.15',
+      deltaTone: 'over',
+      spoken:
+        'Shot 1, par 0.25 seconds, took 1.4 seconds, 1.15 seconds over par',
     });
+  });
+
+  it('shows the shot that ends the draw as not heard when the draw was not', () => {
+    const [, shot] = rowsAt('finished');
+
+    expect(shot).toMatchObject({ time: '—', delta: 'not heard' });
+  });
+
+  it('gives a silent step before the end of the draw no time of its own', () => {
+    const steps: DrillStep[] = [
+      { id: 'draw', type: 'draw', par: 1.5 },
+      { id: 'move', type: 'transition', par: 0.4 },
+      { id: 'shot-1', type: 'shot' },
+    ];
+
+    expect(rowsAt('finished', [DRAWN], steps).map(row => row.time)).toEqual([
+      '1.40',
+      '—',
+      '1.40',
+    ]);
+  });
+
+  it('counts a silent step between the draw and the first shot towards that shot', () => {
+    const steps: DrillStep[] = [
+      { id: 'draw', type: 'draw', par: 1.5 },
+      { id: 'move', type: 'transition', par: 0.4 },
+      { id: 'shot-1', type: 'shot' },
+    ];
+
+    const rows = rowsAt('before', [], steps);
+
+    expect(rows.map(row => row.delta)).toEqual(['', 'with next', '']);
+    expect(rows.map(row => row.par)).toEqual(['1.50', '0.40', '0.40']);
+  });
+
+  it('keeps a draw stored out of first place as counted with the next step', () => {
+    const steps: DrillStep[] = [
+      { id: 'shot-1', type: 'shot', par: 0.3 },
+      { id: 'draw', type: 'draw', par: 1.5 },
+      { id: 'shot-2', type: 'shot', par: 0.25 },
+    ];
+
+    const rows = rowsAt('before', [], steps);
+
+    expect(rows.map(row => row.delta)).toEqual(['', 'with next', '']);
+    expect(rows[2].par).toBe('1.75');
+  });
+
+  it('leaves a draw with nothing heard after it untimed', () => {
+    const steps: DrillStep[] = [
+      { id: 'draw', type: 'draw', par: 1.5 },
+      { id: 'holster', type: 'holster' },
+    ];
+
+    expect(rowsAt('before', [], steps).map(row => row.delta)).toEqual([
+      'not timed',
+      'not timed',
+    ]);
+  });
+
+  it('shows a silent step with a par as counted with the next step', () => {
+    const steps: DrillStep[] = [
+      { id: 'shot-1', type: 'shot', par: 0.3 },
+      { id: 'move', type: 'transition', par: 0.4 },
+      { id: 'shot-2', type: 'shot', par: 0.3 },
+    ];
+
+    const rows = rowsAt('before', [], steps);
+
+    expect(rows[1]).toEqual({
+      stepId: 'move',
+      label: 'Transition',
+      par: '0.40',
+      time: '—',
+      delta: 'with next',
+      deltaTone: 'note',
+      spoken:
+        'Transition, not timed. Its par of 0.4 seconds counts towards the next step',
+    });
+    expect(rows[2].par).toBe('0.70');
   });
 
   it('shows a silent step with nothing heard after it as not timed', () => {
@@ -65,9 +179,7 @@ describe('describeSplits', () => {
   });
 
   it('marks only the step being listened for during a run', () => {
-    const rows = rowsAt('listening', [
-      { stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 },
-    ]);
+    const rows = rowsAt('listening', [DRAWN]);
 
     expect(rows[2]).toMatchObject({
       delta: 'listening',
@@ -77,14 +189,18 @@ describe('describeSplits', () => {
     expect(rows.filter(row => row.delta === 'listening')).toHaveLength(1);
   });
 
+  it('listens for the draw first', () => {
+    const [draw] = rowsAt('listening');
+
+    expect(draw.delta).toBe('listening');
+  });
+
   it('marks nothing as listening before the run has started', () => {
     expect(rowsAt('before').some(row => row.delta === 'listening')).toBe(false);
   });
 
   it('says a step the finished run never heard was not heard', () => {
-    const rows = rowsAt('finished', [
-      { stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 },
-    ]);
+    const rows = rowsAt('finished', [DRAWN]);
 
     expect(rows[2]).toMatchObject({
       time: '—',
@@ -93,23 +209,9 @@ describe('describeSplits', () => {
     });
   });
 
-  it('shows a step under par with a true minus sign and in plain figures', () => {
-    const [, shot] = rowsAt('listening', [
-      { stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 },
-    ]);
-
-    expect(shot).toMatchObject({
-      time: '1.40',
-      delta: '−0.35',
-      deltaTone: 'figure',
-      spoken:
-        'Shot 1, par 1.75 seconds, took 1.4 seconds, 0.35 seconds under par',
-    });
-  });
-
   it('shows a step over par with a plus sign, toned as over', () => {
     const rows = rowsAt('listening', [
-      { stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 },
+      DRAWN,
       { stepId: 'shot-2', par: 0.2, actual: 0.3, delta: 0.1 },
     ]);
 
@@ -122,16 +224,16 @@ describe('describeSplits', () => {
   });
 
   it('shows a step on par as no difference, not as over', () => {
-    const [, shot] = rowsAt('listening', [
+    const [draw] = rowsAt('listening', [
       // Two thousandths over still reads as the par itself.
-      { stepId: 'shot-1', par: 1.75, actual: 1.752, delta: 0.002 },
+      { stepId: 'draw', par: 1.5, actual: 1.502, delta: 0.002 },
     ]);
 
-    expect(shot).toMatchObject({
-      time: '1.75',
+    expect(draw).toMatchObject({
+      time: '1.50',
       delta: '0.00',
       deltaTone: 'figure',
-      spoken: 'Shot 1, par 1.75 seconds, took 1.75 seconds, on par',
+      spoken: 'Draw, par 1.5 seconds, took 1.5 seconds, on par',
     });
   });
 

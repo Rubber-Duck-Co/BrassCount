@@ -1,3 +1,4 @@
+import { CALIBRATION_SOUNDS } from '@/types/calibration';
 import {
   MAX_STEP_PAR_SECONDS,
   type Drill,
@@ -73,6 +74,32 @@ export const totalPar = (
   }
 
   return roundPar(sum);
+};
+
+/** Whether the timer can hear a step of this type: it has a calibrated sound. */
+const isHeardType = (type: DrillStepType): boolean =>
+  CALIBRATION_SOUNDS.some(sound => sound === type);
+
+/**
+ * Where the step whose sound ends the draw sits, counted from 0: the first
+ * step the timer can hear after a draw in first place. The draw is timed
+ * from the beep to that sound, and so is the step itself, against its own
+ * par (see `timedSteps`).
+ *
+ * `null` when the drill does not open with a draw, or nothing heard follows
+ * it. A draw anywhere else, kept by a drill stored before the editor held
+ * a draw to first place, stays a silent step (see `timedSteps`).
+ */
+export const drawEndPosition = (
+  steps: readonly Pick<DrillStep, 'type'>[],
+): number | null => {
+  if (steps[0]?.type !== 'draw') {
+    return null;
+  }
+  const position = steps.findIndex(
+    (step, i) => i > 0 && isHeardType(step.type),
+  );
+  return position < 0 ? null : position;
 };
 
 const STEP_TYPE_LABELS: Record<DrillStepType, string> = {

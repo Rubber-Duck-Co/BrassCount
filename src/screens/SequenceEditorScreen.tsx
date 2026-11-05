@@ -51,6 +51,7 @@ import {
 import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import {
   countShots,
+  drawEndPosition,
   stepLabel,
   stepTypeDescription,
   stepTypeLabel,
@@ -58,6 +59,7 @@ import {
 } from '@utils/drill';
 import {
   canAddStep,
+  canMoveStep,
   nextStepType,
   stepTypeChoices,
   type DrillDraftProblem,
@@ -139,15 +141,16 @@ const saveFailureMessage = (
 };
 
 /**
- * The types the step type sheet offers a step of type `current`, each
- * with what it means; none while the sheet is closed.
+ * The types the step type sheet offers a step of type `current` at
+ * `position`, each with what it means; none while the sheet is closed.
  */
 const typeOptions = (
   current: DrillStepType | undefined,
+  position: number,
 ): SelectOption<DrillStepType>[] =>
   current === undefined
     ? []
-    : stepTypeChoices(current).map(type => ({
+    : stepTypeChoices(current, position).map(type => ({
         value: type,
         label: stepTypeLabel(type),
         description: stepTypeDescription(type),
@@ -539,6 +542,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
 
   const parPosition = steps.findIndex(step => step.id === parStepId);
   const typePosition = steps.findIndex(step => step.id === typeStepId);
+  const drawEnd = drawEndPosition(steps);
   const typeStep = steps[typePosition];
   const hasRoom = canAddStep(steps);
   const canReorder = steps.length > 1;
@@ -597,7 +601,9 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
         <Typography variant="label" color="textSecondary" style={styles.hint}>
           {reordering
             ? 'Use the arrows to move a step. Tap Done when the order is right.'
-            : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
+            : drawEnd !== null
+              ? 'Tap a par to cap how long a step can take from the one before. The draw and the first shot both run from the beep.'
+              : 'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.'}
         </Typography>
 
         <Card flush>
@@ -618,7 +624,8 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
                 key={step.id}
                 step={step}
                 position={i}
-                last={i === steps.length - 1}
+                canMoveUp={canMoveStep(steps, step.id, i - 1)}
+                canMoveDown={canMoveStep(steps, step.id, i + 1)}
                 label={stepLabel(steps, i)}
                 reordering={reordering}
                 labelMinWidth={STEP_LABEL_MIN_WIDTH * fontScale}
@@ -688,7 +695,7 @@ const DrillEditor = ({ drillId }: DrillEditorProps) => {
         visible={typeStep !== undefined}
         onClose={closeTypePicker}
         value={typeStep?.type ?? nextStepType(steps)}
-        options={typeOptions(typeStep?.type)}
+        options={typeOptions(typeStep?.type, typePosition)}
         onChoose={type => {
           if (typeStepId !== null) {
             changeStepType(typeStepId, type);

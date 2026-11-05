@@ -14,7 +14,7 @@ import type {
   StepResult,
 } from '@/types/run';
 
-import { roundPar } from './drill';
+import { drawEndPosition, roundPar } from './drill';
 import { splitDelta } from './session';
 
 /**
@@ -43,7 +43,11 @@ import { splitDelta } from './session';
  * - A beep that begins later than `beepSearchMs` after the trigger (a slow
  *   wireless speaker) is not recognised and is counted as a step.
  * - A silent step's par is added to the next heard step, whether or not
- *   that step has a par of its own (see `planRun`).
+ *   that step has a par of its own (see `timedSteps`).
+ * - A draw ends at the first sound heard after the beep, so it can only be
+ *   timed against the step that follows it; how long the shooter took to
+ *   clear the holster and how long to press the first shot are one figure,
+ *   which the draw and that step both show.
  */
 
 /** The margins the rules below work to. All can be overridden per run. */
@@ -141,27 +145,55 @@ const isCalibrationSound = (type: string): type is CalibrationSound =>
   CALIBRATION_SOUNDS.some(sound => sound === type);
 
 /**
- * The steps of a drill a run can hear, in order.
+ * Every step of a drill that is given a time, in order, with the par it
+ * is judged against.
  *
- * A step with no calibrated sound (draw, transition, holster) cannot be
- * detected, so it is not timed on its own: its par is counted towards the
- * next step that can be. A draw of 1.50 s in front of a shot of 0.25 s
- * makes that shot due 1.75 s after the start. A heard step is untimed only
- * when neither it nor any silent step counted towards it has a par, and a
- * silent step with nothing heard after it is dropped.
+ * A step the timer can hear is judged against its own par plus that of
+ * every silent step in front of it (transition, holster, or a draw a drill
+ * stored before the editor held it to first place): those cannot be
+ * detected, so they are not timed on their own. A draw of 1.50 s in front
+ * of a shot of 0.25 s, anywhere but first, makes that shot due 1.75 s
+ * after the step before. A heard step is untimed only when neither it nor
+ * any silent step counted towards it has a par, and a silent step with
+ * nothing heard after it is dropped.
+ *
+ * A draw in first place is timed from the start signal to the first step
+ * that can be heard (`drawEndPosition`): that sound ends the draw. So the
+ * draw is listed with that step's sound and only its own par, and the step
+ * that ends it is listed after it as usual: it is timed by the same sound,
+ * from the start signal, and judged against its own par and that of any
+ * silent step between the two. Both are listed, so a drill's total par
+ * counts both pars.
  */
-export const planRun = (steps: readonly DrillStep[]): RunStep[] => {
-  const plan: RunStep[] = [];
+export const timedSteps = (steps: readonly DrillStep[]): RunStep[] => {
+  const timed: RunStep[] = [];
+  const drawEnd = drawEndPosition(steps);
+  const endSound = drawEnd === null ? undefined : steps[drawEnd].type;
   let carriedPar: number | undefined;
 
-  for (const step of steps) {
+  for (const [position, step] of steps.entries()) {
+    // `drawEndPosition` only ever points at a heard step; the type check
+    // is what lets its sound be read as one.
+    if (
+      position === 0 &&
+      endSound !== undefined &&
+      isCalibrationSound(endSound)
+    ) {
+      timed.push(
+        step.par === undefined
+          ? { stepId: step.id, sound: endSound }
+          : { stepId: step.id, sound: endSound, par: step.par },
+      );
+      continue;
+    }
+
     const par =
       step.par === undefined
         ? carriedPar
         : roundPar((carriedPar ?? 0) + step.par);
 
     if (isCalibrationSound(step.type)) {
-      plan.push(
+      timed.push(
         par === undefined
           ? { stepId: step.id, sound: step.type }
           : { stepId: step.id, sound: step.type, par },
@@ -172,7 +204,45 @@ export const planRun = (steps: readonly DrillStep[]): RunStep[] => {
     }
   }
 
-  return plan;
+  return timed;
+};
+
+/**
+ * The steps of a drill a run listens for, in order: every timed step
+ * (`timedSteps`) but the one that ends a draw in first place. Its sound is
+ * the draw's, so it is listened for once, as the draw; it takes its time
+ * from the draw's (`withDrawEndResult`).
+ */
+export const planRun = (steps: readonly DrillStep[]): RunStep[] => {
+  const drawEnd = drawEndPosition(steps);
+  const endId = drawEnd === null ? undefined : steps[drawEnd].id;
+  return timedSteps(steps).filter(step => step.stepId !== endId);
+};
+
+/**
+ * `results` with a result for the step that ends a draw in first place
+ * put in straight after the draw's: the same sound ended both, so it took
+ * the draw's time, judged against its own par (`timedSteps`). `results`
+ * as they are when the drill does not open with a draw, or the draw has
+ * not been heard.
+ */
+export const withDrawEndResult = (
+  steps: readonly DrillStep[],
+  results: readonly StepResult[],
+): StepResult[] => {
+  const drawEnd = drawEndPosition(steps);
+  const [drawn, ...rest] = results;
+  if (drawEnd === null || drawn?.stepId !== steps[0].id) {
+    return [...results];
+  }
+  const endId = steps[drawEnd].id;
+  const par = timedSteps(steps).find(step => step.stepId === endId)?.par;
+  const { actual } = drawn;
+  const ended: StepResult =
+    par === undefined
+      ? { stepId: endId, actual, delta: null }
+      : { stepId: endId, par, actual, delta: splitDelta(actual, par) };
+  return [drawn, ended, ...rest];
 };
 
 /**

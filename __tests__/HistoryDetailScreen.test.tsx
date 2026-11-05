@@ -1048,11 +1048,14 @@ describe('HistoryDetailScreen', () => {
   });
 
   describe('a par added after the run', () => {
-    /** A draw and two shots, none of them with a par yet. */
+    /**
+     * A transition and two shots, none of them with a par yet. A silent
+     * step opens it rather than a draw, which is timed on its own.
+     */
     const seedUntimedDrill = (): Promise<Drill> =>
       saveDrill({
         name: 'El Presidente',
-        steps: [{ type: 'draw' }, { type: 'shot' }, { type: 'shot' }],
+        steps: [{ type: 'transition' }, { type: 'shot' }, { type: 'shot' }],
       });
 
     /** A run of `drill` as the timer saves one: a split per heard shot. */
@@ -1093,7 +1096,7 @@ describe('HistoryDetailScreen', () => {
 
       const { tree } = await renderScreen(drill);
 
-      // The draw is silent, so its par is the first shot's, as in a run.
+      // The transition is silent, so its par is the first shot's, as in a run.
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
         ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
         ...['Shot 1', '1.50', '1.62', '+0.12'],
@@ -1166,17 +1169,17 @@ describe('HistoryDetailScreen', () => {
     it('gives no par to a step since removed from the drill', async () => {
       const drill = await seedUntimedDrill();
       const run = await seedRunOf(drill, '2026-10-10T12:00:00Z', [1.62, 0.24]);
-      const [draw, , shot2] = drill.steps;
+      const [move, , shot2] = drill.steps;
       await updateDrill(drill.id, {
         steps: [
-          { id: draw.id, type: draw.type, par: 1.5 },
+          { id: move.id, type: move.type, par: 1.5 },
           { id: shot2.id, type: shot2.type, par: 0.25 },
         ],
       });
 
       const { tree } = await renderScreen(drill);
 
-      // Shot 2 is now the first heard step, so the draw's par is its own.
+      // Shot 2 is now the first heard step, so the transition's par is its own.
       expect(textsOf(tree, `table-splits-${run.id}`)).toEqual([
         ...['STEP', 'PAR', 'ACTUAL', 'Δ'],
         ...['Shot 1', '—', '1.62', '—'],

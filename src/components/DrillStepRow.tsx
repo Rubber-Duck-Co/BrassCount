@@ -131,8 +131,12 @@ type DrillStepRowProps = {
   step: DrillStep;
   /** Where the step sits in the drill, counted from 0. */
   position: number;
-  /** Whether this is the drill's last step, so it cannot move down. */
-  last: boolean;
+  /**
+   * Whether the step can move one place up, or down: not past either end
+   * of the list, and never so a draw leaves first place (`canMoveStep`).
+   */
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   /** What the step is called in the sequence, e.g. "Shot 2". */
   label: string;
   /**
@@ -162,16 +166,17 @@ type DrillStepRowProps = {
 /**
  * One step of the drill editor, a ruled row in the steps box: its name
  * ("Shot 2") over what its type means, which opens the step type sheet;
- * then either its par box and a remove button or, while the list is being
- * reordered, a button to move it up and one to move it down. Memoised so
- * typing the drill's name, or changing one step, does not draw every
- * other row again.
+ * then either its par box and a remove button or, while the list is
+ * being reordered, a button to move it up and one to move it down.
+ * Memoised so typing the drill's name, or changing one step, does not draw
+ * every other row again.
  */
 export const DrillStepRow = memo(
   ({
     step,
     position,
-    last,
+    canMoveUp,
+    canMoveDown,
     label,
     reordering,
     labelMinWidth,
@@ -193,9 +198,9 @@ export const DrillStepRow = memo(
 
     const move = (direction: 'up' | 'down') => {
       const to = direction === 'up' ? position - 1 : position + 1;
-      // The button is disabled at either end; this keeps a stray press
-      // from announcing a move that did not happen.
-      if (to < 0 || (direction === 'down' && last)) {
+      // The button is disabled when the step cannot go that way; this
+      // keeps a stray press from announcing a move that did not happen.
+      if (!(direction === 'up' ? canMoveUp : canMoveDown)) {
         return;
       }
       onMove(step.id, to);
@@ -236,14 +241,14 @@ export const DrillStepRow = memo(
           <View style={styles.controls}>
             <MoveButton
               direction="up"
-              disabled={position === 0}
+              disabled={!canMoveUp}
               position={position}
               label={label}
               onPress={() => move('up')}
             />
             <MoveButton
               direction="down"
-              disabled={last}
+              disabled={!canMoveDown}
               position={position}
               label={label}
               onPress={() => move('down')}

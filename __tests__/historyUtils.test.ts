@@ -748,9 +748,9 @@ describe('fillMissingPars', () => {
     ]);
   });
 
-  it('counts a silent step’s par added later towards the next heard step, as a run would', () => {
+  it('fills a draw’s split with the par the drill gives the draw now', () => {
     const run = runWith([
-      { stepId: 's2', label: 'Shot 1', actual: 1.62, delta: null },
+      { stepId: 's1', label: 'Draw', actual: 1.62, delta: null },
       { stepId: 's3', label: 'Shot 2', actual: 0.24, delta: null },
     ]);
 
@@ -758,32 +758,57 @@ describe('fillMissingPars', () => {
       [run],
       drillWith([
         { id: 's1', type: 'draw', par: 1.5 },
-        { id: 's2', type: 'shot' },
+        { id: 's2', type: 'shot', par: 0.3 },
         { id: 's3', type: 'shot', par: 0.25 },
       ]),
     );
 
     expect(filled.splits).toEqual([
-      { stepId: 's2', label: 'Shot 1', par: 1.5, actual: 1.62, delta: 0.12 },
+      { stepId: 's1', label: 'Draw', par: 1.5, actual: 1.62, delta: 0.12 },
       { stepId: 's3', label: 'Shot 2', par: 0.25, actual: 0.24, delta: -0.01 },
     ]);
   });
 
-  it('adds a silent step’s par to the heard step’s own, rounded to the hundredth', () => {
+  it('fills the split of the shot that ends a draw with its own par', () => {
+    // Timed from the beep, like the draw, so judged against its own par
+    // and nothing of the draw's.
     const run = runWith([
-      { stepId: 's2', label: 'Shot', actual: 1.8, delta: null },
+      { stepId: 's1', label: 'Draw', actual: 1.62, delta: null },
+      { stepId: 's2', label: 'Shot 1', actual: 1.62, delta: null },
     ]);
 
     const [filled] = fillMissingPars(
       [run],
       drillWith([
-        { id: 's1', type: 'draw', par: 1.5 },
-        { id: 's2', type: 'shot', par: 0.25 },
+        { id: 's1', type: 'draw' },
+        { id: 's2', type: 'shot', par: 1.5 },
       ]),
     );
 
     expect(filled.splits).toEqual([
-      { stepId: 's2', label: 'Shot', par: 1.75, actual: 1.8, delta: 0.05 },
+      { stepId: 's1', label: 'Draw', actual: 1.62, delta: null },
+      { stepId: 's2', label: 'Shot 1', par: 1.5, actual: 1.62, delta: 0.12 },
+    ]);
+  });
+
+  it('counts a silent step’s par added later towards the next heard step, as a run would', () => {
+    const run = runWith([
+      { stepId: 's1', label: 'Shot 1', actual: 0.3, delta: null },
+      { stepId: 's3', label: 'Shot 2', actual: 1.8, delta: null },
+    ]);
+
+    const [filled] = fillMissingPars(
+      [run],
+      drillWith([
+        { id: 's1', type: 'shot' },
+        { id: 's2', type: 'transition', par: 1.5 },
+        { id: 's3', type: 'shot', par: 0.25 },
+      ]),
+    );
+
+    expect(filled.splits).toEqual([
+      { stepId: 's1', label: 'Shot 1', actual: 0.3, delta: null },
+      { stepId: 's3', label: 'Shot 2', par: 1.75, actual: 1.8, delta: 0.05 },
     ]);
   });
 

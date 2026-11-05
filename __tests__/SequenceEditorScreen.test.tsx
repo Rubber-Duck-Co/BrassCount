@@ -414,10 +414,11 @@ describe('SequenceEditorScreen', () => {
     it('adds each step untimed', async () => {
       const { tree } = await renderEditor();
 
-      await addSteps(tree, 2);
+      await addSteps(tree, 3);
 
-      expect(stepPars(tree)).toEqual(['+ par', '+ par']);
-      expect(spokenLabel(tree, 'btn-par-step-1')).toBe('Set par for step 2');
+      // The first shot ends the draw, and has a par of its own all the same.
+      expect(stepPars(tree)).toEqual(['+ par', '+ par', '+ par']);
+      expect(spokenLabel(tree, 'btn-par-step-2')).toBe('Set par for step 3');
     });
 
     it('numbers the steps in order for a screen reader', async () => {
@@ -442,10 +443,38 @@ describe('SequenceEditorScreen', () => {
     it('says how a par works under the Steps heading', async () => {
       const { tree } = await renderEditor();
       await addSteps(tree, 1);
+      await chooseType(tree, 0, 'shot');
 
       expect(allText(tree)).toContain(
         'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.',
       );
+    });
+
+    it('says the draw and the first shot both run from the beep when a shot ends the draw', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 2);
+
+      expect(allText(tree)).toContain(
+        'Tap a par to cap how long a step can take from the one before. The draw and the first shot both run from the beep.',
+      );
+    });
+
+    it('keeps the plain hint for a draw with nothing heard after it', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 1);
+
+      expect(allText(tree)).toContain(
+        'Tap a par to cap how long a step can take from the one before. Step 1’s par runs from the beep.',
+      );
+    });
+
+    it('takes a par for the shot that ends the draw', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 2);
+
+      await choosePreset(tree, 1, '1.5');
+
+      expect(stepPars(tree)).toEqual(['+ par', '1.50s']);
     });
 
     it('counts the steps and shots under the title', async () => {
@@ -543,10 +572,20 @@ describe('SequenceEditorScreen', () => {
         withProp(tree, 'select-step-type-option-shot', 'accessibilityState')
           .props.accessibilityState,
       ).toEqual({ selected: true });
-      expect(
-        withProp(tree, 'select-step-type-option-draw', 'accessibilityState')
-          .props.accessibilityState,
-      ).toEqual({ selected: false });
+      // A draw can only be the first step.
+      expect(offeredTypes(tree)).not.toContain('draw');
+    });
+
+    it('offers a draw only for the first step', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 3);
+
+      await press(tree, 'select-step-0');
+      expect(offeredTypes(tree)).toContain('draw');
+      await chooseType(tree, 0, 'shot');
+
+      await press(tree, 'select-step-2');
+      expect(offeredTypes(tree)).toEqual(['shot', 'reload', 'rack', 'holster']);
     });
 
     it('explains each type in the sheet', async () => {
@@ -598,25 +637,25 @@ describe('SequenceEditorScreen', () => {
 
     it('keeps the par the step already had', async () => {
       const { tree } = await renderEditor();
-      await addSteps(tree, 2);
-      await choosePreset(tree, 1, '0.25');
+      await addSteps(tree, 3);
+      await choosePreset(tree, 2, '0.25');
 
-      await chooseType(tree, 1, 'rack');
+      await chooseType(tree, 2, 'rack');
 
-      expect(stepTypes(tree)).toEqual(['Draw', 'Rack']);
-      expect(stepPars(tree)).toEqual(['+ par', '0.25s']);
+      expect(stepTypes(tree)).toEqual(['Draw', 'Shot', 'Rack']);
+      expect(stepPars(tree)).toEqual(['+ par', '+ par', '0.25s']);
     });
   });
 
   describe('setting a step par', () => {
     it('opens a picker headed by the step it is for', async () => {
       const { tree } = await renderEditor();
-      await addSteps(tree, 2);
+      await addSteps(tree, 3);
       expect(parPickerIsOpen(tree)).toBe(false);
 
-      await press(tree, 'btn-par-step-1');
+      await press(tree, 'btn-par-step-2');
 
-      expect(sheetTitle(tree)).toBe('Step 2 par');
+      expect(sheetTitle(tree)).toBe('Step 3 par');
       expect(textOf(tree, 'text-par-heading')).toBe(
         'Max time from the previous step to this one.',
       );
@@ -659,13 +698,13 @@ describe('SequenceEditorScreen', () => {
 
     it('sets a preset par and closes the picker', async () => {
       const { tree } = await renderEditor();
-      await addSteps(tree, 2);
+      await addSteps(tree, 3);
 
-      await choosePreset(tree, 1, '0.25');
+      await choosePreset(tree, 2, '0.25');
 
-      expect(stepPars(tree)).toEqual(['+ par', '0.25s']);
-      expect(spokenLabel(tree, 'btn-par-step-1')).toBe(
-        'Change par for step 2, currently 0.25 seconds',
+      expect(stepPars(tree)).toEqual(['+ par', '+ par', '0.25s']);
+      expect(spokenLabel(tree, 'btn-par-step-2')).toBe(
+        'Change par for step 3, currently 0.25 seconds',
       );
       expect(parPickerIsOpen(tree)).toBe(false);
     });
@@ -734,14 +773,14 @@ describe('SequenceEditorScreen', () => {
 
     it('starts the custom field from the par the step has', async () => {
       const { tree } = await renderEditor();
-      await addSteps(tree, 2);
+      await addSteps(tree, 3);
       await choosePreset(tree, 0, '1.5');
 
       await press(tree, 'btn-par-step-0');
       expect(first(tree, 'input-par-custom').props.value).toBe('1.50');
       await press(tree, 'btn-par-close');
 
-      await press(tree, 'btn-par-step-1');
+      await press(tree, 'btn-par-step-2');
       expect(first(tree, 'input-par-custom').props.value).toBe('');
     });
 
@@ -862,13 +901,15 @@ describe('SequenceEditorScreen', () => {
 
     it('adds up the pars under the title once every step has one', async () => {
       const { tree } = await renderEditor();
-      await addSteps(tree, 2);
+      await addSteps(tree, 3);
 
       await choosePreset(tree, 0, '1.5');
-      expect(subtitle(tree)).toBe('2 steps · 1 shot');
+      await choosePreset(tree, 2, '0.25');
+      expect(subtitle(tree)).toBe('3 steps · 2 shots');
 
-      await choosePreset(tree, 1, '0.25');
-      expect(subtitle(tree)).toBe('2 steps · 1 shot · Par 1.75s');
+      // The draw and the shot that ends it are both counted.
+      await choosePreset(tree, 1, '1');
+      expect(subtitle(tree)).toBe('3 steps · 2 shots · Par 2.75s');
     });
   });
 
@@ -1018,7 +1059,9 @@ describe('SequenceEditorScreen', () => {
   describe('reordering steps', () => {
     /** Build a draw, a shot and a shot, with a par on the first two. */
     const buildThreeSteps = async (tree: ReactTestRenderer) => {
+      // No draw: a draw holds first place, so these steps move freely.
       await addSteps(tree, 3);
+      await chooseType(tree, 0, 'reload');
       await choosePreset(tree, 0, '1.5');
       await choosePreset(tree, 1, '0.25');
     };
@@ -1072,7 +1115,7 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-move-up-step-2');
       await press(tree, 'btn-reorder-steps');
 
-      expect(stepTypes(tree)).toEqual(['Draw', 'Reload', 'Shot']);
+      expect(stepTypes(tree)).toEqual(['Reload', 'Reload', 'Shot']);
       expect(stepPars(tree)).toEqual(['1.50s', '+ par', '0.25s']);
     });
 
@@ -1084,7 +1127,7 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-move-down-step-0');
       await press(tree, 'btn-reorder-steps');
 
-      expect(stepTypes(tree)).toEqual(['Shot', 'Draw', 'Shot']);
+      expect(stepTypes(tree)).toEqual(['Shot', 'Reload', 'Shot']);
       expect(stepPars(tree)).toEqual(['0.25s', '1.50s', '+ par']);
     });
 
@@ -1097,9 +1140,9 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-move-down-step-1');
 
       expect(spokenLabel(tree, 'select-step-2')).toMatch(/^Step 3, /);
-      expect(textOf(tree, 'text-step-label-2')).toBe('Draw');
+      expect(textOf(tree, 'text-step-label-2')).toBe('Reload');
       expect(textOf(tree, 'text-preview')).toBe(
-        'Shot 1 (0.25s)  →  Shot 2  →  Draw (1.50s)',
+        'Shot 1 (0.25s)  →  Shot 2  →  Reload (1.50s)',
       );
       expect(subtitle(tree)).toBe('3 steps · 2 shots');
     });
@@ -1117,6 +1160,21 @@ describe('SequenceEditorScreen', () => {
       await press(tree, 'btn-move-up-step-0');
       await press(tree, 'btn-move-down-step-2');
 
+      expect(stepTypes(tree)).toEqual(['Reload', 'Shot', 'Shot']);
+    });
+
+    it('keeps a draw in first place', async () => {
+      const { tree } = await renderEditor();
+      await addSteps(tree, 3);
+      await press(tree, 'btn-reorder-steps');
+
+      expect(isDisabled(tree, 'btn-move-down-step-0')).toBe(true);
+      expect(isDisabled(tree, 'btn-move-up-step-1')).toBe(true);
+      expect(isDisabled(tree, 'btn-move-down-step-1')).toBe(false);
+
+      await press(tree, 'btn-move-down-step-0');
+      await press(tree, 'btn-move-up-step-1');
+
       expect(stepTypes(tree)).toEqual(['Draw', 'Shot', 'Shot']);
     });
 
@@ -1129,7 +1187,7 @@ describe('SequenceEditorScreen', () => {
         'Move step 3, Shot 2, up',
       );
       expect(spokenLabel(tree, 'btn-move-down-step-0')).toBe(
-        'Move step 1, Draw, down',
+        'Move step 1, Reload, down',
       );
     });
 
@@ -1146,7 +1204,7 @@ describe('SequenceEditorScreen', () => {
 
       expect(announce.mock.calls).toEqual([
         ['Moved step 3, Shot 2, up to step 2'],
-        ['Moved step 1, Draw, down to step 2'],
+        ['Moved step 1, Reload, down to step 2'],
       ]);
     });
 
@@ -1166,14 +1224,14 @@ describe('SequenceEditorScreen', () => {
       const { tree } = await renderEditor(drill.id);
       await press(tree, 'btn-reorder-steps');
 
-      await press(tree, 'btn-move-down-step-0');
+      await press(tree, 'btn-move-down-step-1');
       await press(tree, 'btn-save-drill');
       await settle();
 
       expect((await loadDrillById(drill.id))?.steps).toEqual([
-        drill.steps[1],
         drill.steps[0],
         drill.steps[2],
+        drill.steps[1],
       ]);
     });
   });
@@ -1309,7 +1367,7 @@ describe('SequenceEditorScreen', () => {
       const { tree, currentRoute } = await renderEditor();
       await buildBillDrill(tree, 'Bill Drill');
       await choosePreset(tree, 0, '1.5');
-      await typeCustomPar(tree, 1, '0.25');
+      await typeCustomPar(tree, 2, '0.25');
       await press(tree, 'btn-par-custom-set');
 
       await press(tree, 'btn-save-drill');
@@ -1321,8 +1379,8 @@ describe('SequenceEditorScreen', () => {
           name: 'Bill Drill',
           steps: [
             { type: 'draw', par: 1.5 },
-            { type: 'shot', par: 0.25 },
             { type: 'shot' },
+            { type: 'shot', par: 0.25 },
           ],
         },
       ]);
@@ -1829,7 +1887,6 @@ describe('SequenceEditorScreen', () => {
 
       await press(tree, 'select-step-1');
       expect(offeredTypes(tree)).toEqual([
-        'draw',
         'shot',
         'reload',
         'rack',

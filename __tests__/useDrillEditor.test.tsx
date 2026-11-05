@@ -285,15 +285,15 @@ describe('useDrillEditor saving', () => {
       const drill = await saveDrill(BILL_DRILL);
       const editor = await renderEditor(drill.id);
       act(() => {
-        editor.current().moveStep(drill.steps[0].id, 2);
+        editor.current().moveStep(drill.steps[2].id, 1);
       });
 
       const saved = await editor.save();
 
       expect(saved?.steps).toEqual([
-        drill.steps[1],
-        drill.steps[2],
         drill.steps[0],
+        drill.steps[2],
+        drill.steps[1],
       ]);
       expect(await loadDrillById(drill.id)).toEqual(saved);
     });

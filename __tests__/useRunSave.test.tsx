@@ -25,7 +25,8 @@ const DRILL: Pick<Drill, 'id' | 'steps'> = {
 const run = (overrides: Partial<RunResult> = {}): RunResult => ({
   completed: true,
   results: [
-    { stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 },
+    // The first shot ends the draw: the run hears it as the draw.
+    { stepId: 'draw', par: 1.5, actual: 1.4, delta: -0.1 },
     { stepId: 'shot-2', par: 0.25, actual: 0.3, delta: 0.05 },
   ],
   totalTime: 1.7,
@@ -130,6 +131,16 @@ describe('useRunSave', () => {
       session: { drillId: 'drill-1', completed: true, totalTime: 1.7 },
     });
     expect(await loadSessions()).toEqual([]);
+  });
+
+  it('saves the shot that ended the draw with the draw’s time and its own par', async () => {
+    const hook = renderHook(DRILL, run());
+
+    expect(hook.current().session?.splits).toEqual([
+      { stepId: 'draw', label: 'Draw', par: 1.5, actual: 1.4 },
+      { stepId: 'shot-1', label: 'Shot 1', par: 0.25, actual: 1.4 },
+      { stepId: 'shot-2', label: 'Shot 2', par: 0.25, actual: 0.3 },
+    ]);
   });
 
   it('stores the run and resolves to the stored session', async () => {

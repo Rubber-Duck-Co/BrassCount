@@ -5,8 +5,12 @@
  *
  * A step the timer listens for (a shot, reload or rack) is judged against
  * its planned par: its own plus that of every silent step before it (see
- * `planRun`). A silent step (draw, transition, holster) is never timed; its
- * Δ column says whether its par is carried into the next heard step.
+ * `timedSteps`). A draw in first place is timed from the beep to the
+ * first step heard, which ends it, and that step shows the same time,
+ * since the one sound timed both: each is judged against its own par. Any
+ * other silent step (transition, holster, a draw stored out of first
+ * place) is never timed; its Δ column says whether its par is carried
+ * into the next heard step.
  *
  * Under, on or over par is decided as the figure reads to the hundredth
  * (`shownDeltaSign`), so a row is never toned over par while it shows 0.00.
@@ -23,6 +27,7 @@ import type { SessionSplit } from '@/types/session';
 import { stepLabel } from './drill';
 import { spokenSeconds } from './format';
 import { shownDeltaSign } from './history';
+import { timedSteps, withDrawEndResult } from './runDetection';
 
 /**
  * Where the run is. `before`: nothing is being listened for yet, as while
@@ -228,20 +233,24 @@ export const describeSplits = ({
   const heardIds = new Set(results.map(item => item.stepId));
   // The first planned step not yet heard is the one being listened for.
   const nextId = plan.find(item => !heardIds.has(item.stepId))?.stepId;
+  // Every step given a time, the one that ends the draw included, which
+  // is not listened for itself but takes the draw's time.
+  const timed = timedSteps(steps);
+  const shown = withDrawEndResult(steps, results);
 
   return steps.map((step, i) => {
     const label = stepLabel(steps, i);
-    const planned = plan.find(item => item.stepId === step.id);
+    const planned = timed.find(item => item.stepId === step.id);
     if (planned === undefined) {
       const countsTowardsNext = steps
         .slice(i + 1)
-        .some(later => plan.some(item => item.stepId === later.id));
+        .some(later => timed.some(item => item.stepId === later.id));
       return silentRow(label, step, countsTowardsNext);
     }
     return heardRow(
       label,
       planned,
-      results.find(item => item.stepId === step.id),
+      shown.find(item => item.stepId === step.id),
       stage,
       step.id === nextId,
     );
