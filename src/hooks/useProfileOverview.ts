@@ -28,7 +28,7 @@ export type UseProfileOverviewResult = {
   /**
    * Read everything again, keeping what is shown until the new values
    * arrive, as a return to the screen does. For a change made on the same
-   * screen, such as clearing the run history.
+   * screen, such as clearing the Log.
    */
   refresh: () => void;
   /**
@@ -49,7 +49,7 @@ export type UseProfileOverviewResult = {
  *
  * The counts are the number of stored keys, read without loading any
  * session or drill, so the cost does not grow with the history. An entry
- * the History and Drills lists skip because it is unreadable is still
+ * the Log and Drills lists skip because it is unreadable is still
  * counted here.
  */
 export const useProfileOverview = (): UseProfileOverviewResult => {

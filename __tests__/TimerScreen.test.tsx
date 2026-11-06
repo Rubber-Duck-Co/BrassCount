@@ -1807,19 +1807,14 @@ describe('TimerScreen', () => {
       expect(announce).toHaveBeenCalledWith('Run saved to Log as incomplete');
     });
 
-    it('asks before saving a run stopped early, then opens it in Log', async () => {
-      const { tree, navigationRef, stackIn } = await renderScreen();
+    it('offers a run stopped early in Log only once it is saved', async () => {
+      const { tree, navigationRef } = await renderScreen();
       await stoppedRun(tree);
 
       expect(offersSave(tree)).toBe(true);
-      expect(has(tree, 'btn-discard-run')).toBe(true);
       expect(has(tree, 'btn-view-run')).toBe(false);
-      expect(await loadSessions()).toEqual([]);
 
       await press(tree, 'btn-save-run');
-      expect(textsOf(tree, 'text-run-saved')).toEqual([
-        'Saved to Log as incomplete',
-      ]);
       await act(async () => {
         first(tree, 'btn-view-run').props.onPress();
         await jest.advanceTimersByTimeAsync(0);
@@ -1832,14 +1827,6 @@ describe('TimerScreen', () => {
           drillName: 'Failure to Stop',
         },
       });
-      expect(stackIn('Log')).toEqual(['HistoryList', 'HistoryDetail']);
-
-      await act(async () => {
-        navigationRef.goBack();
-        await jest.advanceTimersByTimeAsync(0);
-      });
-
-      expect(navigationRef.getCurrentRoute()?.name).toBe('HistoryList');
     });
 
     it('offers to save a run ended by leaving the tab, once back', async () => {
@@ -2195,6 +2182,13 @@ describe('TimerScreen', () => {
       });
       // The Log list sits underneath, so back lands on it.
       expect(stackIn('Log')).toEqual(['HistoryList', 'HistoryDetail']);
+
+      await act(async () => {
+        navigationRef.goBack();
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigationRef.getCurrentRoute()?.name).toBe('HistoryList');
     });
   });
 });

@@ -162,12 +162,7 @@ describe('ListRow', () => {
   it('ignores presses and reads as dimmed when it is disabled', () => {
     const onPress = jest.fn();
     const tree = render(
-      <ListRow
-        title="Clear run history"
-        onPress={onPress}
-        disabled
-        testID="row"
-      />,
+      <ListRow title="Clear Log" onPress={onPress} disabled testID="row" />,
     );
 
     act(() => {
@@ -197,15 +192,15 @@ describe('ListRow', () => {
   });
 
   it('shows the title of a destructive row in the danger colour', () => {
-    const tree = render(<ListRow title="Clear run history" destructive />);
+    const tree = render(<ListRow title="Clear Log" destructive />);
 
-    expect(textColor(tree, 'Clear run history')).toBe('danger');
+    expect(textColor(tree, 'Clear Log')).toBe('danger');
   });
 
   it('greys the title of a disabled row, even a destructive one', () => {
     const tree = render(
       <ListRow
-        title="Clear run history"
+        title="Clear Log"
         subtitle="No saved runs to delete"
         onPress={() => {}}
         disabled
@@ -213,7 +208,7 @@ describe('ListRow', () => {
       />,
     );
 
-    expect(textColor(tree, 'Clear run history')).toBe('textTertiary');
+    expect(textColor(tree, 'Clear Log')).toBe('textTertiary');
     // The reason it is disabled stays as readable as any subtitle.
     expect(textColor(tree, 'No saved runs to delete')).toBe('textTertiary');
   });

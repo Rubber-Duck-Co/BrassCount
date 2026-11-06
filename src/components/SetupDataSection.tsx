@@ -17,7 +17,7 @@ import { ListRow } from './ListRow';
 import { SectionHeader } from './SectionHeader';
 import { Typography } from './Typography';
 
-const ROW_TITLE = 'Clear run history';
+const ROW_TITLE = 'Clear Log';
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
@@ -62,8 +62,8 @@ type SetupDataSectionProps = {
 };
 
 /**
- * The Data section: Clear run history, then where the shooter's data
- * lives and the app version. Clearing deletes every saved run after a
+ * The Data section: Clear Log, then where the shooter's data lives and
+ * the app version. Clearing deletes every saved run after a
  * confirmation that names how many, and keeps drills and the profile.
  * The row is disabled while the runs are counted and when there are none;
  * if they cannot be counted, clearing is still offered.

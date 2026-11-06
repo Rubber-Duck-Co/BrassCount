@@ -100,7 +100,7 @@ export const summarizeDrillHistory = (
 };
 
 /**
- * A drill's runs as History shows them: a step that had no par when it was
+ * A drill's runs as Log shows them: a step that had no par when it was
  * run is judged against the par the drill gives it now, so a par added
  * after the first runs reaches those runs too.
  *

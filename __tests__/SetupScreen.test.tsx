@@ -1717,7 +1717,7 @@ describe('SetupScreen', () => {
 
       expect(valueOf(tree, 'row-clear-history')).toBe('3 runs');
       expect(labelOf(tree, 'row-clear-history')).toBe(
-        'Clear run history, 3 saved runs',
+        'Clear Log, 3 saved runs',
       );
     });
 
@@ -1726,7 +1726,7 @@ describe('SetupScreen', () => {
 
       expect(valueOf(tree, 'row-clear-history')).toBe('No runs');
       expect(labelOf(tree, 'row-clear-history')).toBe(
-        'Clear run history, no saved runs',
+        'Clear Log, no saved runs',
       );
       expect(rowState(tree)).toEqual({ disabled: true });
       expect(
@@ -1744,7 +1744,7 @@ describe('SetupScreen', () => {
 
       expect(valueOf(tree, 'row-clear-history')).toBe('…');
       expect(labelOf(tree, 'row-clear-history')).toBe(
-        'Clear run history, counting saved runs',
+        'Clear Log, counting saved runs',
       );
       expect(rowState(tree)).toEqual({ disabled: true });
     });

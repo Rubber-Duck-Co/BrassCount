@@ -61,8 +61,13 @@ const createStyles = (theme: Theme) =>
       alignItems: 'center',
       gap: theme.spacing.sm,
     },
-    // Fills the bar rather than shrinking to its measured width: at exactly
-    // that width a re-render can wrap the last word onto a line the bar hides.
+    // Fills the bar rather than shrinking to its measured width. With
+    // `flexShrink: 1`, repeat saves on the Medium_Phone emulator (API 37.1)
+    // showed "Saved to" with the last word missing. The cause is believed,
+    // not confirmed, to be the label laid out at exactly its measured width
+    // and the last word wrapping onto a line the bar hides. Six repeat saves
+    // looked right after the change; check on a device, as Jest cannot see
+    // text wrap.
     savedLabel: { flex: 1 },
     view: {
       minWidth: theme.sizes.touchTarget,

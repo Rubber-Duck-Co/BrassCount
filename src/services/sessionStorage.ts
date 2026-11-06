@@ -18,8 +18,9 @@ import { createStorageNamespace, StorageError } from './storage';
  * SessionStorageService
  * ---------------------
  * Local persistence layer for sessions: the saved runs of a drill that
- * History is built from, complete or stopped early. It is the one place that knows how a run is
- * stored, and the one place a split's `delta` is worked out.
+ * the Log is built from, complete or stopped early. It is the one place
+ * that knows how a run is stored, and the one place a split's `delta` is
+ * worked out.
  *
  * Design notes:
  *   - Each session is stored under its own key
@@ -445,7 +446,7 @@ export async function deleteSessionsByDrillId(drillId: string): Promise<void> {
 
 /**
  * Remove every session from storage, and nothing else: drills and the
- * profile are kept. Backs Settings → Clear run history, and resets state
+ * profile are kept. Backs Setup → Clear Log, and resets state
  * between tests.
  */
 export async function clearSessions(): Promise<void> {

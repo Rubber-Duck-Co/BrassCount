@@ -184,17 +184,24 @@ describe('SaveRunPrompt', () => {
   ] as const)('offers no way to view the run while %s', (_state, props) => {
     const tree = render(props);
 
+    // Save on show rules out a prompt that renders nothing at all.
+    expect(has(tree, 'btn-save-run')).toBe(true);
     expect(has(tree, 'btn-view-run')).toBe(false);
   });
 
-  it('lets the saved line fill the bar, so a re-render cannot wrap away its last word', () => {
+  // This pins the style only: Jest cannot see text wrap, so whether the last
+  // word stays on show on repeat saves needs a check on a device.
+  it('gives the saved label the room left by VIEW', () => {
     const tree = render({ status: 'saved' });
 
-    const label = first(tree, 'text-run-saved').findAll(
-      node => node.props.children === 'Saved to Log',
-    )[0];
+    const label = first(tree, 'text-run-saved').find(
+      node =>
+        typeof node.type === 'string' && node.props.children === 'Saved to Log',
+    );
 
-    expect(StyleSheet.flatten(label.props.style).flex).toBe(1);
+    // `flex` or `flexGrow` both take the room, so either passes.
+    const { flex, flexGrow } = StyleSheet.flatten(label.props.style);
+    expect((flex ?? 0) > 0 || (flexGrow ?? 0) > 0).toBe(true);
   });
 
   it('gives the view action a 48dp touch target', () => {

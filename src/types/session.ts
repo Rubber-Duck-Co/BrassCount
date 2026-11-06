@@ -44,7 +44,7 @@ export interface SessionSplit {
   /**
    * The par the step was judged against at the time of the run, in
    * seconds: its own par plus that of any silent step in front of it (see
-   * `RunStep.par`). Left off when none of them had one; History then
+   * `RunStep.par`). Left off when none of them had one; Log then
    * shows the par the drill has for the step now (`fillMissingPars`),
    * without changing what is stored.
    */
@@ -79,7 +79,7 @@ export interface Session {
   totalTime: number;
   /**
    * Whether every step the run listened for was heard. `false` for a run
-   * stopped early, which History lists but leaves out of its best and
+   * stopped early, which Log lists but leaves out of its best and
    * average times.
    */
   completed: boolean;
