@@ -40,6 +40,7 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # The APK version check below calls aapt2 from this build-tools version.
       - name: Setup Android SDK (matches android/build.gradle ext.versions)
         uses: android-actions/setup-android@v3
         with:
@@ -75,6 +76,25 @@ jobs:
       - name: Assemble debug APK
         working-directory: android
         run: ./gradlew --no-daemon -PreactNativeArchitectures=arm64-v8a assembleDebug
+
+      # Reads the version back out of the built APK, so a build that misread
+      # VERSION.txt fails here. The formula is repeated on purpose: it checks
+      # android/app/version.gradle rather than trusting it.
+      - name: Check the APK version matches VERSION.txt
+        run: |
+          expected_name="$(tr -d '[:space:]' < VERSION.txt)"
+          IFS=. read -r major minor patch <<< "$expected_name"
+          expected_code=$((10#$major * 10000000 + 10#$minor * 10000 + 10#$patch))
+          # Take the first line after aapt2 exits: head would close the pipe early
+          # and, under pipefail, fail the step on a correct APK.
+          badging="$("$ANDROID_HOME/build-tools/36.0.0/aapt2" dump badging android/app/build/outputs/apk/debug/app-debug.apk)"
+          badging="$(sed -n 1p <<< "$badging")"
+          echo "VERSION.txt: $expected_name (versionCode $expected_code)"
+          echo "APK:         $badging"
+          if ! grep -qF "versionCode='$expected_code' versionName='$expected_name'" <<< "$badging"; then
+            echo "::error::The APK's version does not match VERSION.txt ($expected_name, versionCode $expected_code)"
+            exit 1
+          fi
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
