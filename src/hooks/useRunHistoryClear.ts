@@ -29,7 +29,7 @@ export type UseRunHistoryClearResult = {
  *
  * The count is one per stored key, the same keys `clearSessions` removes,
  * so the number the confirmation names is the number deleted, including
- * any entry History skips because it is unreadable.
+ * any entry the Log skips because it is unreadable.
  */
 export const useRunHistoryClear = (): UseRunHistoryClearResult => {
   const [runCount, setRunCount] = useState<RunCountState>({

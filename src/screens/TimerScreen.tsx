@@ -204,7 +204,7 @@ const failureAction = (
 
 /**
  * The shot timer. Times a run of a stored drill from the microphone, then
- * asks whether the run goes into History: nothing is saved until the
+ * asks whether the run goes into Log: nothing is saved until the
  * shooter says so, and a run that is not wanted is simply discarded.
  */
 export const TimerScreen = () => {
@@ -374,8 +374,8 @@ export const TimerScreen = () => {
     if (stored !== null) {
       AccessibilityInfo.announceForAccessibility(
         stored.completed
-          ? 'Run saved to History'
-          : 'Run saved to History as incomplete',
+          ? 'Run saved to Log'
+          : 'Run saved to Log as incomplete',
       );
       focusStartButton();
     }

@@ -40,7 +40,7 @@ export const SetupScreen = () => {
       />
       <TimerSettings />
       <DisplaySettings />
-      {/* Clearing the history changes the box's run count too. */}
+      {/* Clearing the Log changes the box's run count too. */}
       <SetupDataSection onCleared={refresh} />
     </Screen>
   );

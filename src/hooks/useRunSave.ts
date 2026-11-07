@@ -13,7 +13,7 @@ import { sessionFromRun } from '@utils/session';
 /**
  * Where saving the finished run is. `unsaved`: nothing has been written
  * and Save is on offer. `saving`: the write is under way. `saved`: the
- * run is in History; final, so a second press cannot store it twice.
+ * run is in Log; final, so a second press cannot store it twice.
  */
 export type RunSaveStatus = 'unsaved' | 'saving' | 'saved';
 
@@ -53,7 +53,7 @@ const NOT_SAVED = { status: 'unsaved', failure: null } as const;
 /**
  * Saves a finished run of the Timer as a session, when the shooter asks
  * to. Nothing is written until `save` is called, so a run that is not
- * wanted never reaches History: it is discarded by moving on from it.
+ * wanted never reaches Log: it is discarded by moving on from it.
  *
  * Everything here belongs to one finished run, `result`. A new run, or
  * none, starts from `unsaved` with no failure, without an effect to reset
