@@ -220,6 +220,18 @@ describe('DrillStepRow', () => {
     expect(announce).not.toHaveBeenCalled();
   });
 
+  it('leaves a double-tap to open the type sheet', () => {
+    const { tree } = renderRow();
+
+    // Claiming `activate` would route TalkBack's double-tap to the action
+    // handler instead of the press, so the row offers the moves alone.
+    expect(
+      pressable(tree, 'select-step-1').props.accessibilityActions.map(
+        (offered: { name: string }) => offered.name,
+      ),
+    ).toEqual(['moveUp', 'moveDown']);
+  });
+
   it('shows a grip only on a step that can move', () => {
     expect(hasGrip(renderRow().tree)).toBe(true);
     expect(
