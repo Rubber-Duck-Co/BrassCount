@@ -31,6 +31,30 @@ From the template take:
 - Fill every field marked `required: true`. For optional fields, fill them when you have something real to say and leave them out when you would only be padding; never invent reproduction steps, versions or motivations the user did not give you and the repo does not show. If a required field cannot be filled from what you know, ask the user for exactly that.
 - Use each field's `description` and `placeholder` to understand what belongs there.
 
+For a feature or chore that someone will implement, put this structure inside the description field (the house style since the Range Card tickets, #165–#180), dropping lines with nothing real in them:
+
+```markdown
+**PR title:** `<type>(<scope>): <description>[ #minor]` **Branch:** `<type>/<kebab-description>`
+
+**Goal:** one line.
+
+**Scope**
+
+- real files and what changes in each
+
+**Out of scope:** what a reader might expect here but belongs elsewhere.
+
+**Acceptance criteria**
+
+- checkable statements
+
+**Tests:** the test files to add or update and what they assert.
+
+**Manual checks:** what to verify on the emulator (dark mode, large font, TalkBack where UI changes).
+```
+
+Put `**Blocked by:** <short names>` (or `none.`) at the end of the Motivation/Reason section; the formal links in step 4 are still required. When filing several tickets in one series, end each with the same shared-constraints block rather than repeating rules piecemeal. PR titles follow `git-workflow.md`: add `#minor` when the change warrants a minor bump (new features, or a chore that changes the app's look, like #165).
+
 If there is no template for the type, or the repo has no templates, write a plain issue with a clear title, a short summary, and the details a reader needs to act (for a bug: steps, expected, actual).
 
 Ground the body in the codebase when that makes it better: name the real file, screen or function involved after checking it exists. Keep it concise, written for a maintainer who has not seen this conversation.

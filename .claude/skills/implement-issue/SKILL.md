@@ -24,6 +24,7 @@ gh api repos/{owner}/{repo}/issues/<n>/dependencies/blocked_by --jq '.[] | {numb
 
 - If the issue is closed, or has an **open** blocker, tell the user and stop; building on top of unmerged work gives them a PR they can't merge.
 - Issues here are filed from the templates in `.github/ISSUE_TEMPLATE/` (feature, bug_report, chore, documentation, …). Read the template's sections as the spec: the title prefix and label give the type, and acceptance criteria, steps to reproduce or "expected behaviour" tell you what done looks like. Read the comments too; they often narrow the scope.
+- Most tickets fill the description field with a fixed structure: a `**PR title:** … **Branch:** …` line, `**Goal:**`, `**Scope**`, `**Out of scope:**`, `**Acceptance criteria**`, `**Tests:**`, `**Manual checks:**`, and `**Blocked by:**` under Motivation/Reason. When present, use the PR title and branch verbatim (they already carry the type and `#minor`), write the tests the `Tests` line names, run the `Manual checks` on the emulator, and treat `Out of scope` as a hard boundary. A ticket in a series (e.g. the Range Card redesign, #165–#180) may end with a shared constraints block; every point in it is an acceptance criterion too.
 - If the issue is too vague to know what done looks like, ask the user rather than guessing. One round of focused questions beats a PR that solves the wrong thing.
 
 Map the type to the branch/commit type: feature → `feat`, bug → `fix`, chore → `chore`, documentation → `docs`. A refactor or perf issue uses `refactor` / `perf`.
@@ -38,7 +39,7 @@ Write the plan so the user can approve it, and include:
 2. **Tests first**: the failing tests you will write (names that state behaviour), and where they live.
 3. **Emulator check**: the concrete steps you will perform on the emulator and what you expect to see, taken from the issue's acceptance criteria or repro steps. If the change needs sound (a run, calibration), say you will use the synthetic-mic patches from `brasscount-e2e`. If the issue genuinely has nothing visible or runnable (CI config, docs, a pure type change), say so and say what you will do instead; don't invent an emulator check.
 4. **Risks**: stored-shape changes (see below), native changes, anything that needs a decision from the user.
-5. **Branch and PR title**, e.g. `feat/start-delay-range`, `feat(settings): add start delay range #minor`.
+5. **Branch and PR title**: the ticket's own when it gives them; otherwise e.g. `feat/start-delay-range`, `feat(settings): add start delay range #minor`.
 
 Two project facts that change plans: adding a dependency, especially a native one, is the user's decision, so put it in the plan as a question and don't assume it. And while the app is unreleased, don't bump storage schema versions (see the `unreleased-schema-versions` memory if it is loaded); say in the plan if the issue seems to need one.
 
