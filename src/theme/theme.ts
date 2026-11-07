@@ -86,6 +86,8 @@ export const radius = {
 // never fixed heights, so large system fonts grow them instead of clipping.
 export const sizes = {
   touchTarget: 48,
+  /** The drag grip's slot at the start of a drill step's row. */
+  gripWidth: 28,
   headerMin: 124,
   tabBar: 64,
   mainActionMin: 72,

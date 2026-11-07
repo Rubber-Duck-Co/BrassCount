@@ -25,6 +25,12 @@ type SectionHeaderProps = {
    * action.
    */
   hint?: string;
+  /**
+   * What is happening right now ("Moving Shot 3 · Let go to drop"), shown in
+   * capitals opposite the title in place of an action or hint, and read out
+   * by a screen reader when it appears.
+   */
+  status?: string;
   testID?: string;
 };
 
@@ -73,11 +79,12 @@ export const SectionHeader = ({
   actionAccessibilityLabel,
   actionTestID,
   hint,
+  status,
   testID,
 }: SectionHeaderProps) => {
   const styles = useThemedStyles(createStyles);
-  const hasAction = Boolean(actionLabel && onActionPress);
-  const showHint = !hasAction && Boolean(hint);
+  const hasAction = !status && Boolean(actionLabel && onActionPress);
+  const showHint = !status && !hasAction && Boolean(hint);
 
   return (
     <View style={styles.row} testID={testID}>
@@ -90,7 +97,17 @@ export const SectionHeader = ({
         {title}
       </Typography>
 
-      {hasAction ? (
+      {status ? (
+        <Typography
+          variant="sectionLabel"
+          align="right"
+          accessibilityLiveRegion="polite"
+          style={[styles.title, styles.hint]}
+          testID={testID ? `${testID}-status` : undefined}
+        >
+          {status}
+        </Typography>
+      ) : hasAction ? (
         <TouchableOpacity
           onPress={onActionPress}
           accessibilityRole="button"

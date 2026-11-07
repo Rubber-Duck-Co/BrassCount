@@ -165,4 +165,22 @@ describe('SectionHeader', () => {
     expect(text(tree, 'Swipe left to delete')).toBeUndefined();
     expect(text(tree, 'Reorder')).toBeDefined();
   });
+
+  it('shows a status in place of its action, read out as it appears', () => {
+    const tree = render(
+      <SectionHeader
+        title="Steps"
+        actionLabel="Add"
+        onActionPress={() => {}}
+        actionTestID="action"
+        status="Moving Shot 3"
+        testID="header"
+      />,
+    );
+
+    expect(host(tree, 'header-status').props.accessibilityLiveRegion).toBe(
+      'polite',
+    );
+    expect(tree.root.findAllByProps({ testID: 'action' })).toHaveLength(0);
+  });
 });
