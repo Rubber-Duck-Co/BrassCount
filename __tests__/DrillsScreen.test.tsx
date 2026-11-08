@@ -385,19 +385,52 @@ describe('DrillsScreen', () => {
   });
 
   describe('opening the editor', () => {
-    it('offers + New in the header before the drills have loaded', async () => {
+    it('offers New drill before the drills have loaded', async () => {
       const { tree } = mountScreen();
 
       expect(has(tree, 'text-drills-loading')).toBe(true);
-      expect(textsOf(tree, 'btn-create-drill')).toEqual(['+ NEW']);
+      expect(textsOf(tree, 'btn-create-drill')).toEqual(['New drill']);
       expect(
-        byTestId(tree, 'btn-create-drill')[0].props.accessibilityLabel,
+        byTestId(tree, 'btn-create-drill').find(
+          node => node.props.accessibilityRole === 'button',
+        )?.props.accessibilityLabel,
       ).toBe('New drill');
 
       await settle();
     });
 
-    it('opens a new drill from the header’s + New', async () => {
+    it('puts New drill under the saved drills, not in the header', async () => {
+      await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      await seedDrill(MOZAMBIQUE, '2026-09-02T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      const header = byTestId(tree, 'screen-header')[0];
+      expect(textsUnder(header)).not.toContain('New drill');
+      expect(
+        header.findAll(node => node.props.testID === 'btn-create-drill'),
+      ).toHaveLength(0);
+      expect(byTestId(tree, 'screen-drills')[0].props.action).toBeUndefined();
+
+      const texts = textsOf(tree, 'list-drills');
+      expect(texts.indexOf('New drill')).toBeGreaterThan(
+        texts.indexOf('Bill Drill'),
+      );
+      expect(texts.indexOf('New drill')).toBeGreaterThan(
+        texts.indexOf('Mozambique'),
+      );
+    });
+
+    it('shows a single New drill when there are no drills', async () => {
+      const { tree } = await renderScreen();
+
+      expect(has(tree, 'state-drills-empty')).toBe(true);
+      expect(has(tree, 'btn-create-drill')).toBe(false);
+      expect(
+        textsOf(tree, 'list-drills').filter(text => text === 'New drill'),
+      ).toHaveLength(1);
+    });
+
+    it('opens a new drill from New drill', async () => {
       await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
       const { tree, currentRoute } = await renderScreen();
 
