@@ -386,6 +386,7 @@ export const DrillsScreen = () => {
     <Screen
       title="Drills"
       subtitle="Your library of runnable drills"
+      wordmark={false}
       contentStyle={styles.screenContent}
       testID="screen-drills"
     >

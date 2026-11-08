@@ -243,6 +243,16 @@ describe('DrillsScreen', () => {
     jest.restoreAllMocks();
   });
 
+  describe('the header', () => {
+    it('leads with the title, without the BRASSCOUNT wordmark', async () => {
+      const { tree } = await renderScreen();
+
+      const header = textsOf(tree, 'screen-header');
+      expect(header).not.toContain('BRASSCOUNT');
+      expect(header[0]).toBe('Drills');
+    });
+  });
+
   describe('listing the saved drills', () => {
     it('says it is loading until storage answers', async () => {
       await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
