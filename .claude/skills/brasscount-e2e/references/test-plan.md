@@ -92,18 +92,18 @@ How to set the expectation: `run <beepMs> <t1> <t2> <t3>` puts the beep `beepMs`
 6.2 During the run, `select-drill` is disabled (take the dump right after the run ends if a dump during it fails, and check Start/Stop's label changed while running with a screenshot).
 6.3 No beep heard: `d synth run none 1200 1500 1850`. The run times from the request and the caption says the first step may read long.
 6.4 Stop early: `d synth run 150 1200`, Start, wait 8 s (Start's random 1–5 s delay comes first), Stop (tap-xy). The run finishes with one step heard and the prompt offers Save as incomplete.
-6.5 Nothing heard: `d synth silent`, Start, wait 5 s, Stop. `text-nothing-to-save` appears instead of the save prompt.
+6.5 Nothing heard: `d synth silent`, Start, wait 5 s, Stop. The timer goes straight back to ready ("Ready when you are", 0.00, Start): no save prompt, empty splits.
 6.6 Too close together: `d synth run 150 1200 1240 1600 1950` (the second click is 40 ms after the first, under the 70 ms minimum). The 1240 click is not counted: expect splits 1.20 / 0.40 / 0.35.
-6.7 Reset (`btn-reset`) returns the timer to idle with empty splits.
+6.7 The Timer header has no action. Reset (`btn-reset-run`, beside Save run on a finished run) returns the timer to idle with empty splits.
 
-## 7. Saving and discarding runs
+## 7. Saving and resetting runs
 
 Note History's Runs counter before this area.
 
-7.1 After a complete run the prompt shows **Save run** and **Discard** (`btn-save-run`, `btn-discard-run`). Save: `text-run-saved` confirms, and Start, Reset and the picker are usable again.
+7.1 After a complete run the prompt shows **Reset** (secondary, a third of the width) beside **Save run** (`btn-reset-run`, `btn-save-run`). Save: `text-run-saved` confirms, and Start and the picker are usable again.
 7.2 Save a second run with a different time (`run 150 1150 1450 1800`) and a third slower one (`run 150 1300 1600 1950`), so History has a best, an average and differences to show.
-7.3 Discard a run: the prompt goes, nothing is written (History's count is unchanged later).
-7.4 Starting a new run, Reset, or picking another drill with an unsaved run drops it without writing.
+7.3 Reset a run: the prompt goes, nothing is written (History's count is unchanged later).
+7.4 Reset, or picking another drill, drops an unsaved run without writing.
 7.5 Save as incomplete: a run stopped early (6.4) saved as incomplete appears in History detail with Stopped early.
 7.6 A run of a drill deleted on the Drills tab while the result is on show is dropped when you come back, with an announcement. (Make and run a `ZZE2EGone` drill, go to Drills, delete it, return.)
 
@@ -139,7 +139,7 @@ Read the current values first (`settings get system font_scale`, `cmd uimode nig
 
 ## 11. Lifecycle: leaving mid-run, relaunch
 
-11.1 Start a run (`d synth run 150 1200 5000 9000`), wait 8 s so the first shot lands after the random start delay, press Home (`d key 3`), reopen the app: the run has stopped and offers Save as incomplete; capture was interrupted, not left running. Discard it.
+11.1 Start a run (`d synth run 150 1200 5000 9000`), wait 8 s so the first shot lands after the random start delay, press Home (`d key 3`), reopen the app: the run has stopped and offers Save as incomplete; capture was interrupted, not left running. Reset it.
 11.2 Start a run, wait 8 s, and switch tabs: the run stops. The finished-run announcement does not show on the other tab.
 11.3 Force-stop and relaunch: drills, runs and profile are still there; calibration is back to Not calibrated (it is in memory only by design).
 

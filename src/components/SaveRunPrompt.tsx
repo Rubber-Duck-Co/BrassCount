@@ -14,13 +14,14 @@ type SaveRunPromptProps = {
   status: RunSaveStatus;
   failure: RunSaveFailure | null;
   onSave: () => void;
-  onDiscard: () => void;
+  /** Drops the run without saving it, back to a ready timer. */
+  onReset: () => void;
   /** Opens the saved run's drill in Log. */
   onView: () => void;
 };
 
 /**
- * Above this font scale Discard and Save no longer fit side by side on a
+ * Above this font scale Reset and Save no longer fit side by side on a
  * phone, so they are stacked, in the order a screen reader meets them.
  */
 const STACK_ACTIONS_ABOVE_FONT_SCALE = 1.3;
@@ -40,9 +41,9 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.inset,
     },
     // As tall as the main action beside it; a minimum, like it.
-    discard: { minHeight: theme.sizes.mainActionMin },
-    // Save takes twice Discard's width: it is the main action.
-    discardBeside: { flex: 1 },
+    reset: { minHeight: theme.sizes.mainActionMin },
+    // Save takes twice Reset's width: it is the main action.
+    resetBeside: { flex: 1 },
     saveBeside: { flex: 2 },
     // The Ink bar that says the run is saved. A minimum height, so a large
     // font grows it.
@@ -86,8 +87,8 @@ const failureMessage = (failure: RunSaveFailure): string =>
 
 /**
  * Whether a finished run goes into Log, as the Timer's main action:
- * Save run, with Discard beside it. Nothing is stored until Save is
- * pressed; Discard drops the run. Once saved, an Ink bar says so, with a
+ * Save run, with Reset beside it. Nothing is stored until Save is
+ * pressed; Reset drops the run. Once saved, an Ink bar says so, with a
  * link to the drill's runs, and the screen puts Start back under it.
  */
 export const SaveRunPrompt = ({
@@ -95,7 +96,7 @@ export const SaveRunPrompt = ({
   status,
   failure,
   onSave,
-  onDiscard,
+  onReset,
   onView,
 }: SaveRunPromptProps) => {
   const styles = useThemedStyles(createStyles);
@@ -168,13 +169,13 @@ export const SaveRunPrompt = ({
         testID="row-save-run-actions"
       >
         <Button
-          label="Discard"
+          label="Reset"
           variant="secondary"
           disabled={saving}
-          onPress={onDiscard}
-          accessibilityLabel="Discard run"
-          style={[styles.discard, !stacked && styles.discardBeside]}
-          testID="btn-discard-run"
+          onPress={onReset}
+          accessibilityLabel="Reset without saving"
+          style={[styles.reset, !stacked && styles.resetBeside]}
+          testID="btn-reset-run"
         />
         <Button
           label={saving ? 'Saving…' : 'Save run'}

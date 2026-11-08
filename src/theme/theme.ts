@@ -89,6 +89,8 @@ export const sizes = {
   /** The drag grip's slot at the start of a drill step's row. */
   gripWidth: 28,
   headerMin: 124,
+  /** The header without the wordmark: title row and subtitle; a minimum. */
+  headerCompactMin: 90,
   tabBar: 64,
   mainActionMin: 72,
   /** The Timer's clock box. */

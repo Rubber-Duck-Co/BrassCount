@@ -192,6 +192,7 @@ describe('Range Card tokens', () => {
     expect(sizes.markBox).toBe(40);
     expect(sizes).toMatchObject({
       headerMin: 124,
+      headerCompactMin: 90,
       tabBar: 64,
       mainActionMin: 72,
       border: 2,

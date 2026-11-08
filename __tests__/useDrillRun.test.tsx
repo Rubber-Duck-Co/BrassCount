@@ -8,7 +8,10 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useCalibration } from '../src/hooks/useCalibration';
 import { useDrillRun, type UseDrillRunResult } from '../src/hooks/useDrillRun';
-import { AUDIO_AMPLITUDE_EVENT } from '../src/services/audioCapture';
+import {
+  AUDIO_AMPLITUDE_EVENT,
+  AUDIO_CAPTURE_ERROR_EVENT,
+} from '../src/services/audioCapture';
 import type { BeepPlayer, BeepSpec } from '../src/services/beepPlayer';
 import { DrillRunError } from '../src/services/drillRunEngine';
 import {
@@ -647,6 +650,56 @@ describe('useDrillRun', () => {
 
     expect(pendingStarts[0].options.signal?.aborted).toBe(true);
     expect(mockedNativeAudioCapture.stop).toHaveBeenCalled();
+  });
+
+  it('goes back to idle, with nothing on show, when stopped with nothing heard', async () => {
+    const { read } = renderHook();
+    await startRun(read);
+
+    act(() => read().stop());
+    await settle();
+
+    expect(read()).toMatchObject({
+      phase: 'idle',
+      results: [],
+      result: null,
+      failure: null,
+    });
+    expect(read().readElapsed()).toBe(0);
+    expect(mockedNativeAudioCapture.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('goes back to idle, saying why, when the app is left with nothing heard', async () => {
+    const { read } = renderHook();
+    await startRun(read);
+
+    act(() => {
+      DeviceEventEmitter.emit(AUDIO_CAPTURE_ERROR_EVENT, {
+        code: 'INTERRUPTED',
+        message: 'left the app',
+      });
+    });
+    await settle();
+
+    expect(read()).toMatchObject({
+      phase: 'idle',
+      results: [],
+      result: null,
+      failure: { kind: 'interrupted' },
+    });
+  });
+
+  it('goes back to idle, and says the microphone failed, when it will not close on a stop with nothing heard', async () => {
+    const { read } = renderHook();
+    await startRun(read);
+    mockedNativeAudioCapture.stop.mockRejectedValue(new Error('close failed'));
+
+    act(() => read().stop());
+    await settle();
+
+    expect(read().phase).toBe('idle');
+    expect(read().result).toBeNull();
+    expect(read().failure).toEqual({ kind: 'microphone' });
   });
 
   it('does nothing when stopped with no run', () => {

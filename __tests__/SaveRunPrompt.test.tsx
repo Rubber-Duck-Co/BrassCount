@@ -13,7 +13,7 @@ const defaults: Props = {
   status: 'unsaved',
   failure: null,
   onSave: () => {},
-  onDiscard: () => {},
+  onReset: () => {},
   onView: () => {},
 };
 
@@ -58,7 +58,7 @@ describe('SaveRunPrompt', () => {
 
   afterEach(() => setFontScale(initialWindow.fontScale));
 
-  it('makes Save run the main action, with Discard beside it', () => {
+  it('makes Save run the main action, with Reset beside it', () => {
     const tree = render();
 
     expect(first(tree, 'btn-save-run').props).toMatchObject({
@@ -66,10 +66,10 @@ describe('SaveRunPrompt', () => {
       variant: 'primary',
       size: 'main',
     });
-    expect(first(tree, 'btn-discard-run').props).toMatchObject({
-      label: 'Discard',
+    expect(first(tree, 'btn-reset-run').props).toMatchObject({
+      label: 'Reset',
       variant: 'secondary',
-      accessibilityLabel: 'Discard run',
+      accessibilityLabel: 'Reset without saving',
     });
   });
 
@@ -92,16 +92,16 @@ describe('SaveRunPrompt', () => {
     });
   });
 
-  it('calls back on Save and on Discard', () => {
+  it('calls back on Save and on Reset', () => {
     const onSave = jest.fn();
-    const onDiscard = jest.fn();
-    const tree = render({ onSave, onDiscard });
+    const onReset = jest.fn();
+    const tree = render({ onSave, onReset });
 
     act(() => first(tree, 'btn-save-run').props.onPress());
-    act(() => first(tree, 'btn-discard-run').props.onPress());
+    act(() => first(tree, 'btn-reset-run').props.onPress());
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onDiscard).toHaveBeenCalledTimes(1);
+    expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it('turns both buttons off while saving', () => {
@@ -112,7 +112,7 @@ describe('SaveRunPrompt', () => {
       busy: true,
       disabled: true,
     });
-    expect(first(tree, 'btn-discard-run').props.disabled).toBe(true);
+    expect(first(tree, 'btn-reset-run').props.disabled).toBe(true);
   });
 
   it('offers a retry when the device storage failed', () => {
@@ -124,14 +124,14 @@ describe('SaveRunPrompt', () => {
     expect(first(tree, 'btn-save-run').props.disabled).toBe(false);
   });
 
-  it('offers no retry for a run storage turned down, but can still discard it', () => {
+  it('offers no retry for a run storage turned down, but can still reset it', () => {
     const tree = render({ failure: 'invalid' });
 
     expect(first(tree, 'text-save-run-error').props.children).toBe(
       'This run cannot be saved.',
     );
     expect(first(tree, 'btn-save-run').props.disabled).toBe(true);
-    expect(first(tree, 'btn-discard-run').props.disabled).toBe(false);
+    expect(first(tree, 'btn-reset-run').props.disabled).toBe(false);
   });
 
   it('keeps the actions side by side, Save the wider, at a normal text size', () => {
@@ -143,11 +143,9 @@ describe('SaveRunPrompt', () => {
     );
     expect(row.flexDirection).toBe('row');
     const save = StyleSheet.flatten(first(tree, 'btn-save-run').props.style);
-    const discard = StyleSheet.flatten(
-      first(tree, 'btn-discard-run').props.style,
-    );
+    const reset = StyleSheet.flatten(first(tree, 'btn-reset-run').props.style);
     expect(save.flex).toBe(2);
-    expect(discard.flex).toBe(1);
+    expect(reset.flex).toBe(1);
   });
 
   it('stacks its actions at a large text size', () => {
@@ -166,7 +164,7 @@ describe('SaveRunPrompt', () => {
 
     expect(textsUnder(tree, 'text-run-saved')).toEqual(['Saved to Log']);
     expect(has(tree, 'btn-save-run')).toBe(false);
-    expect(has(tree, 'btn-discard-run')).toBe(false);
+    expect(has(tree, 'btn-reset-run')).toBe(false);
 
     act(() => first(tree, 'btn-view-run').props.onPress());
     expect(onView).toHaveBeenCalledTimes(1);
