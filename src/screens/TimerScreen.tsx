@@ -137,16 +137,14 @@ const timingNote = (result: RunResult): string => {
 
 /**
  * A finished run as a screen reader should say it, with what can be done
- * with it: the prompt to save it appears under the timer.
+ * with it: the prompt to save it appears under the timer. A run with
+ * nothing heard never finishes: it goes back to ready.
  */
 const speakResult = (result: RunResult): string => {
-  if (result.results.length === 0) {
-    return 'Run stopped early, nothing heard';
-  }
   const run = result.completed
     ? `Run complete, ${speak(result.totalTime)}`
     : `Run stopped early, ${pluralize(result.results.length, 'step')} heard`;
-  return `${run}. Save it or discard it`;
+  return `${run}. Save it or reset it`;
 };
 
 const createStyles = (theme: Theme) =>
@@ -205,7 +203,8 @@ const failureAction = (
 /**
  * The shot timer. Times a run of a stored drill from the microphone, then
  * asks whether the run goes into Log: nothing is saved until the
- * shooter says so, and a run that is not wanted is simply discarded.
+ * shooter says so, and a run that is not wanted is reset without saving.
+ * A run stopped with nothing heard goes straight back to ready.
  */
 export const TimerScreen = () => {
   const styles = useThemedStyles(createStyles);
@@ -295,6 +294,19 @@ export const TimerScreen = () => {
     }
   }, [failureText, isFocused, result]);
 
+  // A run stopped with nothing heard goes straight back to ready, with no
+  // result to announce, so the stop itself is said. Not when a failure
+  // ended it, which is said instead, nor when the tab was left: there is
+  // nothing to come back to.
+  const lastPhase = useRef<DrillRunPhase>(phase);
+  useEffect(() => {
+    const stoppedEmpty = lastPhase.current === 'running' && phase === 'idle';
+    lastPhase.current = phase;
+    if (stoppedEmpty && isFocused && failureText === null) {
+      AccessibilityInfo.announceForAccessibility('Run stopped, nothing heard');
+    }
+  }, [failureText, isFocused, phase]);
+
   const onPressStart = useCallback(() => {
     if (running || pending) {
       stop();
@@ -381,18 +393,17 @@ export const TimerScreen = () => {
     }
   }, [focusStartButton, save]);
 
-  const discardRun = useCallback(() => {
+  const resetRun = useCallback(() => {
     reset();
     // The prompt, and the reader's focus with it, is gone: say what happened.
-    AccessibilityInfo.announceForAccessibility('Run discarded');
+    AccessibilityInfo.announceForAccessibility('Run reset, not saved');
     focusStartButton();
   }, [focusStartButton, reset]);
 
   const noDrill = drillsState.status === 'ready' && drill === null;
-  // Reset is the header's action: while a run is on it would throw the run
-  // away at a stray touch, and Stop already ends it. Nor while a run is
-  // being saved, which it would replace.
-  const resetLocked = running || pending || saving;
+  // The drill on the timer cannot change while a run is on, which picking
+  // another would throw away, nor while a run is being saved against it.
+  const drillLocked = running || pending || saving;
 
   // A Load on the Drills tab names a drill to put on the timer. It is
   // cleared at once, so a drill picked here later is never overridden by
@@ -406,13 +417,13 @@ export const TimerScreen = () => {
       return;
     }
     navigation.setParams({ drillId: undefined });
-    if (!resetLocked) {
+    if (!drillLocked) {
       selectDrill(loadedDrillId);
       // Held even when it is the drill already on show as the newest, so a
       // drill made later does not take its place.
       setSelectedDrillId(loadedDrillId);
     }
-  }, [loadedDrillId, navigation, resetLocked, selectDrill]);
+  }, [loadedDrillId, navigation, drillLocked, selectDrill]);
 
   // Every timed step's par, the step that ends the draw included: it is
   // judged against its own par as well as the draw against the draw's.
@@ -448,9 +459,10 @@ export const TimerScreen = () => {
     stage: splitStage,
   });
 
-  // A finished run with something heard in it is offered for saving as the
-  // main action. Start comes back once it is saved, under the line that
-  // says so, or once it is discarded.
+  // A finished run is offered for saving as the main action, with Reset
+  // beside it; one with nothing heard never finishes, it goes back to
+  // ready. Start comes back once the run is saved, under the line that says
+  // so, or once it is reset.
   const offerSave = finished && session !== null;
   const showStart = !offerSave || saveStatus === 'saved';
 
@@ -461,13 +473,6 @@ export const TimerScreen = () => {
         failureText ??
         (noDrill ? 'Create a drill to start' : phaseMessage(phase, result))
       }
-      action={{
-        label: 'Reset',
-        // Dropping a run still on offer is a discard, and said as one.
-        onPress: offerSave && saveStatus !== 'saved' ? discardRun : reset,
-        testID: 'btn-reset',
-      }}
-      actionDisabled={resetLocked}
       contentStyle={styles.content}
       testID="screen-timer"
     >
@@ -480,7 +485,7 @@ export const TimerScreen = () => {
         <DrillPicker
           state={drillsState}
           drill={drill}
-          locked={resetLocked}
+          locked={drillLocked}
           onSelect={selectDrill}
           onCreate={createDrill}
           onRetry={reloadDrills}
@@ -505,17 +510,6 @@ export const TimerScreen = () => {
               caption={clockCaption(readout)}
               dimmed={pending}
             />
-
-            {finished && session === null ? (
-              <Typography
-                variant="caption"
-                color="textSecondary"
-                style={styles.timingNote}
-                testID="text-nothing-to-save"
-              >
-                Nothing was heard, so there is nothing to save.
-              </Typography>
-            ) : null}
 
             <View style={styles.splits}>
               <SectionHeader title="Splits" />
@@ -545,7 +539,7 @@ export const TimerScreen = () => {
               status={saveStatus}
               failure={saveFailure}
               onSave={saveRun}
-              onDiscard={discardRun}
+              onReset={resetRun}
               onView={viewSavedRun}
             />
           ) : null}

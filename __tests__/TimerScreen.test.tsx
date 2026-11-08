@@ -344,13 +344,13 @@ const pickerLocked = (tree: ReactTestRenderer): boolean => {
   );
 };
 
-/** What the Start button says; `null` while Save and Discard stand in for it. */
+/** What the Start button says; `null` while Save and Reset stand in for it. */
 const buttonLabel = (tree: ReactTestRenderer): string | null =>
   has(tree, 'btn-start')
     ? first(tree, 'btn-start').props.accessibilityLabel
     : null;
 
-/** A finished run is on offer: Save and Discard are the main action. */
+/** A finished run is on offer: Save and Reset are the main action. */
 const offersSave = (tree: ReactTestRenderer): boolean =>
   has(tree, 'btn-save-run') && !has(tree, 'btn-start');
 
@@ -556,12 +556,12 @@ describe('TimerScreen', () => {
       expect(timingNote(tree)).toBeNull();
     });
 
-    it('shows the TIMER header with Reset as its action', async () => {
+    it('shows the TIMER header with no action in it', async () => {
       const { tree } = await renderScreen();
 
       expect(first(tree, 'screen-timer').props.title).toBe('Timer');
-      expect(textsOf(tree, 'btn-reset')).toEqual(['RESET']);
-      expect(first(tree, 'btn-reset').props.accessibilityLabel).toBe('Reset');
+      expect(first(tree, 'screen-timer').props.action).toBeUndefined();
+      expect(has(tree, 'btn-reset')).toBe(false);
     });
 
     it('shows the drill in the drill box, ready to be changed', async () => {
@@ -1116,7 +1116,7 @@ describe('TimerScreen', () => {
 
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'Run complete, 2.2 seconds. Save it or discard it',
+        'Run complete, 2.2 seconds. Save it or reset it',
       );
     });
 
@@ -1166,10 +1166,10 @@ describe('TimerScreen', () => {
       expect(elapsedText(tree)).toBe(formatElapsed(0));
     });
 
-    it('starts a fresh run once the finished one is discarded', async () => {
+    it('starts a fresh run once the finished one is reset', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
-      await press(tree, 'btn-discard-run');
+      await press(tree, 'btn-reset-run');
 
       await press(tree, 'btn-start');
 
@@ -1233,7 +1233,7 @@ describe('TimerScreen', () => {
       expect(mockedNativeAudioCapture.stop).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'Run stopped early, 1 step heard. Save it or discard it',
+        'Run stopped early, 1 step heard. Save it or reset it',
       );
     });
 
@@ -1253,7 +1253,7 @@ describe('TimerScreen', () => {
       shoot(ZERO + 1400);
       await press(tree, 'btn-start');
 
-      await press(tree, 'btn-reset');
+      await press(tree, 'btn-reset-run');
 
       expect(buttonLabel(tree)).toBe('Start timer');
       expect(subtitle(tree)).toBe('Ready when you are');
@@ -1301,8 +1301,9 @@ describe('TimerScreen', () => {
       expect(subtitle(tree)).toBe('Calibrate Shot first');
       states.push(mainActionPinned(tree));
 
+      // Calibrating the sound clears the refusal on its own.
       setSample('shot', -4);
-      await press(tree, 'btn-reset');
+      expect(subtitle(tree)).toBe('Ready when you are');
       // Ready, then standing by, then running.
       states.push(mainActionPinned(tree));
       await press(tree, 'btn-start');
@@ -1365,26 +1366,86 @@ describe('TimerScreen', () => {
       expect(startMock).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps Reset off while a run is on, so a stray touch cannot throw it away', async () => {
-      const resetOff = (tree: ReactTestRenderer): boolean => {
-        const reset = first(tree, 'btn-reset');
-        return (
-          reset.props.disabled === true &&
-          reset.props.accessibilityState?.disabled === true
-        );
-      };
+    it('offers no Reset while a run is on, so a stray touch cannot throw it away', async () => {
       const { tree } = await renderScreen();
-      expect(resetOff(tree)).toBe(false);
 
       await press(tree, 'btn-start');
-      expect(resetOff(tree)).toBe(true);
+      expect(has(tree, 'btn-reset-run')).toBe(false);
 
       hear(REQUESTED_AT - 40, ROOM_DB);
       await beep();
-      expect(resetOff(tree)).toBe(true);
+      shoot(ZERO + 1400);
+      expect(has(tree, 'btn-reset-run')).toBe(false);
 
       await press(tree, 'btn-start');
-      expect(resetOff(tree)).toBe(false);
+      expect(has(tree, 'btn-reset-run')).toBe(true);
+    });
+
+    it('goes straight back to ready when stopped with nothing heard', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+
+      await press(tree, 'btn-start');
+
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(subtitle(tree)).toBe('Ready when you are');
+      expect(elapsedText(tree)).toBe(formatElapsed(0));
+      expect(split(tree, 0).time).toBe('—');
+      expect(timingNote(tree)).toBeNull();
+      expect(has(tree, 'card-save-run')).toBe(false);
+      expect(pickerLocked(tree)).toBe(false);
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith('Run stopped, nothing heard');
+    });
+
+    it('says nothing on return when the tab was left mid-run with nothing heard', async () => {
+      const { tree, goTo } = await renderScreen();
+      await startRun(tree);
+
+      await goTo('Elsewhere');
+      await goTo('Timer');
+
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(subtitle(tree)).toBe('Ready when you are');
+      // By design: there is no run to come back to, so nothing to say.
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it('says only that the microphone failed when it will not close on a stop with nothing heard', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+      mockedNativeAudioCapture.stop.mockRejectedValue(
+        new Error('close failed'),
+      );
+
+      await press(tree, 'btn-start');
+
+      expect(subtitle(tree)).toBe('The microphone could not be used');
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(has(tree, 'card-save-run')).toBe(false);
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith('The microphone could not be used');
+    });
+
+    it('says why, over a ready timer, when the app is left with nothing heard', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+
+      act(() => {
+        DeviceEventEmitter.emit(AUDIO_CAPTURE_ERROR_EVENT, {
+          code: 'INTERRUPTED',
+          message: 'left the app',
+        });
+      });
+      await settle();
+
+      expect(subtitle(tree)).toBe('The run stopped because the app was left');
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(has(tree, 'card-save-run')).toBe(false);
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith(
+        'The run stopped because the app was left',
+      );
     });
 
     it('ends the run with what was heard when the app is left', async () => {
@@ -1421,7 +1482,7 @@ describe('TimerScreen', () => {
       expect(split(tree, 0).time).toBe('1.40');
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'Run stopped early, 1 step heard. Save it or discard it',
+        'Run stopped early, 1 step heard. Save it or reset it',
       );
     });
 
@@ -1440,7 +1501,7 @@ describe('TimerScreen', () => {
 
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'The run stopped because the app was left. Run stopped early, 1 step heard. Save it or discard it',
+        'The run stopped because the app was left. Run stopped early, 1 step heard. Save it or reset it',
       );
     });
 
@@ -1708,7 +1769,7 @@ describe('TimerScreen', () => {
 
       await completeRun(tree);
 
-      expect(textsOf(tree, 'card-save-run')).toEqual(['Discard', 'Save run']);
+      expect(textsOf(tree, 'card-save-run')).toEqual(['Reset', 'Save run']);
       expect(offersSave(tree)).toBe(true);
       expect(await loadSessions()).toEqual([]);
     });
@@ -1844,39 +1905,28 @@ describe('TimerScreen', () => {
       ]);
     });
 
-    it('has nothing to save when nothing was heard', async () => {
-      const { tree } = await renderScreen();
-      await startRun(tree);
-
-      await press(tree, 'btn-start');
-
-      expect(has(tree, 'card-save-run')).toBe(false);
-      expect(has(tree, 'text-nothing-to-save')).toBe(true);
-      expect(announce).toHaveBeenCalledWith('Run stopped early, nothing heard');
-    });
-
-    it('drops the run on Discard and stores nothing', async () => {
+    it('drops the run on Reset and stores nothing', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
       announce.mockClear();
 
-      await press(tree, 'btn-discard-run');
+      await press(tree, 'btn-reset-run');
 
       expect(await loadSessions()).toEqual([]);
       expect(has(tree, 'card-save-run')).toBe(false);
       expect(subtitle(tree)).toBe('Ready when you are');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(announce).toHaveBeenCalledWith('Run discarded');
+      expect(announce).toHaveBeenCalledWith('Run reset, not saved');
     });
 
-    it('holds Start back until a finished run is saved or discarded', async () => {
+    it('holds Start back until a finished run is saved or reset', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
 
       expect(has(tree, 'btn-start')).toBe(false);
       expect(mainActionPinned(tree)).toBe(true);
 
-      await press(tree, 'btn-discard-run');
+      await press(tree, 'btn-reset-run');
       await startRun(tree);
       shoot(ZERO + 1400);
       await press(tree, 'btn-start');
@@ -1935,9 +1985,8 @@ describe('TimerScreen', () => {
         label: 'Saving…',
         disabled: true,
       });
-      expect(first(tree, 'btn-discard-run').props.disabled).toBe(true);
+      expect(first(tree, 'btn-reset-run').props.disabled).toBe(true);
       expect(has(tree, 'btn-start')).toBe(false);
-      expect(first(tree, 'btn-reset').props.disabled).toBe(true);
       expect(pickerLocked(tree)).toBe(true);
     });
 
@@ -2007,7 +2056,7 @@ describe('TimerScreen', () => {
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
     });
 
-    it('puts a screen reader on the Start button once the run is saved or discarded', async () => {
+    it('puts a screen reader on the Start button once the run is saved or reset', async () => {
       const focus = jest
         .spyOn(AccessibilityInfo, 'sendAccessibilityEvent')
         .mockImplementation(() => {});
@@ -2021,7 +2070,7 @@ describe('TimerScreen', () => {
       expect(focus).toHaveBeenLastCalledWith(expect.anything(), 'focus');
 
       await completeRun(tree);
-      await press(tree, 'btn-discard-run');
+      await press(tree, 'btn-reset-run');
       expect(focus).toHaveBeenCalledTimes(2);
     });
 
@@ -2151,16 +2200,17 @@ describe('TimerScreen', () => {
       expect(await loadSessions()).toEqual([]);
     });
 
-    it('says the run is discarded when Reset drops one still on offer', async () => {
+    it('puts Reset beside Save run in the main action, not in the header', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
-      announce.mockClear();
 
-      await press(tree, 'btn-reset');
-
-      expect(announce).toHaveBeenCalledWith('Run discarded');
-      expect(buttonLabel(tree)).toBe('Start timer');
-      expect(await loadSessions()).toEqual([]);
+      expect(first(tree, 'btn-reset-run').props).toMatchObject({
+        label: 'Reset',
+        variant: 'secondary',
+        accessibilityLabel: 'Reset without saving',
+      });
+      expect(has(tree, 'btn-reset')).toBe(false);
+      expect(mainActionPinned(tree)).toBe(true);
     });
 
     it('opens the saved run’s drill in Log from the saved line', async () => {
