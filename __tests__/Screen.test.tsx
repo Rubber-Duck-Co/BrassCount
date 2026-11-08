@@ -155,6 +155,86 @@ describe('Screen', () => {
     expect(StyleSheet.flatten(action.props.style).flexShrink ?? 0).toBe(0);
   });
 
+  it('leads with the title, and no wordmark, when the wordmark is off', () => {
+    const rendered = render(
+      <Screen title="Timer" subtitle="Ready" wordmark={false}>
+        {null}
+      </Screen>,
+    );
+
+    const header = byTestId(rendered, 'screen-header');
+    const title = header
+      .findAllByType(Typography)
+      .filter(node => node.props.accessibilityRole === 'header');
+    expect(texts(rendered)).not.toContain('BRASSCOUNT');
+    expect(texts(rendered)).toEqual(['Timer', 'Ready']);
+    expect(title).toHaveLength(1);
+    expect(StyleSheet.flatten(header.props.style).minHeight).toBe(
+      sizes.headerCompactMin,
+    );
+  });
+
+  it('keeps a back link and the title under it when the wordmark is off', () => {
+    const rendered = render(
+      <Screen title="Settings" onBack={jest.fn()} wordmark={false}>
+        {null}
+      </Screen>,
+    );
+
+    const header = byTestId(rendered, 'screen-header');
+    expect(byTestId(rendered, 'btn-back')).toBeDefined();
+    expect(texts(rendered)).toEqual(['BACK', 'Settings']);
+    expect(StyleSheet.flatten(header.props.style).minHeight).toBe(
+      sizes.headerMin,
+    );
+  });
+
+  it('shrinks the title, never the action, beside it when the wordmark is off', () => {
+    const onPress = jest.fn();
+    const rendered = render(
+      <Screen
+        title="A drill with a long name"
+        action={{ label: 'Settings', onPress }}
+        wordmark={false}
+      >
+        {null}
+      </Screen>,
+    );
+
+    const title = rendered.root
+      .findAllByType(Typography)
+      .find(node => node.props.accessibilityRole === 'header');
+    const action = byTestId(rendered, 'btn-header-action');
+    expect(title?.props.adjustsFontSizeToFit).toBe(true);
+    expect(title?.props.minimumFontScale).toBe(0.6);
+    expect(title?.props.numberOfLines).toBe(1);
+    expect(StyleSheet.flatten(title?.props.style)).toMatchObject({
+      flex: 1,
+      minWidth: 0,
+    });
+    expect(StyleSheet.flatten(action.props.style).flexShrink ?? 0).toBe(0);
+
+    act(() => action.props.onPress());
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds the action to the right with no title when the wordmark is off', () => {
+    const rendered = render(
+      <Screen action={{ label: 'Save', onPress: jest.fn() }} wordmark={false}>
+        {null}
+      </Screen>,
+    );
+
+    const header = byTestId(rendered, 'screen-header');
+    expect(texts(rendered)).toEqual(['SAVE']);
+    expect(
+      header
+        .findAllByType(Typography)
+        .filter(node => node.props.accessibilityRole === 'header'),
+    ).toHaveLength(0);
+    expect(byTestId(rendered, 'btn-header-action')).toBeDefined();
+  });
+
   it('calls the header action when it is pressed', () => {
     const onPress = jest.fn();
     const rendered = render(

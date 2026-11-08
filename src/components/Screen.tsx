@@ -41,6 +41,12 @@ type ScreenProps = {
   action?: ScreenAction;
   /** Greys the action out and stops it taking presses. */
   actionDisabled?: boolean;
+  /**
+   * Show the BRASSCOUNT wordmark over the title on a screen with no back
+   * link. Defaults to true; `false` puts the title in the top row instead,
+   * the header screens move to as they are redesigned.
+   */
+  wordmark?: boolean;
   /** Show a back link in place of the wordmark. Pass `navigation.goBack`. */
   onBack?: () => void;
   /** Where the back link goes, e.g. `Log`. Defaults to `Back`. */
@@ -75,15 +81,19 @@ const DEFAULT_BACK_LABEL = 'Back';
 const WORDMARK_MAX_FONT_MULTIPLIER = 1.3;
 const WORDMARK_MIN_FONT_SCALE = 0.6;
 
+/** How far a title in the top row shrinks before it is cut short. */
+const ROW_TITLE_MIN_FONT_SCALE = 0.6;
+
 /**
  * Shared screen shell: safe-area, themed background, the Range Card header
  * and the content area. Screens should render only their unique content
  * inside.
  *
- * The header is the same on every screen, three lines over a 2px rule: the
- * BRASSCOUNT wordmark (or a back link on a pushed screen) with one text
- * action opposite it, the stencil title, then the subtitle. It stays put
- * above scrolling content. Its height is a minimum, so a large system font
+ * The header is three lines over a 2px rule: the BRASSCOUNT wordmark (or a
+ * back link on a pushed screen) with one text action opposite it, the
+ * stencil title, then the subtitle. With `wordmark` off and no back link it
+ * is two: the title takes the wordmark's place beside the action. It stays
+ * put above scrolling content. Its height is a minimum, so a large system font
  * grows it instead of clipping. The back link and action are set in
  * capitals but announced as written, so TalkBack reads words rather than
  * spelling letters.
@@ -103,6 +113,7 @@ const createStyles = (theme: Theme) =>
       borderBottomWidth: theme.sizes.border,
       borderBottomColor: theme.colors.outline,
     },
+    headerCompact: { minHeight: theme.sizes.headerCompactMin },
     topRow: {
       minHeight: theme.sizes.touchTarget,
       flexDirection: 'row',
@@ -111,6 +122,7 @@ const createStyles = (theme: Theme) =>
       gap: theme.spacing.md,
     },
     wordmark: { flexShrink: 1 },
+    rowTitle: { flex: 1, minWidth: 0 },
     back: {
       minHeight: theme.sizes.touchTarget,
       flexDirection: 'row',
@@ -146,24 +158,57 @@ const createStyles = (theme: Theme) =>
 
 type HeaderProps = Pick<
   ScreenProps,
-  'title' | 'subtitle' | 'action' | 'actionDisabled' | 'onBack' | 'backLabel'
+  | 'title'
+  | 'subtitle'
+  | 'action'
+  | 'actionDisabled'
+  | 'wordmark'
+  | 'onBack'
+  | 'backLabel'
 >;
+
+/** The title in the top row; with none, a spacer keeps the action right. */
+const RowTitle = ({ title }: Pick<ScreenProps, 'title'>) => {
+  const styles = useThemedStyles(createStyles);
+
+  return title ? (
+    <Typography
+      variant="stencilTitle"
+      accessibilityRole="header"
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={ROW_TITLE_MIN_FONT_SCALE}
+      style={styles.rowTitle}
+    >
+      {title}
+    </Typography>
+  ) : (
+    <View style={styles.rowTitle} />
+  );
+};
 
 const Header = ({
   title,
   subtitle,
   action,
   actionDisabled = false,
+  wordmark = true,
   onBack,
   backLabel = DEFAULT_BACK_LABEL,
 }: HeaderProps) => {
   const styles = useThemedStyles(createStyles);
   const { sizes } = useTheme();
+  const titleInRow = !onBack && !wordmark;
 
   return (
-    <View style={styles.header} testID="screen-header">
+    <View
+      style={[styles.header, titleInRow && styles.headerCompact]}
+      testID="screen-header"
+    >
       <View style={styles.topRow}>
-        {onBack ? (
+        {titleInRow ? (
+          <RowTitle title={title} />
+        ) : onBack ? (
           <TouchableOpacity
             onPress={onBack}
             accessibilityRole="button"
@@ -220,7 +265,7 @@ const Header = ({
         ) : null}
       </View>
 
-      {title ? (
+      {title && !titleInRow ? (
         <Typography
           variant="stencilTitle"
           accessibilityRole="header"
@@ -243,6 +288,7 @@ export const Screen = ({
   subtitle,
   action,
   actionDisabled,
+  wordmark,
   onBack,
   backLabel,
   children,
@@ -264,6 +310,7 @@ export const Screen = ({
         subtitle={subtitle}
         action={action}
         actionDisabled={actionDisabled}
+        wordmark={wordmark}
         onBack={onBack}
         backLabel={backLabel}
       />

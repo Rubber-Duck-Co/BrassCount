@@ -469,6 +469,7 @@ export const TimerScreen = () => {
   return (
     <Screen
       title="Timer"
+      wordmark={false}
       subtitle={
         failureText ??
         (noDrill ? 'Create a drill to start' : phaseMessage(phase, result))

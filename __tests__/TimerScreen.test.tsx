@@ -564,6 +564,14 @@ describe('TimerScreen', () => {
       expect(has(tree, 'btn-reset')).toBe(false);
     });
 
+    it('leads its header with the title, without the BRASSCOUNT wordmark', async () => {
+      const { tree } = await renderScreen();
+
+      const header = textsOf(tree, 'screen-header');
+      expect(header).not.toContain('BRASSCOUNT');
+      expect(header[0]).toBe('Timer');
+    });
+
     it('shows the drill in the drill box, ready to be changed', async () => {
       const { tree } = await renderScreen();
 
