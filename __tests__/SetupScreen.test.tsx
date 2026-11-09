@@ -291,6 +291,14 @@ describe('SetupScreen', () => {
       expect(header).toContain('Shooter, calibration and settings');
     });
 
+    it('leads its header with the title, without the BRASSCOUNT wordmark', async () => {
+      const { tree } = await renderScreen();
+
+      const header = textsUnder(tree, 'screen-header');
+      expect(header).not.toContain('BRASSCOUNT');
+      expect(header[0]).toBe('Setup');
+    });
+
     it('is a tab root: no back link and no header action', async () => {
       const { tree } = await renderScreen();
 
