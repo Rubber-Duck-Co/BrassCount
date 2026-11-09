@@ -599,6 +599,7 @@ describe('RunComparisonScreen', () => {
 
       expect(textsOf(tree, 'btn-back')).toContain('BILL DRILL');
       expect(spokenOf(tree, 'btn-back')).toBe('Back to Bill Drill');
+      expect(textsOf(tree, 'screen-header')).not.toContain('BRASSCOUNT');
     });
 
     it('shows the name it was opened with until the drill has been read', async () => {

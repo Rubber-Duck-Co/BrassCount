@@ -316,6 +316,7 @@ export const HistoryScreen = () => {
     <Screen
       title="Log"
       subtitle="Pick a drill to see previous runs"
+      wordmark={false}
       contentStyle={styles.screenContent}
       testID="screen-history"
     >
