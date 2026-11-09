@@ -31,6 +31,7 @@ export const SetupScreen = () => {
     <Screen
       title="Setup"
       subtitle="Shooter, calibration and settings"
+      wordmark={false}
       scrollable
       testID="screen-setup"
     >
