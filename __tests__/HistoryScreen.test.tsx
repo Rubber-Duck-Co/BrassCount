@@ -429,6 +429,14 @@ describe('HistoryScreen', () => {
         expect.arrayContaining(['Log', 'Pick a drill to see previous runs']),
       );
     });
+
+    it('leads its header with the title, without the BRASSCOUNT wordmark', async () => {
+      const { tree } = await renderScreen();
+
+      const header = textsOf(tree, 'screen-header');
+      expect(header).not.toContain('BRASSCOUNT');
+      expect(header[0]).toBe('Log');
+    });
   });
 
   describe('the counters', () => {
