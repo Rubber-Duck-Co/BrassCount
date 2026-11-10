@@ -9,9 +9,19 @@
 
 /**
  * Every Appearance choice, in the order a picker lists them. `system`
- * follows the device's light / dark setting; the other two pin the theme.
+ * follows the device's light / dark setting; the others pin a theme.
+ * `field` (olive drab and brass) and `night` (black and amber, for low
+ * light) are dark schemes of their own. A new value also goes in the
+ * native mirror's list (`AppearanceMode.kt`), or it is never stored there
+ * and a cold start follows the device.
  */
-export const APPEARANCE_PREFERENCES = ['system', 'light', 'dark'] as const;
+export const APPEARANCE_PREFERENCES = [
+  'system',
+  'light',
+  'dark',
+  'field',
+  'night',
+] as const;
 
 export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 

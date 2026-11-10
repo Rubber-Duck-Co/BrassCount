@@ -3,15 +3,18 @@ import path from 'path';
 
 import {
   darkTheme,
+  fieldTheme,
   fontFamilies,
   lightTheme,
+  nightTheme,
   radius,
-  resolveThemeMode,
+  resolveThemeScheme,
   sizes,
   spacing,
   typography,
   type SemanticColors,
   type Theme,
+  type ThemeScheme,
 } from '../src/theme/theme';
 
 const FONTS_DIR = path.join(
@@ -40,7 +43,7 @@ const contrast = (a: string, b: string): number => {
   return (light + 0.05) / (dark + 0.05);
 };
 
-const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
+const SPEC: Record<ThemeScheme, Partial<SemanticColors>> = {
   light: {
     background: '#ECE6D4',
     surface: '#F5F1E4',
@@ -72,22 +75,81 @@ const SPEC: Record<'light' | 'dark', Partial<SemanticColors>> = {
     meterTrack: '#35342E',
     overlay: 'rgba(0, 0, 0, 0.6)',
   },
+  field: {
+    background: '#1C2017',
+    surface: '#262B20',
+    textPrimary: '#ECE7D6',
+    outline: '#7E8466',
+    borderStrong: '#7E8466',
+    inverse: '#ECE7D6',
+    textOnInverse: '#1C2017',
+    textSecondary: '#B3AF98',
+    border: '#3A4130',
+    primary: '#CFA55A',
+    primaryBorder: '#CFA55A',
+    warning: '#CFA55A',
+    textOnPrimary: '#1C2017',
+    textOnWarning: '#1C2017',
+    success: '#ECE7D6',
+    danger: '#ECE7D6',
+    disabled: '#646A50',
+    meterTrack: '#313828',
+    overlay: 'rgba(0, 0, 0, 0.6)',
+  },
+  night: {
+    background: '#0A0A0A',
+    surface: '#151515',
+    textPrimary: '#EDE6D6',
+    outline: '#6E6A63',
+    borderStrong: '#6E6A63',
+    inverse: '#EDE6D6',
+    textOnInverse: '#0A0A0A',
+    textSecondary: '#999488',
+    border: '#2A2A2A',
+    primary: '#FFB547',
+    primaryBorder: '#FFB547',
+    warning: '#FFB547',
+    textOnPrimary: '#0A0A0A',
+    textOnWarning: '#0A0A0A',
+    success: '#EDE6D6',
+    danger: '#EDE6D6',
+    disabled: '#5A574F',
+    meterTrack: '#2A2A2A',
+    overlay: 'rgba(0, 0, 0, 0.72)',
+  },
 };
 
-const themesByMode: [string, Theme][] = [
+const themesByMode: [ThemeScheme, Theme][] = [
   ['light', lightTheme],
   ['dark', darkTheme],
+  ['field', fieldTheme],
+  ['night', nightTheme],
 ];
 
 describe('Range Card palettes', () => {
-  it('gives light and dark identical colour keys', () => {
-    expect(Object.keys(darkTheme.colors).sort()).toEqual(
-      Object.keys(lightTheme.colors).sort(),
-    );
-  });
+  it.each(themesByMode)(
+    'gives %s the same colour keys as light',
+    (_scheme, theme) => {
+      expect(Object.keys(theme.colors).sort()).toEqual(
+        Object.keys(lightTheme.colors).sort(),
+      );
+    },
+  );
 
   it.each(themesByMode)('matches the spec hexes in %s mode', (mode, theme) => {
-    expect(theme.colors).toMatchObject(SPEC[mode as 'light' | 'dark']);
+    expect(theme.colors).toMatchObject(SPEC[mode]);
+  });
+
+  it.each(themesByMode)('names the %s scheme on its theme', (scheme, theme) => {
+    expect(theme.scheme).toBe(scheme);
+  });
+
+  it.each([
+    ['field', fieldTheme],
+    ['night', nightTheme],
+  ] as const)('draws %s as a dark scheme', (_scheme, theme) => {
+    expect(theme.mode).toBe('dark');
+    expect(theme.elevation).toEqual(darkTheme.elevation);
   });
 
   it.each(themesByMode)(
@@ -131,11 +193,11 @@ describe('Range Card palettes', () => {
         .map(([key]) => key)
         .sort();
 
-      // Dark mode outlines the primary button in its own orange.
+      // The dark schemes outline the primary button in its own Signal.
       const expected =
-        mode === 'dark'
-          ? ['primary', 'primaryBorder', 'primaryMuted', 'warning']
-          : ['primary', 'primaryMuted', 'warning'];
+        mode === 'light'
+          ? ['primary', 'primaryMuted', 'warning']
+          : ['primary', 'primaryBorder', 'primaryMuted', 'warning'];
       expect(orangeRoles).toEqual(expected);
     },
   );
@@ -163,7 +225,8 @@ describe('Range Card palettes', () => {
       .map(file => path.join(srcDir, file))
       .filter(file => /\.(ts|tsx)$/.test(file) && file !== themeFile)
       .filter(file =>
-        /#(DDD5C0|35342E)\b/i.test(fs.readFileSync(file, 'utf8')),
+        // Night's track is its Rule grey too, so only Field's is guarded.
+        /#(DDD5C0|35342E|313828)\b/i.test(fs.readFileSync(file, 'utf8')),
       );
     expect(offenders).toEqual([]);
   });
@@ -250,11 +313,18 @@ describe('Range Card tokens', () => {
   });
 });
 
-describe('resolveThemeMode', () => {
+describe('resolveThemeScheme', () => {
   it('follows the device only for the system preference', () => {
-    expect(resolveThemeMode('system', 'dark')).toBe('dark');
-    expect(resolveThemeMode('system', null)).toBe('light');
-    expect(resolveThemeMode('light', 'dark')).toBe('light');
-    expect(resolveThemeMode('dark', 'light')).toBe('dark');
+    expect(resolveThemeScheme('system', 'dark')).toBe('dark');
+    expect(resolveThemeScheme('system', null)).toBe('light');
+    expect(resolveThemeScheme('light', 'dark')).toBe('light');
+    expect(resolveThemeScheme('dark', 'light')).toBe('dark');
+  });
+
+  it('pins Field and Night whatever the device scheme', () => {
+    expect(resolveThemeScheme('field', 'light')).toBe('field');
+    expect(resolveThemeScheme('field', null)).toBe('field');
+    expect(resolveThemeScheme('night', 'light')).toBe('night');
+    expect(resolveThemeScheme('night', 'dark')).toBe('night');
   });
 });

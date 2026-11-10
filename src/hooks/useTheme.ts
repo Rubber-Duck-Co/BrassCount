@@ -2,7 +2,7 @@ import { useContext, useMemo } from 'react';
 
 import { StyleSheet, useColorScheme } from 'react-native';
 
-import { resolveThemeMode, themes, type Theme } from '@/theme/theme';
+import { resolveThemeScheme, themes, type Theme } from '@/theme/theme';
 import { PreferencesContext } from '@store/PreferencesContext';
 
 /**
@@ -13,10 +13,10 @@ import { PreferencesContext } from '@store/PreferencesContext';
  * here — never import the theme module directly.
  */
 export const useTheme = (): Theme => {
-  const scheme = useColorScheme();
+  const systemScheme = useColorScheme();
   const preferences = useContext(PreferencesContext);
   const appearance = preferences?.preferences.appearance ?? 'system';
-  return themes[resolveThemeMode(appearance, scheme)];
+  return themes[resolveThemeScheme(appearance, systemScheme)];
 };
 
 /**

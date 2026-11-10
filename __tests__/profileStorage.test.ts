@@ -104,9 +104,28 @@ describe('profileStorage service', () => {
     });
   });
 
-  it('offers system, light and dark as the appearance choices', () => {
-    expect(APPEARANCE_PREFERENCES).toEqual(['system', 'light', 'dark']);
+  it('offers system, light, dark, field and night as the appearance choices', () => {
+    expect(APPEARANCE_PREFERENCES).toEqual([
+      'system',
+      'light',
+      'dark',
+      'field',
+      'night',
+    ]);
   });
+
+  it.each(['field', 'night'] as const)(
+    'stores and reads back a %s appearance',
+    async appearance => {
+      await writeStored(storedProfile({ appearance }));
+      expect((await loadProfile()).appearance).toBe(appearance);
+
+      const saved = await updateProfile({ appearance }, at(SAVED_AT));
+
+      expect(saved.appearance).toBe(appearance);
+      expect((await loadProfile()).appearance).toBe(appearance);
+    },
+  );
 
   it('offers level and dBFS as the level units, level first', () => {
     expect(LEVEL_UNITS).toEqual(['level', 'dbfs']);

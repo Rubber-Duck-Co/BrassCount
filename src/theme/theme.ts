@@ -21,6 +21,13 @@ import type { AppearancePreference } from '@/types/profile';
  * Signal on light Paper is 4.15:1: fine for large text and marks, not for
  * body text. Orange body text belongs on Card (4.58:1).
  *
+ * Field (olive drab and brass) and Night (black and amber, for low light)
+ * are two more dark schemes from the `…Field` and `…Night` boards. They
+ * take the dark roles: outlines in their own Outline grey, Signal (brass,
+ * amber) for `primary` and `warning` with Paper text on it, and the
+ * primary button outlined in Signal. Every text pair there clears 4.5:1,
+ * Signal on Paper and on Card included. Night's meter track is its Rule.
+ *
  * Never reference these directly from components — always go through the
  * semantic `colors` on the active theme.
  */
@@ -47,9 +54,33 @@ const palette = {
   disabledDark: '#6B675B',
   meterTrackDark: '#35342E',
 
-  /** Behind a sheet: Ink at 55% in light, black at 60% in dark. */
+  paperField: '#1C2017',
+  cardField: '#262B20',
+  inkField: '#ECE7D6',
+  outlineField: '#7E8466',
+  pencilField: '#B3AF98',
+  ruleField: '#3A4130',
+  signalField: '#CFA55A',
+  disabledField: '#646A50',
+  meterTrackField: '#313828',
+
+  paperNight: '#0A0A0A',
+  cardNight: '#151515',
+  inkNight: '#EDE6D6',
+  outlineNight: '#6E6A63',
+  pencilNight: '#999488',
+  ruleNight: '#2A2A2A',
+  signalNight: '#FFB547',
+  disabledNight: '#5A574F',
+  meterTrackNight: '#2A2A2A',
+
+  /**
+   * Behind a sheet: Ink at 55% in light, black at 60% in dark and Field,
+   * black at 72% in Night.
+   */
   scrim: 'rgba(27, 27, 23, 0.55)',
   scrimDark: 'rgba(0, 0, 0, 0.6)',
+  scrimNight: 'rgba(0, 0, 0, 0.72)',
 } as const;
 
 export type Palette = typeof palette;
@@ -396,36 +427,96 @@ const lightColors: SemanticColors = {
   overlay: palette.scrim,
 };
 
-const darkColors: SemanticColors = {
-  background: palette.paperDark,
-  surface: palette.cardDark,
-  surfaceElevated: palette.cardDark,
-  border: palette.ruleDark,
-  borderStrong: palette.outlineDark,
-  outline: palette.outlineDark,
-  inverse: palette.inkDark,
-  textOnInverse: palette.paperDark,
-  textPrimary: palette.inkDark,
-  textSecondary: palette.pencilDark,
-  textTertiary: palette.pencilDark,
-  textOnPrimary: palette.paperDark,
-  textOnWarning: palette.paperDark,
-  textOnDanger: palette.paperDark,
-  primary: palette.signalDark,
-  primaryBorder: palette.signalDark,
-  primaryMuted: palette.signalDark,
-  primarySoft: palette.cardDark,
-  disabled: palette.disabledDark,
-  meterTrack: palette.meterTrackDark,
-  success: palette.inkDark,
-  danger: palette.inkDark,
-  warning: palette.signalDark,
-  overlay: palette.scrimDark,
+/** The board colours a dark scheme is drawn from. */
+type DarkBoard = {
+  paper: string;
+  card: string;
+  ink: string;
+  outline: string;
+  pencil: string;
+  rule: string;
+  signal: string;
+  disabled: string;
+  meterTrack: string;
+  scrim: string;
 };
 
-// Theme objects — one shape, two instances. Consumers get everything from
-// `useTheme()`; no need to know whether the app is in light or dark mode.
+/**
+ * Every dark scheme maps its board to the roles the same way: outlines in
+ * the softer Outline grey, the primary button outlined in its own Signal,
+ * and Paper text on every fill.
+ */
+const darkSchemeColors = (board: DarkBoard): SemanticColors => ({
+  background: board.paper,
+  surface: board.card,
+  surfaceElevated: board.card,
+  border: board.rule,
+  borderStrong: board.outline,
+  outline: board.outline,
+  inverse: board.ink,
+  textOnInverse: board.paper,
+  textPrimary: board.ink,
+  textSecondary: board.pencil,
+  textTertiary: board.pencil,
+  textOnPrimary: board.paper,
+  textOnWarning: board.paper,
+  textOnDanger: board.paper,
+  primary: board.signal,
+  primaryBorder: board.signal,
+  primaryMuted: board.signal,
+  primarySoft: board.card,
+  disabled: board.disabled,
+  meterTrack: board.meterTrack,
+  success: board.ink,
+  danger: board.ink,
+  warning: board.signal,
+  overlay: board.scrim,
+});
+
+const darkColors = darkSchemeColors({
+  paper: palette.paperDark,
+  card: palette.cardDark,
+  ink: palette.inkDark,
+  outline: palette.outlineDark,
+  pencil: palette.pencilDark,
+  rule: palette.ruleDark,
+  signal: palette.signalDark,
+  disabled: palette.disabledDark,
+  meterTrack: palette.meterTrackDark,
+  scrim: palette.scrimDark,
+});
+
+const fieldColors = darkSchemeColors({
+  paper: palette.paperField,
+  card: palette.cardField,
+  ink: palette.inkField,
+  outline: palette.outlineField,
+  pencil: palette.pencilField,
+  rule: palette.ruleField,
+  signal: palette.signalField,
+  disabled: palette.disabledField,
+  meterTrack: palette.meterTrackField,
+  scrim: palette.scrimDark,
+});
+
+const nightColors = darkSchemeColors({
+  paper: palette.paperNight,
+  card: palette.cardNight,
+  ink: palette.inkNight,
+  outline: palette.outlineNight,
+  pencil: palette.pencilNight,
+  rule: palette.ruleNight,
+  signal: palette.signalNight,
+  disabled: palette.disabledNight,
+  meterTrack: palette.meterTrackNight,
+  scrim: palette.scrimNight,
+});
+
+/** Whether a scheme is light or dark: React Navigation and elevation key off it. */
 export type ThemeMode = 'light' | 'dark';
+
+/** Which colour scheme a theme draws: one per pinned Appearance choice. */
+export type ThemeScheme = 'light' | 'dark' | 'field' | 'night';
 
 export type Elevation = Pick<
   ViewStyle,
@@ -464,6 +555,7 @@ const buildElevation = (mode: ThemeMode) => {
 export type Elevations = ReturnType<typeof buildElevation>;
 
 export type Theme = {
+  scheme: ThemeScheme;
   mode: ThemeMode;
   colors: SemanticColors;
   spacing: Spacing;
@@ -474,7 +566,10 @@ export type Theme = {
   elevation: Elevations;
 };
 
+// Theme objects — one shape, one instance per scheme. Consumers get
+// everything from `useTheme()`; no need to know which scheme is in use.
 export const lightTheme: Theme = {
+  scheme: 'light',
   mode: 'light',
   colors: lightColors,
   spacing,
@@ -486,6 +581,7 @@ export const lightTheme: Theme = {
 };
 
 export const darkTheme: Theme = {
+  scheme: 'dark',
   mode: 'dark',
   colors: darkColors,
   spacing,
@@ -496,17 +592,35 @@ export const darkTheme: Theme = {
   elevation: buildElevation('dark'),
 };
 
-export const themes = { light: lightTheme, dark: darkTheme } as const;
+export const fieldTheme: Theme = {
+  ...darkTheme,
+  scheme: 'field',
+  colors: fieldColors,
+};
+
+export const nightTheme: Theme = {
+  ...darkTheme,
+  scheme: 'night',
+  colors: nightColors,
+};
+
+export const themes = {
+  light: lightTheme,
+  dark: darkTheme,
+  field: fieldTheme,
+  night: nightTheme,
+} as const satisfies Record<ThemeScheme, Theme>;
 
 /**
- * Which mode the app draws in for an Appearance preference. `system`
+ * Which scheme the app draws in for an Appearance preference. `system`
  * follows the device's color scheme, and a device that reports none
- * (`null`, or `unspecified` on some Android builds) gets light.
+ * (`null`, or `unspecified` on some Android builds) gets light. Every
+ * other preference pins its own scheme.
  */
-export const resolveThemeMode = (
+export const resolveThemeScheme = (
   preference: AppearancePreference,
   systemScheme: string | null | undefined,
-): ThemeMode => {
+): ThemeScheme => {
   if (preference !== 'system') {
     return preference;
   }

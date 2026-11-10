@@ -77,6 +77,7 @@ const Elsewhere = () => null;
 const PreferencesProbe = () => (
   <>
     <Text testID="text-theme-mode">{useTheme().mode}</Text>
+    <Text testID="text-theme-scheme">{useTheme().scheme}</Text>
     <Text testID="text-level-unit">{useLevelUnit().levelUnit}</Text>
   </>
 );
@@ -1319,6 +1320,44 @@ describe('SetupScreen', () => {
       expect(byTestId(tree, 'opt-appearance-dark')).toHaveLength(0);
       expect((await loadProfile()).appearance).toBe('dark');
     });
+
+    it('lists Field and Night after the light and dark choices', async () => {
+      const { tree } = await renderScreen();
+
+      await press(tree, 'row-appearance');
+
+      const options = ['system', 'light', 'dark', 'field', 'night'];
+      options.forEach(preference => {
+        expect(byTestId(tree, `opt-appearance-${preference}`)).not.toHaveLength(
+          0,
+        );
+      });
+      expect(labelOf(tree, 'opt-appearance-field')).toContain(
+        'Olive drab and brass',
+      );
+      expect(labelOf(tree, 'opt-appearance-night')).toContain(
+        'Black and amber, for low light',
+      );
+    });
+
+    it.each([
+      ['field', 'Field'],
+      ['night', 'Night'],
+    ] as const)(
+      'draws the %s scheme as a dark theme and stores it',
+      async (preference, shown) => {
+        const { tree } = await renderScreen();
+
+        await press(tree, 'row-appearance');
+        await press(tree, `opt-appearance-${preference}`);
+
+        expect(textOf(tree, 'text-theme-scheme')).toBe(preference);
+        expect(textOf(tree, 'text-theme-mode')).toBe('dark');
+        expect(valueOf(tree, 'row-appearance')).toBe(shown);
+        expect(labelOf(tree, 'row-appearance')).toBe(`Appearance, ${shown}`);
+        expect((await loadProfile()).appearance).toBe(preference);
+      },
+    );
 
     it('follows the device again when System is chosen', async () => {
       await updateProfile({ appearance: 'dark' });
