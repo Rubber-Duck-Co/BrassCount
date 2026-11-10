@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Base application theme. -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
@@ -6,6 +6,10 @@
         <!-- Painted before the first frame; follows the night mode MainActivity applies. -->
         <item name="android:windowBackground">@color/window_background</item>
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- No system scrim over 3-button navigation: the tab bar, or a Modal's sheet, paints the
+             theme under it (see appearance/SystemBars.kt). A Modal's dialog theme builds on this
+             one, so React Native leaves the scrim off for its windows too. -->
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
     </style>
 
 </resources>
