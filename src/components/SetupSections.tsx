@@ -35,6 +35,8 @@ const APPEARANCE_VALUE: Record<AppearancePreference, string> = {
   system: 'System',
   light: 'Light',
   dark: 'Dark',
+  field: 'Field',
+  night: 'Night',
 };
 
 /** The Appearance row as a screen reader says it. */
@@ -42,6 +44,8 @@ const APPEARANCE_SPOKEN: Record<AppearancePreference, string> = {
   system: 'follows your device setting',
   light: 'Light',
   dark: 'Dark',
+  field: 'Field',
+  night: 'Night',
 };
 
 const VOLUME_SAVE_ERROR = 'Could not save the beep volume. Try again.';

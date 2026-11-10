@@ -11,6 +11,8 @@ const APPEARANCE_COPY: Record<AppearancePreference, OptionCopy> = {
   system: { label: 'System', description: 'Follows your device setting' },
   light: { label: 'Light', description: 'Always use the light theme' },
   dark: { label: 'Dark', description: 'Always use the dark theme' },
+  field: { label: 'Field', description: 'Olive drab and brass' },
+  night: { label: 'Night', description: 'Black and amber, for low light' },
 };
 
 const APPEARANCE_OPTIONS = APPEARANCE_PREFERENCES.map(value => ({
@@ -28,7 +30,8 @@ type AppearanceSheetProps = {
 };
 
 /**
- * Bottom sheet for the Appearance preference: System, Light or Dark.
+ * Bottom sheet for the Appearance preference: System, Light, Dark, Field
+ * or Night.
  * Choosing one calls `onSelect`; closing the sheet is left to the caller,
  * through `visible`.
  */
