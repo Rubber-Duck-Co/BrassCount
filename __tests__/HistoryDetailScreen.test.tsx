@@ -1281,6 +1281,13 @@ describe('HistoryDetailScreen', () => {
       ).toBe('Back to Log');
     });
 
+    it('puts the back link where the BRASSCOUNT wordmark was', async () => {
+      const drill = await seedDrill('Bill Drill');
+      const { tree } = await renderScreen(drill);
+
+      expect(textsOf(tree, 'screen-header')).not.toContain('BRASSCOUNT');
+    });
+
     it('goes back when the back link is pressed', async () => {
       const drill = await seedDrill('Bill Drill');
       const { tree, goTo, currentRoute } = await renderScreen(drill);

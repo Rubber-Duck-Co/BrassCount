@@ -93,6 +93,20 @@ const press = async (tree: ReactTestRenderer, testID: string) => {
   await settle();
 };
 
+/**
+ * Start a new drill from the Drills tab. Nothing is saved here, so it is
+ * the empty state's New drill that is pressed.
+ */
+const openNewDrill = async (tree: ReactTestRenderer) => {
+  await press(tree, 'tab-Drills');
+  await act(async () => {
+    byTestId(tree, 'state-drills-empty')[0]
+      .findAllByProps({ accessibilityRole: 'button' })[0]
+      .props.onPress();
+  });
+  await settle();
+};
+
 /** The tab bar's buttons, left to right, by what a screen reader calls them. */
 const tabLabels = (tree: ReactTestRenderer): string[] =>
   tree.root
@@ -161,8 +175,7 @@ describe('navigation', () => {
     it('keeps it on the drill editor, with Drills selected', async () => {
       const { tree, currentRoute } = await renderTabs();
 
-      await press(tree, 'tab-Drills');
-      await press(tree, 'btn-create-drill');
+      await openNewDrill(tree);
 
       expect(currentRoute()).toBe('SequenceEditor');
       expect(isSelected(tree, 'Drills')).toBe(true);
@@ -197,8 +210,7 @@ describe('navigation', () => {
   describe('an unsaved drill', () => {
     it('survives switching to another tab and back', async () => {
       const { tree, currentRoute } = await renderTabs();
-      await press(tree, 'tab-Drills');
-      await press(tree, 'btn-create-drill');
+      await openNewDrill(tree);
       typeName(tree, 'ZZ Draft');
 
       await press(tree, 'tab-Timer');
@@ -210,8 +222,7 @@ describe('navigation', () => {
 
     it('survives pressing the Drills tab while the editor is open', async () => {
       const { tree, currentRoute, stackIn } = await renderTabs();
-      await press(tree, 'tab-Drills');
-      await press(tree, 'btn-create-drill');
+      await openNewDrill(tree);
       typeName(tree, 'ZZ Draft');
 
       await press(tree, 'tab-Drills');
@@ -242,8 +253,7 @@ describe('navigation', () => {
       // Create is offered on the Timer only while no drill is saved, so
       // the only editor it can find open is a new drill's.
       const { tree, currentRoute, stackIn } = await renderTabs();
-      await press(tree, 'tab-Drills');
-      await press(tree, 'btn-create-drill');
+      await openNewDrill(tree);
       typeName(tree, 'ZZ Draft');
       await press(tree, 'tab-Timer');
 

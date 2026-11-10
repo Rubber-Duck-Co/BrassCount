@@ -28,6 +28,7 @@ import { Button } from '@components/Button';
 import { Card } from '@components/Card';
 import { ConfirmSheet } from '@components/ConfirmSheet';
 import { EmptyState } from '@components/EmptyState';
+import { Icon } from '@components/Icon';
 import { RefreshFailedNotice } from '@components/RefreshFailedNotice';
 import { Screen } from '@components/Screen';
 import { SectionHeader } from '@components/SectionHeader';
@@ -35,7 +36,7 @@ import { SwipeableRow } from '@components/SwipeableRow';
 import { Typography } from '@components/Typography';
 import { useAnnounce } from '@hooks/useAnnounce';
 import { useDrills } from '@hooks/useDrills';
-import { useThemedStyles } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import { describeDrill } from '@utils/drill';
 
 /** The Drills tab's list, which also loads a drill onto the Timer tab. */
@@ -53,6 +54,8 @@ const createStyles = (theme: Theme) =>
     list: { flex: 1 },
     listContent: { paddingBottom: theme.spacing.gutter },
     listHeader: { gap: theme.spacing.gutter },
+    // The New drill button, a gutter under the last row.
+    listFooter: { paddingTop: theme.spacing.gutter },
     // The rows draw the ruled box between them: Ink down both sides, a 2px
     // rule above the first and below the last, 1px Rule lines between.
     rowFrame: {
@@ -266,8 +269,9 @@ const keyOfDrill = (drill: Drill): string => drill.id;
 /**
  * Library of saved drills, read from `DrillStorageService` — the same
  * drills the shot timer runs. Each row opens the drill in the editor, and
- * its Load button switches to the Timer with that drill on it; the
- * header's + New starts a new one.
+ * its Load button switches to the Timer with that drill on it; the New
+ * drill button under the list starts a new one. With no drill saved, the
+ * empty state's own New drill takes its place.
  *
  * A drill is deleted by swiping its row left for the Delete action, then
  * confirming in a sheet. The runs recorded with it are deleted too, and the
@@ -275,6 +279,7 @@ const keyOfDrill = (drill: Drill): string => drill.id;
  */
 export const DrillsScreen = () => {
   const styles = useThemedStyles(createStyles);
+  const { sizes } = useTheme();
   const navigation = useNavigation<Nav>();
   const { state, reload, deleteDrill } = useDrills();
   const drills = state.status === 'ready' ? state.drills : NO_DRILLS;
@@ -381,12 +386,7 @@ export const DrillsScreen = () => {
     <Screen
       title="Drills"
       subtitle="Your library of runnable drills"
-      action={{
-        label: '+ New',
-        accessibilityLabel: 'New drill',
-        onPress: createDrill,
-        testID: 'btn-create-drill',
-      }}
+      wordmark={false}
       contentStyle={styles.screenContent}
       testID="screen-drills"
     >
@@ -419,6 +419,23 @@ export const DrillsScreen = () => {
             onRetry={reload}
             onCreate={createDrill}
           />
+        }
+        ListFooterComponent={
+          // The empty state has a New drill of its own: one is enough.
+          state.status === 'ready' && drills.length === 0 ? null : (
+            <View style={styles.listFooter}>
+              <Button
+                label="New drill"
+                variant="primary"
+                size="main"
+                leading={
+                  <Icon name="plus" size={sizes.iconMd} color="textOnPrimary" />
+                }
+                onPress={createDrill}
+                testID="btn-create-drill"
+              />
+            </View>
+          )
         }
         style={styles.list}
         contentContainerStyle={styles.listContent}

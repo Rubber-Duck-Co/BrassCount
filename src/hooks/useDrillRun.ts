@@ -26,7 +26,8 @@ import { BEEP_VOLUME_GAIN } from '@utils/startSettings';
  * Where a run is. `arming`: the microphone is being opened. `waiting`: the
  * random delay before the beep. `running`: the beep has been requested and
  * steps are being listened for. `finished`: the run ended, complete or not,
- * and its times are on show.
+ * with at least one step heard, and its times are on show. A run that ends
+ * with nothing heard goes back to `idle` instead.
  */
 export type DrillRunPhase =
   'idle' | 'arming' | 'waiting' | 'running' | 'finished';
@@ -51,7 +52,7 @@ export type UseDrillRunResult = {
   phase: DrillRunPhase;
   /** How each step heard so far went, in the order they were heard. */
   results: readonly StepResult[];
-  /** The run as it ended. `null` until it has. */
+  /** The run as it ended. `null` until it has, or when nothing was heard. */
   result: RunResult | null;
   /**
    * Why the last run did not start, or stopped. A refusal for want of
@@ -64,7 +65,7 @@ export type UseDrillRunResult = {
   start: (steps: readonly DrillStep[]) => void;
   /**
    * Before the beep: cancel the start. During the run: end it early and
-   * keep what was heard.
+   * keep what was heard, or go back to idle when nothing was.
    */
   stop: () => void;
   /** Drop the run and everything it showed. */
@@ -290,6 +291,16 @@ export const useDrillRun = (): UseDrillRunResult => {
       runIdRef.current += 1;
       abortRef.current = null;
       runRef.current = null;
+      if (ended.results.length === 0) {
+        // Nothing was heard, so there is nothing to show or save: the timer
+        // is ready again, as if the run never began. A failure set with it
+        // stays, so the shooter is still told why the run ended.
+        zeroAtRef.current = null;
+        setResult(null);
+        setResults([]);
+        goTo('idle');
+        return;
+      }
       setResult(ended);
       setResults(ended.results);
       goTo('finished');
