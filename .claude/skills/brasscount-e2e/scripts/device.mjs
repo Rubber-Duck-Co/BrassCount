@@ -39,7 +39,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const APP_ID = 'com.brasscount.app';
+const APP_ID = 'com.rubberduckco.brasscount';
 const AVD = process.env.BRASSCOUNT_AVD || 'Medium_Phone';
 const SDK = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
 const STATE_DIR = join(tmpdir(), 'brasscount-e2e');
@@ -70,8 +70,8 @@ const COLD_START_SOFT_EXCEPTION =
 
 // The crash buffer also holds other processes' crashes (the emulator's Bluetooth
 // service, Chrome). Lines are grouped by their logcat PID and a group is kept only
-// when one of its lines names the app: "Process: com.brasscount.app" for a Java
-// crash, ">>> com.brasscount.app <<<" in a native tombstone.
+// when one of its lines names the app: "Process: com.rubberduckco.brasscount" for a Java
+// crash, ">>> com.rubberduckco.brasscount <<<" in a native tombstone.
 function appCrashLines(lines) {
   const pidOf = l => l.match(/^\S+\s+\S+\s+(\d+)\s+\d+\s/)?.[1];
   const appPids = new Set(

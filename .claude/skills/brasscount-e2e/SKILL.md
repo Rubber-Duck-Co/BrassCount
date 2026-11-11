@@ -111,7 +111,7 @@ Do every step, in this order, even when testing stopped early.
 5. Check the baseline on screen: Drills count, History Runs / Drills and Profile counters and the profile fields all match what you wrote down. No `ZZE2E` drill is listed.
 6. `$P cleanup off`, then `$P status` must say no patched files and no e2e markers. `git status --porcelain` must match the preflight snapshot exactly. If it does not, fix that before anything else; leaving test code in the user's tree is the worst outcome of this skill.
 7. Relaunch once (`$D stop-app`, `$D launch`, wait until the Timer shows) while Metro serves the clean bundle. The device caches the last dev bundle it loaded, and until it does this the cached one still imports `e2eCleanup`, so the next launch without Metro, or with the user's own Metro on another branch, fails on the missing file.
-8. `$D synth off` is unnecessary (the installed build no longer reads it), but remove the file anyway: `adb shell run-as com.brasscount.app rm -f files/e2e-synth.txt`.
+8. `$D synth off` is unnecessary (the installed build no longer reads it), but remove the file anyway: `adb shell run-as com.rubberduckco.brasscount rm -f files/e2e-synth.txt`.
 9. Stop the Metro you started, if you started one, and only after step 7. Find it by its port (`netstat -ano | grep :8081`), not by its background task, which may already have ended while node kept running; check the PID's start time with `ps -W` and never stop the user's.
 10. `$D emulator stop`. It shuts the emulator down gracefully if this run booted it, and leaves an emulator the user already had running alone.
 

@@ -69,9 +69,26 @@ react {
 }
 
 /**
- * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
+ * Run R8 on release builds to shrink and obfuscate the Java bytecode. Keep
+ * rules for anything reached by reflection go in proguard-rules.pro.
  */
-def enableProguardInReleaseBuilds = false
+def enableProguardInReleaseBuilds = true
+
+/**
+ * Upload key for Play releases. The four values come from Gradle properties
+ * (~/.gradle/gradle.properties locally; CI passes them as ORG_GRADLE_PROJECT_*
+ * environment variables from the GitHub environment's secrets) and are never
+ * committed. Without all four, release builds fall back to the debug key so a
+ * local `assembleRelease` still works, but `bundleRelease` refuses to run:
+ * Play rejects a bundle signed with the debug certificate.
+ */
+def uploadKeyProperties = [
+    'BRASSCOUNT_UPLOAD_STORE_FILE',
+    'BRASSCOUNT_UPLOAD_STORE_PASSWORD',
+    'BRASSCOUNT_UPLOAD_KEY_ALIAS',
+    'BRASSCOUNT_UPLOAD_KEY_PASSWORD',
+]
+def hasUploadKey = uploadKeyProperties.every { !(findProperty(it) ?: '').toString().isEmpty() }
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -91,9 +108,11 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
+    // The Kotlin package; it does not have to match applicationId.
     namespace "com.brasscount.app"
     defaultConfig {
-        applicationId "com.brasscount.app"
+        // The app's identity on Google Play and on devices. Permanent once published.
+        applicationId "com.rubberduckco.brasscount"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode appVersionCode
@@ -106,15 +125,25 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (hasUploadKey) {
+            release {
+                storeFile file(findProperty('BRASSCOUNT_UPLOAD_STORE_FILE'))
+                storePassword findProperty('BRASSCOUNT_UPLOAD_STORE_PASSWORD')
+                keyAlias findProperty('BRASSCOUNT_UPLOAD_KEY_ALIAS')
+                keyPassword findProperty('BRASSCOUNT_UPLOAD_KEY_PASSWORD')
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            signingConfig hasUploadKey ? signingConfigs.release : signingConfigs.debug
+            // Native symbols for the C++ audio code, so Play Console can read its crashes.
+            ndk {
+                debugSymbolLevel 'SYMBOL_TABLE'
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
@@ -133,4 +162,25 @@ dependencies {
 
     // Local JVM unit tests (src/test), run with `gradlew testDebugUnitTest`
     testImplementation("junit:junit:4.13.2")
+}
+
+// Checked once the task graph is known, so it fails at once rather than after the build.
+gradle.taskGraph.whenReady { graph ->
+    if (!hasUploadKey && graph.hasTask("${project.path}:bundleRelease")) {
+        throw new GradleException(
+            "bundleRelease needs the upload key: set ${uploadKeyProperties.join(', ')} " +
+            "as Gradle properties. See docs/RELEASING.md.")
+    }
+    // Only release builds read the keystore, so a stale property cannot break a debug build.
+    def buildsRelease = graph.hasTask("${project.path}:bundleRelease") ||
+        graph.hasTask("${project.path}:assembleRelease")
+    if (hasUploadKey && buildsRelease) {
+        def keystore = new File(findProperty('BRASSCOUNT_UPLOAD_STORE_FILE').toString())
+        // A relative path would resolve against android/app, not where the caller meant.
+        if (!keystore.isAbsolute() || !keystore.isFile()) {
+            throw new GradleException(
+                "BRASSCOUNT_UPLOAD_STORE_FILE must be the absolute path of an existing keystore, " +
+                "but is '${keystore.path}'.")
+        }
+    }
 }

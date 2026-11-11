@@ -12,8 +12,9 @@ paths:
 
 - Release artifacts come from Gradle: `npm run android:release` (APK) and `npm run android:bundle` (AAB for the Play Store).
 - CI builds a debug APK (`assembleDebug`, arm64) on every push and PR; there is no automated release or store-submission pipeline yet.
-- The `release` build type is still signed with the debug keystore (`android/app/build.gradle`). A store release needs a real signing config whose keystore and passwords are never committed; only `android/app/debug.keystore` belongs in the repo.
-- R8 / ProGuard changes go in `android/app/proguard-rules.pro`. Test a release build after adding any library that relies on reflection or serialization.
+- The `release` build type is signed with the upload key when the four `BRASSCOUNT_UPLOAD_*` Gradle properties are set, otherwise with the debug keystore (so a local `assembleRelease` still works); `bundleRelease` fails without them. The keystore and passwords are never committed; only `android/app/debug.keystore` belongs in the repo. See `docs/RELEASING.md`.
+- The Play package name is the `applicationId` (`com.rubberduckco.brasscount`); the Kotlin `namespace` stays `com.brasscount.app`. It cannot change once published.
+- Release builds run R8. Keep rules go in `android/app/proguard-rules.pro`; test a release build on a device after adding any library that relies on reflection or serialization.
 
 ## Versioning
 
