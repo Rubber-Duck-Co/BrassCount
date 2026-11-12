@@ -11,7 +11,7 @@ paths:
 ## Build & Release
 
 - Release artifacts come from Gradle: `npm run android:release` (APK) and `npm run android:bundle` (AAB for the Play Store).
-- CI builds a debug APK (`assembleDebug`, arm64) on every push and PR; there is no automated release or store-submission pipeline yet.
+- CI builds a debug APK (`assembleDebug`, arm64) on every push and PR. Store releases are manual: `release-uat.yml` builds `main` and publishes to the internal track; `release-prod.yml`, run from a `v*` tag, promotes that internal release to production (it uploads nothing). Setup and the steps are in `docs/RELEASING.md`.
 - The `release` build type is signed with the upload key when the four `BRASSCOUNT_UPLOAD_*` Gradle properties are set, otherwise with the debug keystore (so a local `assembleRelease` still works); `bundleRelease` fails without them. The keystore and passwords are never committed; only `android/app/debug.keystore` belongs in the repo. See `docs/RELEASING.md`.
 - The Play package name is the `applicationId` (`com.rubberduckco.brasscount`); the Kotlin `namespace` stays `com.brasscount.app`. It cannot change once published.
 - Release builds run R8. Keep rules go in `android/app/proguard-rules.pro`; test a release build on a device after adding any library that relies on reflection or serialization.

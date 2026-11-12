@@ -8,8 +8,9 @@
  * on every merge and never caps it), so the code only increases across bumps.
  * Play rejects a versionCode above 2,100,000,000, which allows major up to 210.
  *
- * Nothing has been uploaded to Play yet. After the first upload the formula
- * may only change in ways that keep every new code above the published ones.
+ * Play already holds versionCode 320004 (0.32.4), the first upload. The
+ * formula may only change in ways that keep every new code above the
+ * published ones. release-prod.yml repeats this formula and these limits.
  *
  * Anything that is not plain `major.minor.patch`, or a field past its width,
  * fails the build: a guessed version would ship silently.

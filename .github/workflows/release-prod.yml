@@ -1,0 +1,114 @@
+name: Release to PROD (Google Play production)
+
+# Manual, and only from a version tag. Promotes to the Play production track
+# the release that "Release to UAT" already put on the internal track, so what
+# goes to production is exactly what testers got. Nothing is built or
+# uploaded. Run it with the tag selected in the "Use workflow from" box, and
+# limit the PROD environment to tags matching v*.
+#
+# The service account in the PROD environment is the only one allowed to
+# release to production. See docs/RELEASING.md for the setup.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-prod
+  cancel-in-progress: false
+
+env:
+  PACKAGE_NAME: com.rubberduckco.brasscount
+
+jobs:
+  # Runs before anyone is asked to approve, and holds no secrets.
+  verify:
+    name: Check the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version_code: ${{ steps.version.outputs.version_code }}
+      release_name: ${{ steps.version.outputs.release_name }}
+
+    steps:
+      - name: Only release a version tag
+        run: |
+          if [ "$GITHUB_REF_TYPE" != "tag" ] || ! [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Run this workflow from a tag like v1.2.3, not $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the tag is on main and matches VERSION.txt
+        id: version
+        run: |
+          # The tag as it is now, asked of the remote: checkout fetches the
+          # commit this run started from even if the tag has moved since.
+          remote_sha="$(git ls-remote origin "refs/tags/$GITHUB_REF_NAME" "refs/tags/$GITHUB_REF_NAME^{}" | tail -n 1 | cut -f1)"
+          if [ "$remote_sha" != "$GITHUB_SHA" ]; then
+            echo "::error::$GITHUB_REF_NAME now points at '$remote_sha', not $GITHUB_SHA"
+            exit 1
+          fi
+          # Only code that went through the PR gates on main may be released.
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_REF_NAME is not on main"
+            exit 1
+          fi
+          version="$(tr -d '[:space:]' < VERSION.txt)"
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::VERSION.txt says $version but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+          # The same formula and limits as android/app/version.gradle: it is
+          # what Play has, and past a limit two versions share a code.
+          IFS=. read -r major minor patch <<< "$version"
+          if [ $((10#$minor)) -gt 999 ] || [ $((10#$patch)) -gt 9999 ] || [ ${#major} -gt 9 ]; then
+            echo "::error::$version is past the versionCode limits (minor 999, patch 9999)"
+            exit 1
+          fi
+          code=$((10#$major * 10000000 + 10#$minor * 10000 + 10#$patch))
+          if [ "$code" -gt 2100000000 ]; then
+            echo "::error::$version gives versionCode $code, over Play's limit of 2100000000"
+            exit 1
+          fi
+          echo "version_code=$code" >> "$GITHUB_OUTPUT"
+          # Named like UAT's release, which carries the commit.
+          echo "release_name=$version (${GITHUB_SHA::12})" >> "$GITHUB_OUTPUT"
+          echo "Promoting $GITHUB_REF_NAME (versionCode $code) from $GITHUB_SHA"
+
+  promote:
+    name: Promote to PROD
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: PROD
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      # Needs the version to be a completed release on the internal track, so
+      # a build that never reached testers cannot be promoted.
+      - name: Promote the internal release to production
+        env:
+          SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          VERSION_CODE: ${{ needs.verify.outputs.version_code }}
+          RELEASE_NAME: ${{ needs.verify.outputs.release_name }}
+          # The internal release must have been built from this commit.
+          EXPECTED_COMMIT: ${{ github.sha }}
+          # The track UAT publishes to: internal, or alpha if UAT sets PLAY_TRACK.
+          FROM_TRACK: ${{ vars.PLAY_SOURCE_TRACK || 'internal' }}
+          TO_TRACK: production
+          # draft until Play has approved the app for its first release; a
+          # draft is not live until it is rolled out in Play Console.
+          STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
+        run: bash .github/scripts/promote-play-release.sh
