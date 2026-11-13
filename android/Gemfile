@@ -1,0 +1,7 @@
+# fastlane for .github/workflows/release.yml, which uploads and promotes on
+# Google Play. Gemfile.lock pins every gem with its checksum, because these
+# gems run holding the Play service account key; update it deliberately with
+# `bundle lock --update fastlane` and review the diff.
+source 'https://rubygems.org'
+
+gem 'fastlane', '2.241.2'

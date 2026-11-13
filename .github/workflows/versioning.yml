@@ -21,3 +21,42 @@ jobs:
           files: package.json,package-lock.json,VERSION.txt
           create-tag: true
           tag-prefix: 'v'
+
+  # The action tags minor and major bumps only, and has no outputs, so a
+  # release is due when a v* tag points at the bump commit. The release is
+  # dispatched rather than triggered by the tag push because the bump commit
+  # carries [skip ci], which must stay: it is what stops this workflow from
+  # running on its own commit.
+  #
+  # A job of its own so that only this script holds actions: write, not the
+  # tag-pinned actions in `bump`.
+  release:
+    name: Start a release for a minor or major bump
+    needs: bump
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Find the bump commit and start its release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The bump commit is the one on main whose parent is the commit this
+          # run was triggered by. The action's push is rejected if main moved,
+          # so a later merge cannot come between them.
+          bump="$(gh api "repos/$GITHUB_REPOSITORY/commits?sha=main&per_page=50" \
+            --jq ".[] | select(any(.parents[]; .sha == \"$GITHUB_SHA\")) | .sha" | head -n 1)"
+          if [ -z "$bump" ]; then
+            echo "No bump commit follows $GITHUB_SHA, so no release is started."
+            exit 0
+          fi
+          # The tags API gives the commit each tag points at, annotated or not.
+          tag="$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" \
+            --jq ".[] | select(.commit.sha == \"$bump\" and (.name | startswith(\"v\"))) | .name" | head -n 1)"
+          if [ -z "$tag" ]; then
+            echo "The bump commit $bump has no v* tag: a patch bump, so no release is started."
+            exit 0
+          fi
+          echo "Starting the release of $tag ($bump)."
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f sha="$bump"
