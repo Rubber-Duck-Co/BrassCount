@@ -64,7 +64,7 @@ Production is a full release to every user; there is no staged rollout.
   commit, `versioning.yml` starts the release workflow for it.
 - **A patch is released by hand.** Actions → Release (Google Play) → Run
   workflow, on `main`. Leave `sha` empty for the tip of `main`, or give the
-  version-bump commit to release.
+  full 40-character SHA of the version-bump commit to release.
 
 The workflow only accepts a commit that is on `main`, changes `VERSION.txt` (a
 bump commit, the only kind with a version of its own) and is not older than the
@@ -104,8 +104,14 @@ The repository is public, so the logs and artifacts of every run are too.
 - **Prefer environment secrets over repository secrets**, with each
   environment restricted to `main`: a workflow on any other branch then cannot
   read them.
-- **Actions are pinned to commit SHAs** and fastlane to a version. Update them
-  deliberately, reading the release notes, not by moving back to a tag.
+- **Actions are pinned to commit SHAs**, and fastlane and every gem it loads
+  are pinned with checksums by `android/Gemfile.lock`. Update them
+  deliberately, reading the release notes, not by moving back to a tag or
+  loosening the lock: run `bundle lock --update fastlane` in `android/`, then
+  review the diff. The lock lists only the `x86_64-linux` platform the
+  runners use; strip any platform your machine adds before committing it.
+- **No release job restores a cache**, because another workflow could have
+  written it.
 - **The artifact** holds the bundle and the R8 mapping, both of which describe
   public source. The keystore is never part of it, and is deleted from the runner after the build.
 - **If a key ever shows in a log**, deleting the run is not enough: rotate the
@@ -124,5 +130,21 @@ The repository is public, so the logs and artifacts of every run are too.
 - **Do not approve an older waiting run after a newer version has shipped.**
 - **Releasing an older commit is not a rollback.** Play does not serve a lower
   versionCode to someone who has a higher one; ship a new version instead.
-- **Releasing the same version twice fails** at the internal upload, because
-  Play has already seen that versionCode.
+- **One release runs at a time.** A run waiting for approval holds the queue,
+  and GitHub keeps only one run waiting behind it: starting a third cancels
+  the one already queued. Reject or cancel a waiting run you no longer want.
+
+### Finishing a release that stopped part-way
+
+Each Play step is a lane in `android/fastlane/Fastfile` that first asks Play
+whether the build is already on its target track, and skips itself if so. When
+an approval expired, was rejected by mistake, or a job failed, start the
+workflow again with the same `sha`: it rebuilds the bundle (same versionCode),
+skips the upload and any promotion that already happened, and waits for the
+remaining approvals.
+
+This only works while the build is still on the track it is promoted from. Once
+a newer version has replaced it on internal or closed testing, finish the old
+one in Play Console or ship the newer one instead. A draft counts as being on
+its track, so while `PLAY_RELEASE_STATUS` is `draft`, finish drafts in Play
+Console rather than by dispatching again.
