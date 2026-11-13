@@ -1,0 +1,72 @@
+# Google Play lanes for .github/workflows/release.yml.
+#
+# Each lane first asks Play whether the build is already on the target track
+# and does nothing if it is. A release that stopped part-way (an expired or
+# rejected approval, a failed job) is finished by dispatching the workflow
+# again for the same commit: the steps that already happened are skipped.
+#
+# The workflow passes PACKAGE_NAME, RELEASE_STATUS and the Play key
+# (SUPPLY_JSON_KEY_DATA) through the environment. Never add verbose or debug
+# flags to these calls: the repository's logs are public.
+
+skip_docs
+
+default_platform(:android)
+
+platform :android do
+  # Uploads the bundle and its R8 mapping to the internal track.
+  lane :upload_internal do |options|
+    version_code = Integer(options.fetch(:version_code))
+    next if already_on_track?('internal', version_code)
+
+    upload_to_play_store(
+      package_name: ENV.fetch('PACKAGE_NAME'),
+      json_key_data: ENV.fetch('SUPPLY_JSON_KEY_DATA'),
+      track: 'internal',
+      release_status: ENV.fetch('RELEASE_STATUS'),
+      aab: options.fetch(:aab),
+      mapping: options.fetch(:mapping),
+      skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  # Moves the build Play already has from one track to another; nothing is
+  # uploaded. `alpha` is the API's name for the default closed testing track.
+  lane :promote do |options|
+    version_code = Integer(options.fetch(:version_code))
+    to = options.fetch(:to)
+    next if already_on_track?(to, version_code)
+
+    upload_to_play_store(
+      package_name: ENV.fetch('PACKAGE_NAME'),
+      json_key_data: ENV.fetch('SUPPLY_JSON_KEY_DATA'),
+      track: options.fetch(:from),
+      track_promote_to: to,
+      version_code: version_code,
+      track_promote_release_status: ENV.fetch('RELEASE_STATUS'),
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end
+
+# The API returns version codes as strings.
+def already_on_track?(track, version_code)
+  codes = google_play_track_version_codes(
+    package_name: ENV.fetch('PACKAGE_NAME'),
+    json_key_data: ENV.fetch('SUPPLY_JSON_KEY_DATA'),
+    track: track
+  ).map(&:to_i)
+  return false unless codes.include?(version_code)
+
+  UI.important("versionCode #{version_code} is already on #{track}; skipping.")
+  true
+end
