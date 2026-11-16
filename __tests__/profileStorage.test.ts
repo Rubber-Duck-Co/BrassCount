@@ -41,7 +41,7 @@ const at = (timestamp: string = SAVED_AT): ProfileStorageOptions => ({
   getTimestamp: () => timestamp,
 });
 
-const marty: ProfileChanges = { name: 'Marty McFly', handle: '@martymcfly' };
+const duck: ProfileChanges = { name: 'Mr Duck', handle: '@mrduck' };
 
 const readStored = async (): Promise<unknown> => {
   const raw = await AsyncStorage.getItem(PROFILE_KEY);
@@ -161,7 +161,7 @@ describe('profileStorage service', () => {
 
     it('returns the saved profile', async () => {
       const saved = await updateProfile(
-        { ...marty, appearance: 'dark' },
+        { ...duck, appearance: 'dark' },
         at(SAVED_AT),
       );
 
@@ -179,7 +179,7 @@ describe('profileStorage service', () => {
       ['an envelope with no profile', { schemaVersion: 1 }],
       [
         'an envelope whose profile is not an object',
-        { schemaVersion: 1, profile: 'Marty McFly' },
+        { schemaVersion: 1, profile: 'Mr Duck' },
       ],
       ['a list', [storedProfile()]],
       ['a string', 'profile'],
@@ -221,7 +221,7 @@ describe('profileStorage service', () => {
     });
 
     it('drops fields the model does not know', async () => {
-      await writeStored(storedProfile({ email: 'marty@example.com' }));
+      await writeStored(storedProfile({ email: 'duck@example.com' }));
 
       expect(await loadProfile()).toEqual({
         name: 'Stored Name',
@@ -256,7 +256,7 @@ describe('profileStorage service', () => {
         { name: null },
       ],
       ['a handle that is not text', { handle: ['@x'] }, { handle: null }],
-      ['a handle with a space', { handle: '@marty mcfly' }, { handle: null }],
+      ['a handle with a space', { handle: '@mr duck' }, { handle: null }],
       [
         'a handle over the limit',
         { handle: `@${'h'.repeat(MAX_PROFILE_HANDLE_LENGTH + 1)}` },
@@ -315,11 +315,11 @@ describe('profileStorage service', () => {
 
   describe('updating the profile', () => {
     it('creates the profile on the first update', async () => {
-      const saved = await updateProfile(marty, at(SAVED_AT));
+      const saved = await updateProfile(duck, at(SAVED_AT));
 
       expect(saved).toEqual({
-        name: 'Marty McFly',
-        handle: '@martymcfly',
+        name: 'Mr Duck',
+        handle: '@mrduck',
         appearance: 'system',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
@@ -330,14 +330,14 @@ describe('profileStorage service', () => {
     });
 
     it('writes the profile inside a schemaVersion envelope under a versioned key', async () => {
-      const saved = await updateProfile(marty, at(SAVED_AT));
+      const saved = await updateProfile(duck, at(SAVED_AT));
 
       expect(await AsyncStorage.getAllKeys()).toEqual([PROFILE_KEY]);
       expect(await readStored()).toEqual({ schemaVersion: 1, profile: saved });
     });
 
     it('stamps an ISO timestamp by default', async () => {
-      const saved = await updateProfile(marty);
+      const saved = await updateProfile(duck);
 
       expect(saved.updatedAt).not.toBeNull();
       expect(saved.updatedAt).toBe(
@@ -346,16 +346,16 @@ describe('profileStorage service', () => {
     });
 
     it('keeps the fields an update leaves out', async () => {
-      await updateProfile({ ...marty, appearance: 'dark' }, at(SAVED_AT));
+      await updateProfile({ ...duck, appearance: 'dark' }, at(SAVED_AT));
 
       const updated = await updateProfile(
-        { name: 'Doc Brown' },
+        { name: 'Mrs Goose' },
         at(UPDATED_AT),
       );
 
       expect(updated).toEqual({
-        name: 'Doc Brown',
-        handle: '@martymcfly',
+        name: 'Mrs Goose',
+        handle: '@mrduck',
         appearance: 'dark',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
@@ -369,13 +369,13 @@ describe('profileStorage service', () => {
     it.each(APPEARANCE_PREFERENCES)(
       'stores the %s appearance without touching the name or handle',
       async appearance => {
-        await updateProfile({ ...marty, appearance: 'light' }, at(SAVED_AT));
+        await updateProfile({ ...duck, appearance: 'light' }, at(SAVED_AT));
 
         const updated = await updateProfile({ appearance }, at(UPDATED_AT));
 
         expect(updated).toEqual({
-          name: 'Marty McFly',
-          handle: '@martymcfly',
+          name: 'Mr Duck',
+          handle: '@mrduck',
           appearance,
           levelUnit: 'level',
           startDelay: DEFAULT_START_DELAY,
@@ -390,13 +390,13 @@ describe('profileStorage service', () => {
     it.each(LEVEL_UNITS)(
       'stores the %s level unit without touching the other fields',
       async levelUnit => {
-        await updateProfile({ ...marty, appearance: 'dark' }, at(SAVED_AT));
+        await updateProfile({ ...duck, appearance: 'dark' }, at(SAVED_AT));
 
         const updated = await updateProfile({ levelUnit }, at(UPDATED_AT));
 
         expect(updated).toEqual({
-          name: 'Marty McFly',
-          handle: '@martymcfly',
+          name: 'Mr Duck',
+          handle: '@mrduck',
           appearance: 'dark',
           levelUnit,
           startDelay: DEFAULT_START_DELAY,
@@ -436,34 +436,34 @@ describe('profileStorage service', () => {
     });
 
     it('trims the name', async () => {
-      const saved = await updateProfile({ name: '  Marty McFly \n' }, at());
+      const saved = await updateProfile({ name: '  Mr Duck \n' }, at());
 
-      expect(saved.name).toBe('Marty McFly');
+      expect(saved.name).toBe('Mr Duck');
     });
 
     it('puts a name with a line break or a run of spaces on one line', async () => {
-      const saved = await updateProfile({ name: 'Marty\n\tMc   Fly' }, at());
+      const saved = await updateProfile({ name: 'Mr\n\tBig   Duck' }, at());
 
-      expect(saved.name).toBe('Marty Mc Fly');
+      expect(saved.name).toBe('Mr Big Duck');
     });
 
     it.each<[string, string]>([
-      ['with its @', '@martymcfly'],
-      ['without its @', 'martymcfly'],
-      ['with surrounding spaces', '  @martymcfly  '],
+      ['with its @', '@mrduck'],
+      ['without its @', 'mrduck'],
+      ['with surrounding spaces', '  @mrduck  '],
     ])(
       'stores a handle given %s with a single leading @',
       async (_case, handle) => {
         const saved = await updateProfile({ handle }, at());
 
-        expect(saved.handle).toBe('@martymcfly');
+        expect(saved.handle).toBe('@mrduck');
       },
     );
 
     it('keeps the case and the allowed punctuation of a handle', async () => {
-      const saved = await updateProfile({ handle: 'Marty.Mc_Fly-85' }, at());
+      const saved = await updateProfile({ handle: 'Mr.Big_Duck-42' }, at());
 
-      expect(saved.handle).toBe('@Marty.Mc_Fly-85');
+      expect(saved.handle).toBe('@Mr.Big_Duck-42');
     });
 
     it.each<[string, ProfileChanges]>([
@@ -471,7 +471,7 @@ describe('profileStorage service', () => {
       ['an empty string', { name: '', handle: '' }],
       ['whitespace', { name: '   ', handle: '  ' }],
     ])('clears the name and handle when given %s', async (_case, changes) => {
-      await updateProfile({ ...marty, appearance: 'dark' }, at(SAVED_AT));
+      await updateProfile({ ...duck, appearance: 'dark' }, at(SAVED_AT));
 
       const updated = await updateProfile(changes, at(UPDATED_AT));
 
@@ -489,22 +489,22 @@ describe('profileStorage service', () => {
     });
 
     it('clears the handle when given a lone @', async () => {
-      await updateProfile(marty, at(SAVED_AT));
+      await updateProfile(duck, at(SAVED_AT));
 
       const updated = await updateProfile({ handle: '@' }, at(UPDATED_AT));
 
       expect(updated.handle).toBeNull();
-      expect(updated.name).toBe('Marty McFly');
+      expect(updated.name).toBe('Mr Duck');
     });
 
     it('stores only the known fields', async () => {
-      const withExtra = { ...marty, email: 'marty@example.com' };
+      const withExtra = { ...duck, email: 'duck@example.com' };
 
       const saved = await updateProfile(withExtra, at(SAVED_AT));
 
       expect(saved).toEqual({
-        name: 'Marty McFly',
-        handle: '@martymcfly',
+        name: 'Mr Duck',
+        handle: '@mrduck',
         appearance: 'system',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
@@ -516,7 +516,7 @@ describe('profileStorage service', () => {
     });
 
     it('does not mutate the changes it is given', async () => {
-      const changes: ProfileChanges = { name: '  Marty  ', handle: 'marty' };
+      const changes: ProfileChanges = { name: '  Duck  ', handle: 'duck' };
       const snapshot = { ...changes };
 
       await updateProfile(changes, at());
@@ -525,13 +525,13 @@ describe('profileStorage service', () => {
     });
 
     it('still stamps updatedAt when the update changes nothing', async () => {
-      await updateProfile(marty, at(SAVED_AT));
+      await updateProfile(duck, at(SAVED_AT));
 
       const updated = await updateProfile({}, at(UPDATED_AT));
 
       expect(updated).toEqual({
-        name: 'Marty McFly',
-        handle: '@martymcfly',
+        name: 'Mr Duck',
+        handle: '@mrduck',
         appearance: 'system',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
@@ -570,12 +570,12 @@ describe('profileStorage service', () => {
       await writeStored(storedProfile({ appearance: 'sepia' }));
 
       const updated = await updateProfile(
-        { name: 'Doc Brown' },
+        { name: 'Mrs Goose' },
         at(UPDATED_AT),
       );
 
       expect(updated).toEqual({
-        name: 'Doc Brown',
+        name: 'Mrs Goose',
         handle: '@stored',
         appearance: 'system',
         levelUnit: 'dbfs',
@@ -627,12 +627,12 @@ describe('profileStorage service', () => {
         storedProfile({ name: 'n'.repeat(MAX_PROFILE_NAME_LENGTH + 1) }),
       );
 
-      await updateProfile({ name: 'Marty' }, at(UPDATED_AT));
+      await updateProfile({ name: 'Duck' }, at(UPDATED_AT));
 
       expect(await readStored()).toEqual({
         schemaVersion: 1,
         profile: {
-          name: 'Marty',
+          name: 'Duck',
           handle: '@stored',
           appearance: 'dark',
           levelUnit: 'dbfs',
@@ -668,7 +668,7 @@ describe('profileStorage service', () => {
       'rejects a generated timestamp of %p without writing',
       async timestamp => {
         await expectRejection(
-          updateProfile({ name: 'Marty' }, { getTimestamp: () => timestamp }),
+          updateProfile({ name: 'Duck' }, { getTimestamp: () => timestamp }),
           'INVALID_INPUT',
         );
 
@@ -694,8 +694,8 @@ describe('profileStorage service', () => {
 
     it.each<[string, unknown]>([
       ['missing changes', null],
-      ['changes that are not an object', 'Marty'],
-      ['a list of changes', [marty]],
+      ['changes that are not an object', 'Duck'],
+      ['a list of changes', [duck]],
       ['a name that is not text', { name: 42 }],
       [
         'a name over the limit',
@@ -706,9 +706,9 @@ describe('profileStorage service', () => {
         'a handle over the limit',
         { handle: `@${'h'.repeat(MAX_PROFILE_HANDLE_LENGTH + 1)}` },
       ],
-      ['a handle with a space', { handle: '@marty mcfly' }],
-      ['a handle with a second @', { handle: '@@marty' }],
-      ['a handle with an unsupported character', { handle: '@marty!' }],
+      ['a handle with a space', { handle: '@mr duck' }],
+      ['a handle with a second @', { handle: '@@duck' }],
+      ['a handle with an unsupported character', { handle: '@duck!' }],
       ['an appearance that is not a choice', { appearance: 'sepia' }],
       ['a null appearance', { appearance: null }],
       ['a level unit that is not a choice', { levelUnit: 'spl' }],
@@ -747,7 +747,7 @@ describe('profileStorage service', () => {
       'rejects %s and leaves the stored profile alone',
       async (_case, changes) => {
         const saved = await updateProfile(
-          { ...marty, appearance: 'dark' },
+          { ...duck, appearance: 'dark' },
           at(SAVED_AT),
         );
 
@@ -770,7 +770,7 @@ describe('profileStorage service', () => {
     });
 
     it('wraps a write failure and leaves the stored profile alone', async () => {
-      const saved = await updateProfile(marty, at(SAVED_AT));
+      const saved = await updateProfile(duck, at(SAVED_AT));
       const cause = new Error('disk full');
       jest.spyOn(AsyncStorage, 'setItem').mockRejectedValueOnce(cause);
 
@@ -789,7 +789,7 @@ describe('profileStorage service', () => {
         .mockRejectedValueOnce(new Error('unavailable'));
 
       await expectRejection(
-        updateProfile({ name: 'Marty' }, at()),
+        updateProfile({ name: 'Duck' }, at()),
         'STORAGE_FAILURE',
       );
 
@@ -873,7 +873,7 @@ describe('profileStorage service', () => {
       );
 
       const updated = await updateProfile(
-        { appearance: 'dark', name: 'Marty' },
+        { appearance: 'dark', name: 'Duck' },
         at(UPDATED_AT),
       );
 
@@ -883,7 +883,7 @@ describe('profileStorage service', () => {
 
     it('keeps the other fields when the timer settings are changed', async () => {
       await updateProfile(
-        { ...marty, appearance: 'dark', levelUnit: 'dbfs' },
+        { ...duck, appearance: 'dark', levelUnit: 'dbfs' },
         at(SAVED_AT),
       );
 
@@ -893,8 +893,8 @@ describe('profileStorage service', () => {
       );
 
       expect(updated).toEqual({
-        name: 'Marty McFly',
-        handle: '@martymcfly',
+        name: 'Mr Duck',
+        handle: '@mrduck',
         appearance: 'dark',
         levelUnit: 'dbfs',
         startDelay: { minMs: 1500, maxMs: 1500 },
@@ -977,18 +977,18 @@ describe('profileStorage service', () => {
     );
 
     it('keeps the other fields when the sensitivity is changed', async () => {
-      await updateProfile({ ...marty, beepVolume: 'quiet' }, at(SAVED_AT));
+      await updateProfile({ ...duck, beepVolume: 'quiet' }, at(SAVED_AT));
 
       const updated = await updateProfile({ sensitivity: 'high' }, at());
 
-      expect(updated.name).toBe('Marty McFly');
+      expect(updated.name).toBe('Mr Duck');
       expect(updated.beepVolume).toBe('quiet');
     });
 
     it('keeps the sensitivity when something else is changed', async () => {
       await updateProfile({ sensitivity: 'low' }, at(SAVED_AT));
 
-      const updated = await updateProfile({ name: 'Marty' }, at());
+      const updated = await updateProfile({ name: 'Duck' }, at());
 
       expect(updated.sensitivity).toBe('low');
     });
@@ -1056,7 +1056,7 @@ describe('profileStorage service', () => {
 
   describe('clearing the profile', () => {
     it('removes the stored profile so the next load is the default', async () => {
-      await updateProfile({ ...marty, appearance: 'dark' }, at());
+      await updateProfile({ ...duck, appearance: 'dark' }, at());
 
       await clearProfile();
 
@@ -1071,7 +1071,7 @@ describe('profileStorage service', () => {
     it('leaves other namespaces alone', async () => {
       const otherKey = `${STORAGE_ROOT}:drills:v1:keep-me`;
       await AsyncStorage.setItem(otherKey, '{}');
-      await updateProfile(marty, at());
+      await updateProfile(duck, at());
 
       await clearProfile();
 
@@ -1089,17 +1089,17 @@ describe('profileStorage service', () => {
 
   describe('overlapping changes', () => {
     it('applies both of two overlapping updates', async () => {
-      await updateProfile(marty, at(SAVED_AT));
+      await updateProfile(duck, at(SAVED_AT));
 
       const [, last] = await Promise.all([
-        updateProfile({ name: 'Doc Brown' }, at(UPDATED_AT)),
+        updateProfile({ name: 'Mrs Goose' }, at(UPDATED_AT)),
         updateProfile({ appearance: 'dark' }, at(UPDATED_AT)),
       ]);
 
       const stored = await loadProfile();
       expect(stored).toEqual({
-        name: 'Doc Brown',
-        handle: '@martymcfly',
+        name: 'Mrs Goose',
+        handle: '@mrduck',
         appearance: 'dark',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
@@ -1112,14 +1112,14 @@ describe('profileStorage service', () => {
 
     it('applies overlapping updates made before any profile is stored', async () => {
       await Promise.all([
-        updateProfile({ name: 'Marty McFly' }, at()),
-        updateProfile({ handle: 'martymcfly' }, at()),
+        updateProfile({ name: 'Mr Duck' }, at()),
+        updateProfile({ handle: 'mrduck' }, at()),
         updateProfile({ appearance: 'light' }, at()),
       ]);
 
       expect(await loadProfile()).toEqual({
-        name: 'Marty McFly',
-        handle: '@martymcfly',
+        name: 'Mr Duck',
+        handle: '@mrduck',
         appearance: 'light',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,
@@ -1139,15 +1139,15 @@ describe('profileStorage service', () => {
     });
 
     it('starts from the default when an update follows a clear', async () => {
-      await updateProfile({ ...marty, appearance: 'dark' }, at(SAVED_AT));
+      await updateProfile({ ...duck, appearance: 'dark' }, at(SAVED_AT));
 
       const [, updated] = await Promise.all([
         clearProfile(),
-        updateProfile({ name: 'Doc Brown' }, at(UPDATED_AT)),
+        updateProfile({ name: 'Mrs Goose' }, at(UPDATED_AT)),
       ]);
 
       expect(updated).toEqual({
-        name: 'Doc Brown',
+        name: 'Mrs Goose',
         handle: null,
         appearance: 'system',
         levelUnit: 'level',
@@ -1159,10 +1159,10 @@ describe('profileStorage service', () => {
     });
 
     it('does not restore a profile cleared while an update was in flight', async () => {
-      await updateProfile(marty, at(SAVED_AT));
+      await updateProfile(duck, at(SAVED_AT));
 
       await Promise.all([
-        updateProfile({ name: 'Doc Brown' }, at(UPDATED_AT)),
+        updateProfile({ name: 'Mrs Goose' }, at(UPDATED_AT)),
         clearProfile(),
       ]);
 
@@ -1170,7 +1170,7 @@ describe('profileStorage service', () => {
     });
 
     it('keeps applying changes after one of them fails', async () => {
-      await updateProfile(marty, at(SAVED_AT));
+      await updateProfile(duck, at(SAVED_AT));
       jest
         .spyOn(AsyncStorage, 'setItem')
         .mockRejectedValueOnce(new Error('disk full'));
@@ -1187,7 +1187,7 @@ describe('profileStorage service', () => {
     });
 
     it('keeps applying changes after a clear fails', async () => {
-      await updateProfile(marty, at(SAVED_AT));
+      await updateProfile(duck, at(SAVED_AT));
       jest
         .spyOn(AsyncStorage, 'removeItem')
         .mockRejectedValueOnce(new Error('unavailable'));
@@ -1197,8 +1197,8 @@ describe('profileStorage service', () => {
       await failed;
 
       expect(await next).toEqual({
-        name: 'Marty McFly',
-        handle: '@martymcfly',
+        name: 'Mr Duck',
+        handle: '@mrduck',
         appearance: 'dark',
         levelUnit: 'level',
         startDelay: DEFAULT_START_DELAY,

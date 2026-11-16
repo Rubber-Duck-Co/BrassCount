@@ -26,16 +26,16 @@ const initialsOf = (tree: ReactTestRenderer): string | null => {
 
 describe('Avatar', () => {
   it('shows the first letter of the first two words, in capitals', () => {
-    expect(initialsOf(renderAvatar('marty mcfly'))).toBe('MM');
-    expect(initialsOf(renderAvatar('Emmett Lathrop Brown'))).toBe('EL');
+    expect(initialsOf(renderAvatar('mr duck'))).toBe('MD');
+    expect(initialsOf(renderAvatar('Grey Little Goose'))).toBe('GL');
   });
 
   it('shows one initial for a single-word name', () => {
-    expect(initialsOf(renderAvatar('  Biff  '))).toBe('B');
+    expect(initialsOf(renderAvatar('  Swan  '))).toBe('S');
   });
 
   it('keeps an emoji whole when a name starts with one', () => {
-    expect(initialsOf(renderAvatar('🎯 Marty'))).toBe('🎯M');
+    expect(initialsOf(renderAvatar('🎯 Duck'))).toBe('🎯D');
   });
 
   it('shows a person glyph instead of an empty circle for a blank name', () => {
@@ -46,12 +46,11 @@ describe('Avatar', () => {
   });
 
   it('shows no glyph once there is a name', () => {
-    expect(renderAvatar('Marty').root.findAllByType(Icon)).toHaveLength(0);
+    expect(renderAvatar('Duck').root.findAllByType(Icon)).toHaveLength(0);
   });
 
   it('sets the initials in stencil, in the colour drawn on an Ink fill', () => {
-    const initials =
-      renderAvatar('Marty McFly').root.findAllByType(Typography)[0];
+    const initials = renderAvatar('Mr Duck').root.findAllByType(Typography)[0];
 
     expect(initials.props.variant).toBe('stencilSmall');
     expect(initials.props.color).toBe('textOnInverse');
@@ -64,8 +63,7 @@ describe('Avatar', () => {
   });
 
   it('keeps the initials out of the screen reader’s way', () => {
-    const initials =
-      renderAvatar('Marty McFly').root.findAllByType(Typography)[0];
+    const initials = renderAvatar('Mr Duck').root.findAllByType(Typography)[0];
 
     expect(initials.props.importantForAccessibility).toBe('no');
   });
@@ -76,7 +74,7 @@ describe('Avatar', () => {
         accessibilityRole: 'button',
       })[0].props.accessibilityLabel;
 
-    expect(label('Marty McFly')).toBe('Marty McFly, open profile');
+    expect(label('Mr Duck')).toBe('Mr Duck, open profile');
     expect(label('  ')).toBe('Open profile');
   });
 });

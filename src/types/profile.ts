@@ -112,10 +112,10 @@ export const MAX_PROFILE_NAME_INPUT_LENGTH = 200;
 export const MAX_PROFILE_HANDLE_LENGTH = 30;
 
 export interface Profile {
-  /** Display name, e.g. `Marty McFly`. `null` until the shooter sets one. */
+  /** Display name, e.g. `Mr Duck`. `null` until the shooter sets one. */
   name: string | null;
   /**
-   * Handle, always with its leading `@`, e.g. `@martymcfly`: letters,
+   * Handle, always with its leading `@`, e.g. `@mrduck`: letters,
    * digits, `.`, `_` and `-` after the `@`. `null` until the shooter sets
    * one.
    */
