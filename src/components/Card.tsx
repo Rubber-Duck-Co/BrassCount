@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 import type { Theme } from '@/theme/theme';
-import { useTheme, useThemedStyles } from '@hooks/useTheme';
+import { useThemedStyles } from '@hooks/useTheme';
 
 type CardProps = {
   children: ReactNode;
@@ -17,8 +17,6 @@ type CardProps = {
   onPress?: () => void;
   /** Drop the default inner padding when the card hosts its own rows. */
   flush?: boolean;
-  /** Lift the card off the background — use for the one focal card. */
-  raised?: boolean;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -27,9 +25,9 @@ const createStyles = (theme: Theme) =>
   StyleSheet.create({
     base: {
       backgroundColor: theme.colors.surface,
-      borderRadius: theme.radius.lg,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
+      borderRadius: theme.radius.none,
+      borderWidth: theme.sizes.border,
+      borderColor: theme.colors.outline,
       overflow: 'hidden',
     },
     padded: {
@@ -37,24 +35,21 @@ const createStyles = (theme: Theme) =>
     },
   });
 
-/** Standard surface container. The base unit every screen is built from. */
+/**
+ * The Range Card ruled box: a 2px outline around the Card fill, square
+ * corners and no shadow. The base unit every screen is built from; rows
+ * inside it are split by 1px Rule lines (`ListRow` `divided`).
+ */
 export const Card = ({
   children,
   onPress,
   flush = false,
-  raised = false,
   style,
   testID,
 }: CardProps) => {
   const styles = useThemedStyles(createStyles);
-  const theme = useTheme();
 
-  const composed = [
-    styles.base,
-    !flush && styles.padded,
-    raised ? theme.elevation.raised : theme.elevation.card,
-    style,
-  ];
+  const composed = [styles.base, !flush && styles.padded, style];
 
   if (onPress) {
     return (

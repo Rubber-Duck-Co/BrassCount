@@ -1,4 +1,4 @@
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -35,7 +35,8 @@ import type { Drill, DrillInput } from '../src/types/drill';
 import type { SessionInput } from '../src/types/session';
 
 /**
- * The editor sits on the root stack in the app. Here it is a sibling tab:
+ * The editor is pushed over the list in the Drills tab's stack in the app.
+ * Here it is a sibling tab:
  * the screen only needs a route of that name to navigate to, and a tab
  * keeps the Drills screen mounted behind it the way the stack does.
  */
@@ -43,6 +44,8 @@ type TestTabParamList = {
   Drills: undefined;
   Elsewhere: undefined;
   SequenceEditor: { id?: string };
+  /** Where Load sends a drill, as the tab of that name does in the app. */
+  Timer: { drillId?: string } | undefined;
 };
 
 const metrics = {
@@ -124,6 +127,7 @@ const mountScreen = (): Harness => {
             <Tab.Navigator screenOptions={{ headerShown: false }}>
               <Tab.Screen name="Drills" component={DrillsScreen} />
               <Tab.Screen name="Elsewhere" component={Blank} />
+              <Tab.Screen name="Timer" component={Blank} />
               <Tab.Screen name="SequenceEditor" component={Blank} />
             </Tab.Navigator>
           </NavigationContainer>
@@ -239,6 +243,16 @@ describe('DrillsScreen', () => {
     jest.restoreAllMocks();
   });
 
+  describe('the header', () => {
+    it('leads with the title, without the BRASSCOUNT wordmark', async () => {
+      const { tree } = await renderScreen();
+
+      const header = textsOf(tree, 'screen-header');
+      expect(header).not.toContain('BRASSCOUNT');
+      expect(header[0]).toBe('Drills');
+    });
+  });
+
   describe('listing the saved drills', () => {
     it('says it is loading until storage answers', async () => {
       await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
@@ -265,14 +279,41 @@ describe('DrillsScreen', () => {
       ]);
     });
 
-    it('leaves the par out for a drill with an untimed step', async () => {
+    it('marks a drill with an untimed step as untimed', async () => {
       const drill = await seedDrill(MOZAMBIQUE, '2026-09-01T10:00:00.000Z');
 
       const { tree } = await renderScreen();
 
       expect(textsOf(tree, `row-drill-${drill.id}`)).toEqual([
         'Mozambique',
-        '3 shots',
+        '3 shots · untimed',
+      ]);
+    });
+
+    it('sets each name in stencil capitals over a mono line', async () => {
+      const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+
+      const { tree } = await renderScreen();
+
+      const [name, meta] = byTestId(tree, `row-drill-${drill.id}`)[0].findAll(
+        node => node.props.variant !== undefined && node.props.children,
+      );
+      expect(name.props.variant).toBe('stencilSmall');
+      expect(StyleSheet.flatten(name.props.style).textTransform).toBe(
+        'uppercase',
+      );
+      expect(meta.props.variant).toBe('metricCaption');
+    });
+
+    it('says to swipe left to delete only when there are drills', async () => {
+      const { tree: empty } = await renderScreen();
+      expect(has(empty, 'header-saved-drills-hint')).toBe(false);
+
+      await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      expect(textsOf(tree, 'header-saved-drills-hint')).toEqual([
+        'Swipe left to delete',
       ]);
     });
 
@@ -303,7 +344,7 @@ describe('DrillsScreen', () => {
 
       const { tree } = await renderScreen();
 
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 2']);
+      expect(textsOf(tree, 'header-saved-drills')[0]).toBe('Saved · 2');
     });
 
     it('leaves out a stored entry that cannot be read', async () => {
@@ -316,7 +357,7 @@ describe('DrillsScreen', () => {
       const { tree } = await renderScreen();
 
       expect(rowOrder(tree)).toEqual([drill.id]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 1']);
+      expect(textsOf(tree, 'header-saved-drills')[0]).toBe('Saved · 1');
     });
   });
 
@@ -327,34 +368,79 @@ describe('DrillsScreen', () => {
       expect(has(tree, 'state-drills-empty')).toBe(true);
       expect(textsOf(tree, 'state-drills-empty')).toContain('No drills yet');
       expect(rowOrder(tree)).toEqual([]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 0']);
+      expect(textsOf(tree, 'header-saved-drills')[0]).toBe('Saved · 0');
     });
 
-    it('leaves creating a drill to the Create Drill card, not a second button', async () => {
-      const { tree } = await renderScreen();
+    it('offers New drill in the empty state, opening the editor', async () => {
+      const { tree, currentRoute } = await renderScreen();
 
-      // Two near-identical buttons would be read out one after the other.
-      expect(tree.root.findAllByProps({ label: 'Create drill' })).toHaveLength(
-        0,
+      expect(textsOf(tree, 'state-drills-empty')).toContain(
+        'Create a drill and it will show up here, ready to time.',
       );
-      expect(has(tree, 'btn-create-drill')).toBe(true);
-      expect(textsOf(tree, 'state-drills-empty').join(' ')).toContain(
-        'Create Drill',
+      const [newDrill] = byTestId(tree, 'state-drills-empty')[0].findAll(
+        node => node.props.label === 'New drill',
       );
+      expect(newDrill.props.variant).toBe('primary');
+
+      await act(async () => {
+        newDrill.props.onPress();
+      });
+      await settle();
+
+      expect(currentRoute()).toMatchObject({
+        name: 'SequenceEditor',
+        params: {},
+      });
     });
   });
 
   describe('opening the editor', () => {
-    it('offers Create Drill before the drills have loaded', async () => {
+    it('offers New drill before the drills have loaded', async () => {
       const { tree } = mountScreen();
 
       expect(has(tree, 'text-drills-loading')).toBe(true);
-      expect(has(tree, 'btn-create-drill')).toBe(true);
+      expect(textsOf(tree, 'btn-create-drill')).toEqual(['New drill']);
+      expect(
+        byTestId(tree, 'btn-create-drill').find(
+          node => node.props.accessibilityRole === 'button',
+        )?.props.accessibilityLabel,
+      ).toBe('New drill');
 
       await settle();
     });
 
-    it('opens a new drill from Create Drill', async () => {
+    it('puts New drill under the saved drills, not in the header', async () => {
+      await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      await seedDrill(MOZAMBIQUE, '2026-09-02T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      const header = byTestId(tree, 'screen-header')[0];
+      expect(textsUnder(header)).not.toContain('New drill');
+      expect(
+        header.findAll(node => node.props.testID === 'btn-create-drill'),
+      ).toHaveLength(0);
+      expect(byTestId(tree, 'screen-drills')[0].props.action).toBeUndefined();
+
+      const texts = textsOf(tree, 'list-drills');
+      expect(texts.indexOf('New drill')).toBeGreaterThan(
+        texts.indexOf('Bill Drill'),
+      );
+      expect(texts.indexOf('New drill')).toBeGreaterThan(
+        texts.indexOf('Mozambique'),
+      );
+    });
+
+    it('shows a single New drill when there are no drills', async () => {
+      const { tree } = await renderScreen();
+
+      expect(has(tree, 'state-drills-empty')).toBe(true);
+      expect(has(tree, 'btn-create-drill')).toBe(false);
+      expect(
+        textsOf(tree, 'list-drills').filter(text => text === 'New drill'),
+      ).toHaveLength(1);
+    });
+
+    it('opens a new drill from New drill', async () => {
       await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
       const { tree, currentRoute } = await renderScreen();
 
@@ -378,6 +464,55 @@ describe('DrillsScreen', () => {
         params: { id: tapped.id },
       });
     });
+
+    it('names the drill in what a screen reader hears for the row', async () => {
+      const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      expect(
+        byTestId(tree, `row-drill-${drill.id}`)[0].props.accessibilityLabel,
+      ).toBe('Edit Bill Drill, 6 shots · Par 2.75s');
+    });
+  });
+
+  describe('loading a drill on the timer', () => {
+    it('switches to the Timer with the drill named', async () => {
+      await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const loaded = await seedDrill(MOZAMBIQUE, '2026-09-02T10:00:00.000Z');
+      const { tree, currentRoute } = await renderScreen();
+
+      await press(tree, `btn-load-drill-${loaded.id}`);
+
+      expect(currentRoute()).toMatchObject({
+        name: 'Timer',
+        params: { drillId: loaded.id },
+      });
+    });
+
+    it('shows Load as a secondary button named for its drill', async () => {
+      const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      const load = byTestId(tree, `btn-load-drill-${drill.id}`)[0];
+      expect(load.props).toMatchObject({
+        label: 'Load',
+        variant: 'secondary',
+        accessibilityLabel: 'Load Bill Drill on the timer',
+      });
+    });
+
+    it('loads the drill from a row that is swiped open', async () => {
+      const drill = await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree, currentRoute } = await renderScreen();
+      await swipe(drill.id, -FULL_SWIPE);
+
+      await press(tree, `btn-load-drill-${drill.id}`);
+
+      expect(currentRoute()).toMatchObject({
+        name: 'Timer',
+        params: { drillId: drill.id },
+      });
+    });
   });
 
   describe('coming back to the screen', () => {
@@ -390,7 +525,7 @@ describe('DrillsScreen', () => {
       await goTo('Drills');
 
       expect(rowOrder(tree)).toEqual([second.id, first.id]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 2']);
+      expect(textsOf(tree, 'header-saved-drills')[0]).toBe('Saved · 2');
     });
 
     it('drops a drill deleted while the screen was in the background', async () => {
@@ -458,7 +593,7 @@ describe('DrillsScreen', () => {
 
       expect(has(tree, 'state-drills-error')).toBe(true);
       expect(has(tree, 'state-drills-empty')).toBe(false);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED']);
+      expect(textsOf(tree, 'header-saved-drills')).toEqual(['Saved']);
       expect(has(tree, 'btn-create-drill')).toBe(true);
 
       const retry = tree.root.findAllByProps({ label: 'Try again' })[0];
@@ -756,7 +891,7 @@ describe('DrillsScreen', () => {
 
       expect(isAsking(tree)).toBe(false);
       expect(rowOrder(tree)).toEqual([kept.id]);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 1']);
+      expect(textsOf(tree, 'header-saved-drills')[0]).toBe('Saved · 1');
       expect(await storedIds()).toEqual([kept.id]);
     });
 
@@ -885,7 +1020,7 @@ describe('DrillsScreen', () => {
       await press(tree, `${SHEET}-confirm`);
 
       expect(has(tree, 'state-drills-empty')).toBe(true);
-      expect(textsOf(tree, 'header-saved-drills')).toEqual(['SAVED · 0']);
+      expect(textsOf(tree, 'header-saved-drills')[0]).toBe('Saved · 0');
     });
 
     it('tells a screen reader the drill was deleted', async () => {

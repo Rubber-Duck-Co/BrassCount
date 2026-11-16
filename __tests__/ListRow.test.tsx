@@ -1,8 +1,11 @@
+import { Dimensions, StyleSheet } from 'react-native';
+
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { Icon } from '../src/components/Icon';
 import { ListRow } from '../src/components/ListRow';
 import { Typography } from '../src/components/Typography';
+import { lightTheme, sizes } from '../src/theme/theme';
 
 const render = (row: React.ReactElement): ReactTestRenderer => {
   let tree: ReactTestRenderer | undefined;
@@ -69,6 +72,79 @@ describe('ListRow', () => {
     });
   });
 
+  describe('with a value at a large font', () => {
+    const initialWindow = Dimensions.get('window');
+
+    /** Reports a new system font scale the way the OS does. */
+    const setFontScale = (fontScale: number): void => {
+      act(() => {
+        Dimensions.set({
+          window: { ...Dimensions.get('window'), fontScale },
+          screen: Dimensions.get('screen'),
+        });
+      });
+    };
+
+    afterEach(() => {
+      setFontScale(initialWindow.fontScale);
+    });
+
+    /** Whether the value is drawn in the title's column, under it. */
+    const valueUnderTitle = (tree: ReactTestRenderer): boolean => {
+      const texts = tree.root.findAllByType(Typography);
+      const title = texts.find(node => node.props.children === 'Start delay');
+      const value = texts.find(
+        node => node.props.children === 'Random, 1.5 to 10 s',
+      );
+      if (title === undefined || value === undefined) {
+        throw new Error('the title or value is not rendered');
+      }
+      return title.parent === value.parent;
+    };
+
+    const renderRow = () =>
+      render(
+        <ListRow
+          title="Start delay"
+          value="Random, 1.5 to 10 s"
+          onPress={() => {}}
+          chevron
+          testID="row"
+        />,
+      );
+
+    it('puts the value under the title, so neither squeezes the other out', () => {
+      setFontScale(2);
+
+      const tree = renderRow();
+
+      expect(valueUnderTitle(tree)).toBe(true);
+      expect(
+        tree.root
+          .findAllByType(Typography)
+          .find(node => node.props.children === 'Start delay')?.props
+          .numberOfLines,
+      ).toBe(2);
+    });
+
+    it('keeps the value beside the title at the default font', () => {
+      setFontScale(1);
+
+      const tree = renderRow();
+
+      expect(valueUnderTitle(tree)).toBe(false);
+    });
+
+    it('follows a font scale changed while the row is shown', () => {
+      setFontScale(1);
+      const tree = renderRow();
+
+      setFontScale(2);
+
+      expect(valueUnderTitle(tree)).toBe(true);
+    });
+  });
+
   it('shows its value in the colour it is given', () => {
     const tree = render(
       <ListRow title="Shot 2" value="0.30s" valueColor="danger" />,
@@ -86,12 +162,7 @@ describe('ListRow', () => {
   it('ignores presses and reads as dimmed when it is disabled', () => {
     const onPress = jest.fn();
     const tree = render(
-      <ListRow
-        title="Clear run history"
-        onPress={onPress}
-        disabled
-        testID="row"
-      />,
+      <ListRow title="Clear Log" onPress={onPress} disabled testID="row" />,
     );
 
     act(() => {
@@ -121,15 +192,15 @@ describe('ListRow', () => {
   });
 
   it('shows the title of a destructive row in the danger colour', () => {
-    const tree = render(<ListRow title="Clear run history" destructive />);
+    const tree = render(<ListRow title="Clear Log" destructive />);
 
-    expect(textColor(tree, 'Clear run history')).toBe('danger');
+    expect(textColor(tree, 'Clear Log')).toBe('danger');
   });
 
   it('greys the title of a disabled row, even a destructive one', () => {
     const tree = render(
       <ListRow
-        title="Clear run history"
+        title="Clear Log"
         subtitle="No saved runs to delete"
         onPress={() => {}}
         disabled
@@ -137,7 +208,7 @@ describe('ListRow', () => {
       />,
     );
 
-    expect(textColor(tree, 'Clear run history')).toBe('textTertiary');
+    expect(textColor(tree, 'Clear Log')).toBe('textTertiary');
     // The reason it is disabled stays as readable as any subtitle.
     expect(textColor(tree, 'No saved runs to delete')).toBe('textTertiary');
   });
@@ -156,5 +227,88 @@ describe('ListRow', () => {
     const tree = render(<ListRow title="Appearance" />);
 
     expect(textColor(tree, 'Appearance')).toBe('textPrimary');
+  });
+
+  it('draws a 1px Rule divider under a divided row', () => {
+    const tree = render(<ListRow title="Appearance" divided testID="row" />);
+
+    expect(StyleSheet.flatten(host(tree, 'row').props.style)).toMatchObject({
+      borderBottomWidth: sizes.rule,
+      borderBottomColor: lightTheme.colors.border,
+    });
+  });
+
+  it('draws no divider under the last row of a group', () => {
+    const tree = render(<ListRow title="Appearance" testID="row" />);
+
+    expect(
+      StyleSheet.flatten(host(tree, 'row').props.style).borderBottomWidth,
+    ).toBeUndefined();
+  });
+
+  it('is at least the touch-target minimum tall', () => {
+    const tree = render(
+      <ListRow title="Appearance" onPress={() => {}} testID="row" />,
+    );
+
+    expect(StyleSheet.flatten(host(tree, 'row').props.style).minHeight).toBe(
+      sizes.touchTarget,
+    );
+  });
+
+  it('sets its title as a row label', () => {
+    const tree = render(<ListRow title="Appearance" />);
+
+    expect(
+      tree.root
+        .findAllByType(Typography)
+        .find(text => text.props.children === 'Appearance')?.props.variant,
+    ).toBe('rowLabel');
+  });
+
+  it('draws its chevron in Ink', () => {
+    const tree = render(<ListRow title="Appearance" onPress={() => {}} />);
+
+    expect(tree.root.findByType(Icon).props).toMatchObject({
+      name: 'chevron',
+      color: 'textPrimary',
+      size: sizes.iconSm,
+    });
+  });
+
+  it('numbers a step in a square outlined badge, not in orange', () => {
+    const tree = render(<ListRow title="Shot 1" index={1} testID="row-1" />);
+    const number = tree.root
+      .findAllByType(Typography)
+      .find(text => text.props.children === 1);
+
+    expect(number?.props.color).toBe('textSecondary');
+    expect(
+      StyleSheet.flatten(host(tree, 'row-1-index').props.style),
+    ).toMatchObject({
+      borderWidth: sizes.rule,
+      borderColor: lightTheme.colors.outline,
+      borderRadius: 0,
+    });
+  });
+
+  it('gives each row its own badge test ID, and none without a row ID', () => {
+    const tree = render(
+      <>
+        <ListRow title="Shot 1" index={1} testID="row-1" />
+        <ListRow title="Shot 2" index={2} testID="row-2" />
+        <ListRow title="Shot 3" index={3} />
+      </>,
+    );
+    const badgeIds = tree.root
+      .findAll(
+        node =>
+          typeof node.type === 'string' &&
+          typeof node.props.testID === 'string' &&
+          node.props.testID.endsWith('-index'),
+      )
+      .map(node => node.props.testID);
+
+    expect(badgeIds).toEqual(['row-1-index', 'row-2-index']);
   });
 });

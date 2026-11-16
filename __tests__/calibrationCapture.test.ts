@@ -491,4 +491,72 @@ describe('captureSample', () => {
       expect(jest.getTimerCount()).toBe(0);
     });
   });
+
+  describe('live level', () => {
+    it('reports each level it hears while listening', async () => {
+      const fake = createFakeAudio();
+      const onLevel = jest.fn();
+      const promise = captureSample({ audio: fake.audio, onLevel });
+      await untilListening();
+
+      fake.hear(-42);
+      fake.hear(-11.5);
+      fake.hear(-30);
+      await jest.advanceTimersByTimeAsync(CALIBRATION_LISTEN_MS);
+      await promise;
+
+      expect(onLevel.mock.calls).toEqual([[-42], [-11.5], [-30]]);
+    });
+
+    it('does not report a reading that is not a level on the dBFS scale', async () => {
+      const fake = createFakeAudio();
+      const onLevel = jest.fn();
+      const promise = captureSample({ audio: fake.audio, onLevel });
+      await untilListening();
+
+      fake.emit({ peakDb: '-1' });
+      fake.emit(null);
+      fake.hear(4);
+      await jest.advanceTimersByTimeAsync(CALIBRATION_LISTEN_MS);
+      await promise;
+
+      expect(onLevel).not.toHaveBeenCalled();
+    });
+
+    it('reports no level once the capture is aborted', async () => {
+      const fake = createFakeAudio();
+      const controller = new AbortController();
+      const onLevel = jest.fn();
+      const rejection = rejectionOf(
+        captureSample({
+          audio: fake.audio,
+          signal: controller.signal,
+          onLevel,
+        }),
+      );
+      await untilListening();
+
+      controller.abort();
+      fake.hear(-10);
+      await rejection;
+
+      expect(onLevel).not.toHaveBeenCalled();
+    });
+
+    it('keeps the loudest peak when the level callback throws', async () => {
+      const fake = createFakeAudio();
+      const promise = captureSample({
+        audio: fake.audio,
+        onLevel: () => {
+          throw new Error('render failed');
+        },
+      });
+      await untilListening();
+
+      fake.hear(-12);
+      await jest.advanceTimersByTimeAsync(CALIBRATION_LISTEN_MS);
+
+      await expect(promise).resolves.toEqual({ peakDbfs: -12 });
+    });
+  });
 });

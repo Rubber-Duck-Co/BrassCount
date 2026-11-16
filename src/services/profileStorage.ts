@@ -33,8 +33,8 @@ import { createStorageNamespace, StorageError } from './storage';
 /**
  * ProfileStorageService
  * ---------------------
- * Local persistence layer for the profile: the display name and handle the
- * Profile screen shows, and the preferences Settings changes (the
+ * Local persistence layer for the profile: the display name and handle
+ * Setup's profile box shows, and the preferences Setup changes (the
  * Appearance the theme follows, the unit sound levels are shown in, and
  * the timer's start delay range and beep volume).
  * There is no account behind it — the profile lives on this device only.

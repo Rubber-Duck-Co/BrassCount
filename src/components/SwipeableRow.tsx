@@ -19,7 +19,7 @@ import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 
 import type { Theme } from '@/theme/theme';
 import { useReduceMotion } from '@hooks/useReduceMotion';
-import { useThemedStyles } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 import {
   SWIPE_ACTIVATE_DISTANCE,
   SWIPE_FAIL_DISTANCE,
@@ -28,9 +28,6 @@ import {
 } from '@utils/swipe';
 
 import { Typography } from './Typography';
-
-/** Width of the revealed action at the default font size, in points. */
-const ACTION_WIDTH = 88;
 
 /** How long the row takes to slide to rest once it is let go. */
 const SETTLE_MS = 180;
@@ -73,10 +70,13 @@ const createStyles = (theme: Theme) =>
       bottom: 0,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.danger,
+      // Signal, like the confirm of the sheet it opens: act or look.
+      backgroundColor: theme.colors.primary,
     },
     // Opaque, so the action stays out of sight until the row moves.
     foreground: { backgroundColor: theme.colors.surface },
+    // Capitals from the style, so a screen reader reads the word.
+    actionLabel: { textTransform: 'uppercase' },
   });
 
 /**
@@ -100,10 +100,13 @@ export const SwipeableRow = ({
   gestureTestID,
 }: SwipeableRowProps) => {
   const styles = useThemedStyles(createStyles);
+  const { sizes } = useTheme();
   const reduceMotion = useReduceMotion();
   // The label grows with the system font size, and its button with it.
   const { fontScale } = useWindowDimensions();
-  const actionWidth = Math.round(ACTION_WIDTH * Math.max(1, fontScale));
+  const actionWidth = Math.round(
+    sizes.swipeActionWidth * Math.max(1, fontScale),
+  );
 
   const [offset] = useState(() => new Animated.Value(open ? -actionWidth : 0));
   // Whether the row was open when the swipe in progress began.
@@ -207,7 +210,12 @@ export const SwipeableRow = ({
         style={[styles.action, { width: actionWidth }]}
         testID={actionTestID}
       >
-        <Typography variant="label" color="textOnDanger" numberOfLines={1}>
+        <Typography
+          variant="actionLabel"
+          color="textOnPrimary"
+          numberOfLines={1}
+          style={styles.actionLabel}
+        >
           {actionLabel}
         </Typography>
       </TouchableOpacity>

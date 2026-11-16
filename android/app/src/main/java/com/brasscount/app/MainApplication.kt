@@ -2,6 +2,7 @@ package com.brasscount.app
 
 import android.app.Application
 import com.brasscount.app.appearance.AppearancePackage
+import com.brasscount.app.appearance.ModalSystemBars
 import com.brasscount.app.audio.AudioCapturePackage
 import com.facebook.react.PackageList
 import com.facebook.react.ReactApplication
@@ -28,12 +29,14 @@ class MainApplication : Application(), ReactApplication {
   override fun onCreate() {
     super.onCreate()
     loadReactNative(this)
-    // Keeps Escape from closing a Modal behind JS's back (#125); not part of the template, so
-    // carry it over on React Native upgrades. Called again for the new context after a reload.
+    // Keeps Escape from closing a Modal behind JS's back (#125), and gives a Modal's window the
+    // themed navigation bar; not part of the template, so carry it over on React Native upgrades.
+    // Called again for the new context after a reload.
     reactHost.addReactInstanceEventListener(
       object : ReactInstanceEventListener {
         override fun onReactContextInitialized(context: ReactContext) {
           context.addExtraWindowEventListener(ModalDialogGuard)
+          context.addExtraWindowEventListener(ModalSystemBars)
         }
       },
     )

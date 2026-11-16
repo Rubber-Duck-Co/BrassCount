@@ -13,7 +13,7 @@ import {
   PreferencesProvider,
   type PreferencesProviderProps,
 } from '../src/store/PreferencesContext';
-import { resolveThemeMode } from '../src/theme/theme';
+import { resolveThemeScheme } from '../src/theme/theme';
 import { DEFAULT_PROFILE, type Profile } from '../src/types/profile';
 
 jest.mock('react-native/Libraries/Utilities/useColorScheme', () => ({
@@ -107,10 +107,13 @@ const choose = async (
   return { saved };
 };
 
-describe('resolveThemeMode', () => {
+describe('resolveThemeScheme', () => {
   it.each([
     ['light', 'dark', 'light'],
     ['dark', 'light', 'dark'],
+    ['field', 'light', 'field'],
+    ['night', 'light', 'night'],
+    ['night', null, 'night'],
     ['system', 'dark', 'dark'],
     ['system', 'light', 'light'],
     ['system', null, 'light'],
@@ -118,7 +121,7 @@ describe('resolveThemeMode', () => {
   ] as const)(
     'resolves %s on a %s device to %s',
     (preference, scheme, expected) => {
-      expect(resolveThemeMode(preference, scheme)).toBe(expected);
+      expect(resolveThemeScheme(preference, scheme)).toBe(expected);
     },
   );
 });

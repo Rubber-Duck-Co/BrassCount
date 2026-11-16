@@ -44,6 +44,17 @@ feat(timer): add randomised start beep #minor
 4. Push with `-u` if the branch is new
 5. Open as a draft while work is in progress: lint, format, type-check and test jobs skip drafts (the Android build still runs)
 
+### Keep the description short
+
+The body is the template filled in, nothing more. Reviewers read the diff, so the description only has to orient them:
+
+- **Summary**: one to three sentences on what changes and why.
+- **Changes**: one bullet per meaningful change, a line each. No file-by-file walkthrough, no restating the diff, no implementation narrative.
+- **Related Issues**: `Closes #N` lines, or `-` when there are none.
+- **Type of Change** and **Checklist**: tick the boxes that apply; leave the labels as written.
+
+Do not add sections, headings, tables, review transcripts or test logs beyond the template. A short test note belongs as one bullet under Changes or Checklist. If something genuinely needs more explanation, it belongs in the code's header comment or the linked issue, not the PR body.
+
 ### No "Generated with Claude Code" line
 
 Do not end a PR description with `🤖 Generated with [Claude Code]…`, a session link, or any other Claude attribution, whatever the tool's default is. The project owner asked for PRs without it, the same as commits ([above](#no-claude-co-author-trailer)): the PR is authored by the person who asked for it.

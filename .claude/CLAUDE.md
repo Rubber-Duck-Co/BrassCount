@@ -38,7 +38,7 @@ Every screen reads real data through a service. There are no display fixtures (`
 - `src/types/` — stored models (`Drill`, `Session`, `Profile`), run types, and all navigation param lists (`navigation.ts`).
 - `src/screens/`, `src/components/` — screens compose the primitives in `components/`.
 
-Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial, History, Profile) plus `SequenceEditor` and `Settings` (opened from Profile's header) pushed over the tabs. History is a nested stack (`HistoryList` → `HistoryDetail` → `RunComparison`) so the tab bar stays visible. Navigator headers are off: each screen renders its own through `Screen`, and the bottom chrome is the custom `TabBar` (a new tab needs an entry in `tabIcons`).
+Navigation: root native stack → `Tabs` only: **Timer** (first, initial), then Drills, Log and Setup, each a nested stack so the tab bar stays at every depth (`DrillList` → `SequenceEditor`; `HistoryList` → `HistoryDetail` → `RunComparison`; `SetupHome` (Setup: profile and settings) → `Calibration`). Pressing the active Drills tab with the editor open does nothing, so a draft is kept. Navigator headers are off: each screen renders its own through `Screen` (wordmark or back link, one text `action`, title, subtitle; `wordmark={false}` (Timer, Drills, Log, Setup) moves the title into the top row), and the bottom chrome is the custom text-only `TabBar`.
 
 ### Invariants
 
@@ -54,7 +54,7 @@ Navigation: root native stack → `Tabs` (Calibration, Drills, **Timer** initial
 
 ### Theming
 
-`src/theme/theme.ts` holds the palette and semantic tokens for light and dark (identical shape). Components never import it, only type-only `Theme`. Use `useTheme()` and module-scope `createStyles = (theme: Theme) => StyleSheet.create(...)` with `useThemedStyles`. Use spacing/radius tokens and `Typography` variants, and the mono variants (`timer`, `metric`, `metricSmall`) for readouts. A new semantic colour goes in `SemanticColors` and both palettes.
+`src/theme/theme.ts` holds the palette and semantic tokens for light and dark (identical shape). Components never import it, only type-only `Theme`. Use `useTheme()` and module-scope `createStyles = (theme: Theme) => StyleSheet.create(...)` with `useThemedStyles`. Use spacing/radius tokens and `Typography` variants, and the mono variants (`timer`, `metric`, `metricSmall`) for readouts. Fonts are bundled TTFs in `android/app/src/main/assets/fonts`, one `fontFamily` (the file's basename) per weight: never set `fontWeight` with them, and a new font needs a native rebuild. A new semantic colour goes in `SemanticColors` and both palettes.
 
 ## Conventions
 

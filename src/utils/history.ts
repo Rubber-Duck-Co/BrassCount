@@ -1,10 +1,10 @@
 import type { Drill } from '@/types/drill';
 import type { Session, SessionSplit } from '@/types/session';
-import { planRun } from '@utils/runDetection';
+import { timedSteps } from '@utils/runDetection';
 import { splitDelta } from '@utils/session';
 
 /**
- * How the History tab rolls stored runs up by drill. Pure functions, no
+ * How the Log tab rolls stored runs up by drill. Pure functions, no
  * side effects.
  */
 
@@ -22,6 +22,11 @@ export type DrillHistorySummary = {
   drillId: string;
   /** The drill's current name, or `DELETED_DRILL_NAME`. */
   drillName: string;
+  /**
+   * The drill is no longer saved, so its runs are listed under the
+   * stand-in name. Kept apart from the name, which a saved drill may share.
+   */
+  deleted: boolean;
   /** Every run, complete or stopped early. */
   runCount: number;
   /**
@@ -75,6 +80,7 @@ export const summarizeDrillHistory = (
         ? {
             drillId,
             drillName: drillNames.get(drillId) ?? DELETED_DRILL_NAME,
+            deleted: !drillNames.has(drillId),
             runCount: 1,
             bestTime: time,
             lastRunAt: createdAt,
@@ -94,12 +100,12 @@ export const summarizeDrillHistory = (
 };
 
 /**
- * A drill's runs as History shows them: a step that had no par when it was
+ * A drill's runs as Log shows them: a step that had no par when it was
  * run is judged against the par the drill gives it now, so a par added
  * after the first runs reaches those runs too.
  *
  * The stored runs are never changed, only what is shown. Each step's par
- * comes from `planRun`, the way a run made now would be judged, so a
+ * comes from `timedSteps`, the way a run made now would be judged, so a
  * silent step's par counts towards the next heard step. Only a missing par
  * is filled: a step that had one keeps it, since that is what the shooter
  * was timed against, and a filled par goes again once the drill drops it.
@@ -117,7 +123,7 @@ export const fillMissingPars = (
   }
 
   const pars = new Map<string, number>();
-  for (const { stepId, par } of planRun(drill.steps)) {
+  for (const { stepId, par } of timedSteps(drill.steps)) {
     if (par !== undefined) {
       pars.set(stepId, par);
     }

@@ -14,6 +14,12 @@ class AppearanceModeTest {
   }
 
   @Test
+  fun `the field and night schemes ask for the dark window`() {
+    assertEquals(NightMode.DARK, nightModeFor("field"))
+    assertEquals(NightMode.DARK, nightModeFor("night"))
+  }
+
+  @Test
   fun `a pinned light preference asks for the light window`() {
     assertEquals(NightMode.LIGHT, nightModeFor("light"))
   }
@@ -38,6 +44,8 @@ class AppearanceModeTest {
   @Test
   fun `each preference maps to the matching AppCompat night mode`() {
     assertEquals(AppCompatDelegate.MODE_NIGHT_YES, appCompatNightModeFor("dark"))
+    assertEquals(AppCompatDelegate.MODE_NIGHT_YES, appCompatNightModeFor("field"))
+    assertEquals(AppCompatDelegate.MODE_NIGHT_YES, appCompatNightModeFor("night"))
     assertEquals(AppCompatDelegate.MODE_NIGHT_NO, appCompatNightModeFor("light"))
     assertEquals(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM, appCompatNightModeFor("system"))
     assertEquals(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM, appCompatNightModeFor(null))
@@ -45,12 +53,15 @@ class AppearanceModeTest {
   }
 
   @Test
-  fun `only the three preference values are known`() {
+  fun `only the five preference values are known`() {
     assertTrue(isKnownPreference("system"))
     assertTrue(isKnownPreference("light"))
     assertTrue(isKnownPreference("dark"))
+    assertTrue(isKnownPreference("field"))
+    assertTrue(isKnownPreference("night"))
     assertFalse(isKnownPreference(null))
     assertFalse(isKnownPreference("sepia"))
     assertFalse(isKnownPreference("Dark"))
+    assertFalse(isKnownPreference("Night"))
   }
 }

@@ -18,6 +18,12 @@ import { generateId as defaultGenerateId } from './id';
  * given its id up front, which is what keeps a row's identity stable as
  * the rows around it are removed, and the storage service keeps an id it
  * is handed.
+ *
+ * A draw can only be a drill's first step: it is timed from the beep (see
+ * `planRun`). Nothing here makes a draw of any other step or moves one out
+ * of first place, and only the first step's dropdown offers it. A drill
+ * stored before that rule may still hold a draw further down; it is kept
+ * as it is, and the storage service does not enforce the rule.
  */
 
 /**
@@ -35,18 +41,27 @@ export const EDITOR_STEP_TYPES = [
   'holster',
 ] as const satisfies readonly DrillStepType[];
 
+/** Whether a step at `position` may be a draw: only the first may. */
+const drawAllowedAt = (position: number): boolean => position === 0;
+
 /**
- * The types the dropdown of one step offers: the editor's list, plus the
- * step's own type when that is not on it. Without that, a stored
- * `transition` step would show as a blank dropdown and silently change
- * type the first time it was opened.
+ * The types the dropdown of the step at `position` offers: the editor's
+ * list, without `draw` past the first step, plus the step's own type when
+ * that is not on it. Without that, a stored `transition` step, or a draw
+ * stored further down a drill, would show as a blank dropdown and silently
+ * change type the first time it was opened.
  */
 export const stepTypeChoices = (
   current: DrillStepType,
-): readonly DrillStepType[] =>
-  EDITOR_STEP_TYPES.some(type => type === current)
+  position: number,
+): readonly DrillStepType[] => {
+  const offered = drawAllowedAt(position)
     ? EDITOR_STEP_TYPES
-    : [...EDITOR_STEP_TYPES, current];
+    : EDITOR_STEP_TYPES.filter(type => type !== 'draw');
+  return offered.some(type => type === current)
+    ? offered
+    : [...offered, current];
+};
 
 /**
  * The type a step added to `steps` starts as: a draw to open the string,
@@ -79,26 +94,46 @@ export const removeStep = (
 ): readonly DrillStep[] => steps.filter(step => step.id !== id);
 
 /**
- * `steps` with the step that has this id moved to `toPosition`, counted
- * from 0, and the steps between shifted along to make room. The step
- * itself is kept as it is — id, type and par — so only the order changes.
- *
- * An id that is not in the list, or a position the list does not have,
- * gives back `steps` unchanged.
+ * Whether `moveStep` would move the step that has this id to `toPosition`:
+ * the step is in the list, the position is one the list has and is not
+ * where the step already is, and the move keeps a draw in first place —
+ * it neither takes the draw out of it nor puts another step above it.
  */
-export const moveStep = (
+export const canMoveStep = (
   steps: readonly DrillStep[],
   id: string,
   toPosition: number,
-): readonly DrillStep[] => {
+): boolean => {
   const from = steps.findIndex(step => step.id === id);
   const inRange =
     Number.isInteger(toPosition) &&
     toPosition >= 0 &&
     toPosition < steps.length;
   if (from < 0 || !inRange || from === toPosition) {
+    return false;
+  }
+  const opensWithDraw = steps[0].type === 'draw';
+  return !opensWithDraw || (from !== 0 && toPosition !== 0);
+};
+
+/**
+ * `steps` with the step that has this id moved to `toPosition`, counted
+ * from 0, and the steps between shifted along to make room. The step
+ * itself is kept as it is — id, type and par — so only the order changes.
+ *
+ * A move `canMoveStep` refuses — an id that is not in the list, a
+ * position the list does not have, or one that would move a draw out of
+ * first place — gives back `steps` unchanged.
+ */
+export const moveStep = (
+  steps: readonly DrillStep[],
+  id: string,
+  toPosition: number,
+): readonly DrillStep[] => {
+  if (!canMoveStep(steps, id, toPosition)) {
     return steps;
   }
+  const from = steps.findIndex(step => step.id === id);
 
   const without = steps.filter((_, i) => i !== from);
   return [
@@ -108,13 +143,21 @@ export const moveStep = (
   ];
 };
 
-/** `steps` with the type of one step changed; its par is kept. */
+/**
+ * `steps` with the type of one step changed; its par is kept. Making any
+ * step but the first a draw gives back `steps` unchanged.
+ */
 export const changeStepType = (
   steps: readonly DrillStep[],
   id: string,
   type: DrillStepType,
-): readonly DrillStep[] =>
-  steps.map(step => (step.id === id ? { ...step, type } : step));
+): readonly DrillStep[] => {
+  const position = steps.findIndex(step => step.id === id);
+  if (type === 'draw' && !drawAllowedAt(position)) {
+    return steps;
+  }
+  return steps.map(step => (step.id === id ? { ...step, type } : step));
+};
 
 /**
  * `steps` with the par of one step set, or cleared when `par` is

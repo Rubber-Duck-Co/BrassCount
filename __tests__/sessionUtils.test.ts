@@ -37,12 +37,12 @@ describe('splitDelta', () => {
 });
 
 describe('sessionFromRun', () => {
-  /** Mozambique: a draw, three shots and a holster. */
+  /** Mozambique: a draw ended by the first of three shots, and a holster. */
   const mozambique: Pick<Drill, 'id' | 'steps'> = {
     id: 'drill-1',
     steps: [
-      { id: 'draw', type: 'draw', par: 1.5 },
-      { id: 'shot-1', type: 'shot', par: 0.25 },
+      { id: 'draw', type: 'draw', par: 1.75 },
+      { id: 'shot-1', type: 'shot' },
       { id: 'shot-2', type: 'shot', par: 0.25 },
       { id: 'shot-3', type: 'shot' },
       { id: 'holster', type: 'holster' },
@@ -52,7 +52,7 @@ describe('sessionFromRun', () => {
   const run = (overrides: Partial<RunResult> = {}): RunResult => ({
     completed: true,
     results: [
-      { stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 },
+      { stepId: 'draw', par: 1.75, actual: 1.4, delta: -0.35 },
       { stepId: 'shot-2', par: 0.25, actual: 0.3, delta: 0.05 },
       { stepId: 'shot-3', actual: 0.5, delta: null },
     ],
@@ -69,18 +69,43 @@ describe('sessionFromRun', () => {
       totalTime: 2.2,
       completed: true,
       splits: [
-        { stepId: 'shot-1', label: 'Shot 1', par: 1.75, actual: 1.4 },
+        { stepId: 'draw', label: 'Draw', par: 1.75, actual: 1.4 },
         { stepId: 'shot-2', label: 'Shot 2', par: 0.25, actual: 0.3 },
         { stepId: 'shot-3', label: 'Shot 3', actual: 0.5 },
       ],
     });
   });
 
-  it('keeps the par a step was judged against, with the silent steps before it counted in', () => {
+  it('saves the draw under its own name, timed to the shot that ended it', () => {
     const session = sessionFromRun(mozambique, run());
 
-    // The draw's 1.50 s and the shot's own 0.25 s.
-    expect(session?.splits[0].par).toBe(1.75);
+    expect(session?.splits[0]).toEqual({
+      stepId: 'draw',
+      label: 'Draw',
+      par: 1.75,
+      actual: 1.4,
+    });
+  });
+
+  it('keeps the par a step was judged against, with the silent steps before it counted in', () => {
+    const session = sessionFromRun(
+      {
+        id: 'drill-2',
+        steps: [
+          { id: 'shot-1', type: 'shot', par: 0.3 },
+          { id: 'move', type: 'transition', par: 1.5 },
+          { id: 'shot-2', type: 'shot', par: 0.25 },
+        ],
+      },
+      run({
+        results: [
+          { stepId: 'shot-1', par: 0.3, actual: 0.3, delta: 0 },
+          { stepId: 'shot-2', par: 1.75, actual: 1.6, delta: -0.15 },
+        ],
+      }),
+    );
+
+    expect(session?.splits[1].par).toBe(1.75);
   });
 
   it('leaves the delta to the storage service', () => {
@@ -92,7 +117,7 @@ describe('sessionFromRun', () => {
   it('keeps a run stopped early, marked as incomplete', () => {
     const stopped = run({
       completed: false,
-      results: [{ stepId: 'shot-1', par: 1.75, actual: 1.4, delta: -0.35 }],
+      results: [{ stepId: 'draw', par: 1.75, actual: 1.4, delta: -0.35 }],
       totalTime: 1.4,
     });
 
@@ -100,7 +125,7 @@ describe('sessionFromRun', () => {
       drillId: 'drill-1',
       totalTime: 1.4,
       completed: false,
-      splits: [{ stepId: 'shot-1', label: 'Shot 1', par: 1.75, actual: 1.4 }],
+      splits: [{ stepId: 'draw', label: 'Draw', par: 1.75, actual: 1.4 }],
     });
   });
 

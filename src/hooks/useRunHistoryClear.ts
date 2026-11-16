@@ -24,12 +24,12 @@ export type UseRunHistoryClearResult = {
 };
 
 /**
- * The Settings screen's Data section: counts the stored runs each time the
+ * Setup's Data section: counts the stored runs each time the
  * screen gains focus, and clears them.
  *
  * The count is one per stored key, the same keys `clearSessions` removes,
  * so the number the confirmation names is the number deleted, including
- * any entry History skips because it is unreadable.
+ * any entry the Log skips because it is unreadable.
  */
 export const useRunHistoryClear = (): UseRunHistoryClearResult => {
   const [runCount, setRunCount] = useState<RunCountState>({

@@ -1,7 +1,8 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 import {
   ScrollView,
+  type ScrollViewProps,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -16,79 +17,285 @@ import {
 
 import type { Theme } from '@/theme/theme';
 import { useKeyboardHeight } from '@hooks/useKeyboardHeight';
-import { useThemedStyles } from '@hooks/useTheme';
+import { useTheme, useThemedStyles } from '@hooks/useTheme';
 
 import { Icon } from './Icon';
 import { Typography } from './Typography';
+
+/** The one text action at the header's top right. */
+export type ScreenAction = {
+  /** Written as a sentence ("Save"); the header shows it in capitals. */
+  label: string;
+  onPress: () => void;
+  /** Defaults to `label`. */
+  accessibilityLabel?: string;
+  /** Defaults to `btn-header-action`. */
+  testID?: string;
+};
 
 type ScreenProps = {
   title?: string;
   /** Supporting line under the title. */
   subtitle?: string;
-  /** Accessory pinned to the title row's right edge, e.g. an avatar. */
-  headerRight?: ReactNode;
-  /** Show a back control before the title. Pass `navigation.goBack`. */
+  /** Text action pinned to the header's top right, e.g. Save or + New. */
+  action?: ScreenAction;
+  /** Greys the action out and stops it taking presses. */
+  actionDisabled?: boolean;
+  /**
+   * Show the BRASSCOUNT wordmark over the title on a screen with no back
+   * link. Defaults to true; `false` puts the title in the top row instead,
+   * the header screens move to as they are redesigned.
+   */
+  wordmark?: boolean;
+  /** Show a back link in place of the wordmark. Pass `navigation.goBack`. */
   onBack?: () => void;
+  /** Where the back link goes, e.g. `Log`. Defaults to `Back`. */
+  backLabel?: string;
   children: ReactNode;
   /** Center children on both axes. Defaults to false (top-aligned). */
   centered?: boolean;
   /** Wrap content in a ScrollView. Use for any screen that can overflow. */
   scrollable?: boolean;
+  /** The ScrollView of a `scrollable` screen, to scroll it from the screen. */
+  scrollRef?: Ref<ScrollView>;
+  /** Further props for the ScrollView of a `scrollable` screen. */
+  scrollProps?: Pick<
+    ScrollViewProps,
+    | 'scrollEnabled'
+    | 'scrollEventThrottle'
+    | 'onScroll'
+    | 'onLayout'
+    | 'onContentSizeChange'
+  >;
   contentStyle?: StyleProp<ViewStyle>;
   testID?: string;
 };
 
+const WORDMARK = 'BRASSCOUNT';
+const DEFAULT_BACK_LABEL = 'Back';
+
 /**
- * Shared screen shell: safe-area, themed background, standard padding, and
- * an optional title. Screens should render only their unique content inside.
+ * The wordmark is decoration, so it gives way to the action: it grows with
+ * the system font only this far, then shrinks to share the top row.
+ */
+const WORDMARK_MAX_FONT_MULTIPLIER = 1.3;
+const WORDMARK_MIN_FONT_SCALE = 0.6;
+
+/** How far a title in the top row shrinks before it is cut short. */
+const ROW_TITLE_MIN_FONT_SCALE = 0.6;
+
+/**
+ * Shared screen shell: safe-area, themed background, the Range Card header
+ * and the content area. Screens should render only their unique content
+ * inside.
  *
- * Bottom inset is left to the tab bar, which floats over the content and
- * applies its own safe-area padding.
+ * The header is three lines over a 2px rule: the BRASSCOUNT wordmark (or a
+ * back link on a pushed screen) with one text action opposite it, the
+ * stencil title, then the subtitle. With `wordmark` off and no back link it
+ * is two: the title takes the wordmark's place beside the action. It stays
+ * put above scrolling content. Its height is a minimum, so a large system font
+ * grows it instead of clipping. The back link and action are set in
+ * capitals but announced as written, so TalkBack reads words rather than
+ * spelling letters.
+ *
+ * Bottom inset is left to the tab bar, which applies its own safe-area
+ * padding.
  */
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.colors.background },
-    content: {
-      flex: 1,
-      padding: theme.spacing.lg,
-      gap: theme.spacing.md,
-    },
-    scrollContent: {
-      padding: theme.spacing.lg,
-      gap: theme.spacing.md,
-      // Clears the floating tab bar so the last card is never trapped.
-      paddingBottom: theme.spacing.xxl * 2,
-    },
-    centered: { alignItems: 'center', justifyContent: 'center' },
     header: {
+      minHeight: theme.sizes.headerMin,
+      paddingHorizontal: theme.spacing.gutter,
+      paddingVertical: theme.spacing.sm,
+      justifyContent: 'center',
+      backgroundColor: theme.colors.background,
+      borderBottomWidth: theme.sizes.border,
+      borderBottomColor: theme.colors.outline,
+    },
+    headerCompact: { minHeight: theme.sizes.headerCompactMin },
+    topRow: {
+      minHeight: theme.sizes.touchTarget,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       gap: theme.spacing.md,
     },
-    headerText: { flex: 1, gap: 2 },
+    wordmark: { flexShrink: 1 },
+    rowTitle: { flex: 1, minWidth: 0 },
     back: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
+      minHeight: theme.sizes.touchTarget,
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: theme.colors.border,
-      // Reuse the right-facing chevron rather than ship a mirrored glyph.
-      transform: [{ rotate: '180deg' }],
+      gap: theme.spacing.xs,
+      paddingRight: theme.spacing.sm,
     },
+    // Flip the right-facing chevron on an inner view: a rotated touchable
+    // stops taking presses on Android.
+    backChevron: { transform: [{ rotate: '180deg' }] },
+    action: {
+      minHeight: theme.sizes.touchTarget,
+      minWidth: theme.sizes.touchTarget,
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+      paddingLeft: theme.spacing.sm,
+    },
+    actionLabel: { textDecorationLine: 'underline' },
+    content: {
+      flex: 1,
+      padding: theme.spacing.gutter,
+      gap: theme.spacing.gutter,
+    },
+    scroll: { flex: 1 },
+    scrollContent: {
+      padding: theme.spacing.gutter,
+      gap: theme.spacing.gutter,
+      // Clears the tab bar so the last card is never trapped.
+      paddingBottom: theme.spacing.xxl * 2,
+    },
+    centered: { alignItems: 'center', justifyContent: 'center' },
   });
+
+type HeaderProps = Pick<
+  ScreenProps,
+  | 'title'
+  | 'subtitle'
+  | 'action'
+  | 'actionDisabled'
+  | 'wordmark'
+  | 'onBack'
+  | 'backLabel'
+>;
+
+/** The title in the top row; with none, a spacer keeps the action right. */
+const RowTitle = ({ title }: Pick<ScreenProps, 'title'>) => {
+  const styles = useThemedStyles(createStyles);
+
+  return title ? (
+    <Typography
+      variant="stencilTitle"
+      accessibilityRole="header"
+      numberOfLines={1}
+      adjustsFontSizeToFit
+      minimumFontScale={ROW_TITLE_MIN_FONT_SCALE}
+      style={styles.rowTitle}
+    >
+      {title}
+    </Typography>
+  ) : (
+    <View style={styles.rowTitle} />
+  );
+};
+
+const Header = ({
+  title,
+  subtitle,
+  action,
+  actionDisabled = false,
+  wordmark = true,
+  onBack,
+  backLabel = DEFAULT_BACK_LABEL,
+}: HeaderProps) => {
+  const styles = useThemedStyles(createStyles);
+  const { sizes } = useTheme();
+  const titleInRow = !onBack && !wordmark;
+
+  return (
+    <View
+      style={[styles.header, titleInRow && styles.headerCompact]}
+      testID="screen-header"
+    >
+      <View style={styles.topRow}>
+        {titleInRow ? (
+          <RowTitle title={title} />
+        ) : onBack ? (
+          <TouchableOpacity
+            onPress={onBack}
+            accessibilityRole="button"
+            accessibilityLabel={
+              backLabel === DEFAULT_BACK_LABEL
+                ? 'Go back'
+                : `Back to ${backLabel}`
+            }
+            activeOpacity={0.7}
+            style={styles.back}
+            testID="btn-back"
+          >
+            <View style={styles.backChevron}>
+              <Icon name="chevron" size={sizes.iconMd} color="textPrimary" />
+            </View>
+            <Typography variant="actionLabel" numberOfLines={1}>
+              {backLabel.toUpperCase()}
+            </Typography>
+          </TouchableOpacity>
+        ) : (
+          <Typography
+            variant="wordmark"
+            color="textSecondary"
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={WORDMARK_MIN_FONT_SCALE}
+            maxFontSizeMultiplier={WORDMARK_MAX_FONT_MULTIPLIER}
+            style={styles.wordmark}
+          >
+            {WORDMARK}
+          </Typography>
+        )}
+
+        {action ? (
+          <TouchableOpacity
+            onPress={action.onPress}
+            disabled={actionDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={action.accessibilityLabel ?? action.label}
+            accessibilityState={{ disabled: actionDisabled }}
+            activeOpacity={0.7}
+            style={styles.action}
+            testID={action.testID ?? 'btn-header-action'}
+          >
+            <Typography
+              variant="actionLabel"
+              color={actionDisabled ? 'disabled' : 'textPrimary'}
+              numberOfLines={1}
+              style={actionDisabled ? undefined : styles.actionLabel}
+            >
+              {action.label.toUpperCase()}
+            </Typography>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {title && !titleInRow ? (
+        <Typography
+          variant="stencilTitle"
+          accessibilityRole="header"
+          numberOfLines={1}
+        >
+          {title}
+        </Typography>
+      ) : null}
+      {subtitle ? (
+        <Typography variant="body" color="textSecondary" numberOfLines={2}>
+          {subtitle}
+        </Typography>
+      ) : null}
+    </View>
+  );
+};
 
 export const Screen = ({
   title,
   subtitle,
-  headerRight,
+  action,
+  actionDisabled,
+  wordmark,
   onBack,
+  backLabel,
   children,
   centered = false,
   scrollable = false,
+  scrollRef,
+  scrollProps,
   contentStyle,
   testID,
 }: ScreenProps) => {
@@ -97,31 +304,16 @@ export const Screen = ({
   const { bottom: navBarHeight } = useSafeAreaInsets();
 
   const header =
-    title || headerRight || onBack ? (
-      <View style={styles.header}>
-        {onBack ? (
-          <TouchableOpacity
-            onPress={onBack}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-            activeOpacity={0.7}
-            style={styles.back}
-            testID="btn-back"
-          >
-            <Icon name="chevron" size={18} color="textPrimary" />
-          </TouchableOpacity>
-        ) : null}
-
-        <View style={styles.headerText}>
-          {title ? <Typography variant="title">{title}</Typography> : null}
-          {subtitle ? (
-            <Typography variant="body" color="textSecondary">
-              {subtitle}
-            </Typography>
-          ) : null}
-        </View>
-        {headerRight}
-      </View>
+    title || action || onBack ? (
+      <Header
+        title={title}
+        subtitle={subtitle}
+        action={action}
+        actionDisabled={actionDisabled}
+        wordmark={wordmark}
+        onBack={onBack}
+        backLabel={backLabel}
+      />
     ) : null;
 
   return (
@@ -130,8 +322,12 @@ export const Screen = ({
       style={styles.safeArea}
       edges={['top', 'left', 'right']}
     >
+      {header}
       {scrollable ? (
         <ScrollView
+          {...scrollProps}
+          ref={scrollRef}
+          style={styles.scroll}
           contentContainerStyle={[
             styles.scrollContent,
             contentStyle,
@@ -144,14 +340,12 @@ export const Screen = ({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {header}
           {children}
         </ScrollView>
       ) : (
         <View
           style={[styles.content, centered && styles.centered, contentStyle]}
         >
-          {header}
           {children}
         </View>
       )}

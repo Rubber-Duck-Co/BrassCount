@@ -64,7 +64,7 @@ For formatting, check only the files the branch touches (`npx prettier --check <
    - Otherwise start it yourself in the background (`npx react-native start --port 8081`) and note that you started it. Give the background command a long timeout (the full run takes well over an hour): if the background task is stopped at its time limit, the node process can survive it, orphaned, still holding the port. Either way, find it for teardown by its port (`netstat -ano | grep :8081` for the PID), not by the task.
    - If the app later sits on "Loading from 10.0.2.2:8081…", the user's Metro is wedged: see the memory note for the 8082 workaround; do not stop theirs.
 4. `$D mic grant`, `$D synth silent`, `$D log-clear`, `$D launch`. Wait a few seconds before the first tap: the tab bar appears a moment before the app takes taps.
-5. Baseline. Write down, from the screens: Profile name, handle and the Runs / Drills counters; Settings' Appearance and Level units; History's Runs / Drills counters; the Drills tab's count; and `adb shell settings get system font_scale`. Teardown checks these come back.
+5. Baseline. Write down, from the screens: Setup's profile name, handle and runs / drills line, Appearance and Level units; History's Runs / Drills counters; the Drills tab's count; and `adb shell settings get system font_scale`. Teardown checks these come back.
 
 ### If a patch anchor is missing
 
@@ -92,8 +92,8 @@ How to drive the UI well:
 - Find things by `testID` (`$D tap btn-start`, `$D text id=text-elapsed`), and fall back to `text=` or `contains=` for rows without one. Take a fresh `$D dump` whenever you are unsure what is on screen. Positions change with font scale and scrolling, so do not reuse coordinates across them.
 - While a run is ticking the UI never goes idle and cannot be dumped: use `$D tap-xy` with coordinates from a dump taken just before Start, and read results after the run ends.
 - Take a screenshot (`$D screenshot <scratchpad>/name.png`) at each screen you check visually and look at it with the Read tool. Tests and dumps cannot see clipping, overlap, contrast or wrong theme colours; your eyes can.
-- A soft keyboard docks after typing (check `adb shell dumpsys input_method | grep mInputShown`) and covers the buttons at the bottom of a form, such as Save: a tap there types a letter into the field instead. Hide it with the keyboard's own chevron (`$D tap-xy 113 2335` on the 1080x2400 AVD), never with Back, which pops the screen when no keyboard or sheet is up.
-- While a sheet is open, Back (`$D key 4`) closes it, but if the keyboard is up the first Back only hides the keyboard: press it again. Do not use Escape (`key 111`) on the par sheet: it freezes the drill editor (#125).
+- A soft keyboard docks after typing (check `adb shell dumpsys input_method | grep mInputShown`) and covers the buttons at the bottom of a form, such as Save: a tap there types a letter into the field instead. Hide it with the keyboard's own chevron (`$D tap-xy 113 2335` on the 1080x2400 AVD), never with Back, which pops the screen when no keyboard or sheet is up. Check `mInputShown=true` right before that tap: the keyboard can close on its own, and the same point is then the Timer tab.
+- While a sheet is open, Back (`$D key 4`) closes it, but if the keyboard is up the first Back only hides the keyboard: press it again. Escape (`key 111`) closes any sheet the same way, the par sheet included, and the screen behind keeps taking presses: the editor freeze of #125 was fixed by #133, and an Escape followed by a press on the screen behind is its regression check.
 - Start waits a random 1–5 s before the beep. Allow for it whenever a check waits for a shot: the first shot of `run 150 1200` can land as late as 6.4 s after Start.
 - After the app has been in the background, a "Fast Refresh disconnected" toast can sit over the tab bar and swallow taps; force-stop and relaunch (`$D stop-app`, `$D launch`).
 - `$D crashes` after each area. A crash or JS error in the log is a FAIL even if the screen looked right. The `ReactNoCrashSoftException` (`onWindowFocusChange … context is not ready`) logged on every cold start is framework noise, and the emulator's own services (Bluetooth, Chrome) also crash now and then; `crashes` filters both out and says how many lines it ignored.
@@ -104,11 +104,11 @@ Judge each check against CLAUDE.md's description of the intended behaviour. When
 
 Do every step, in this order, even when testing stopped early.
 
-1. Put back what you changed on the device: profile name and handle (through the Profile screen), Appearance and Level units (through Settings), `cmd uimode night no` if you changed it, the original font scale (force-stop the app first).
+1. Put back what you changed on the device: profile name and handle Appearance and Level units (all through Setup), `cmd uimode night no` if you changed it, the original font scale (force-stop the app first).
 2. `$P synth off`. The native code is now back to normal in the repo.
 3. `$D stop-app` first: with the app open, Metro's Fast Refresh loads the cleanup the moment it is applied, and step 4 then logs `removed sessions=0 drills=0`. Then `$P cleanup on`, and rebuild and install from Git Bash as in step 3.2. This one build both drops the patched native code from the emulator and loads the cleanup. Check `$D metro` after the build and restart it as in step 3.3 if it died.
 4. `$D log-clear`, `$D launch`, wait ~5 s, `$D log`. Expect a line `BRASSCOUNT-E2E removed sessions=N drills=M; left drills=… sessions=…`. A `cleanup failed` line is a finding; report it and the data left behind.
-5. Check the baseline on screen: Drills count, History Runs / Drills and Profile counters and the profile fields all match what you wrote down. No `ZZE2E` drill is listed.
+5. Check the baseline on screen: Drills count, History Runs / Drills and Setup's profile counts and the profile fields all match what you wrote down. No `ZZE2E` drill is listed.
 6. `$P cleanup off`, then `$P status` must say no patched files and no e2e markers. `git status --porcelain` must match the preflight snapshot exactly. If it does not, fix that before anything else; leaving test code in the user's tree is the worst outcome of this skill.
 7. Relaunch once (`$D stop-app`, `$D launch`, wait until the Timer shows) while Metro serves the clean bundle. The device caches the last dev bundle it loaded, and until it does this the cached one still imports `e2eCleanup`, so the next launch without Metro, or with the user's own Metro on another branch, fails on the missing file.
 8. `$D synth off` is unnecessary (the installed build no longer reads it), but remove the file anyway: `adb shell run-as com.rubberduckco.brasscount rm -f files/e2e-synth.txt`.

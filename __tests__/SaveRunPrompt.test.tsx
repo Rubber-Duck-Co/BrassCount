@@ -1,5 +1,7 @@
 import type { ComponentProps } from 'react';
 
+import { Dimensions, StyleSheet } from 'react-native';
+
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { SaveRunPrompt } from '../src/components/SaveRunPrompt';
@@ -8,13 +10,11 @@ type Props = ComponentProps<typeof SaveRunPrompt>;
 
 const defaults: Props = {
   completed: true,
-  totalTime: 2.2,
-  heardCount: 3,
-  plannedCount: 3,
   status: 'unsaved',
   failure: null,
   onSave: () => {},
-  onDiscard: () => {},
+  onReset: () => {},
+  onView: () => {},
 };
 
 const render = (props: Partial<Props> = {}): ReactTestRenderer => {
@@ -34,36 +34,74 @@ const first = (tree: ReactTestRenderer, testID: string) =>
 const has = (tree: ReactTestRenderer, testID: string): boolean =>
   tree.root.findAllByProps({ testID }).length > 0;
 
+const textsUnder = (tree: ReactTestRenderer, testID: string): string[] =>
+  first(tree, testID)
+    .findAll(
+      node =>
+        typeof node.type === 'string' &&
+        typeof node.props.children === 'string',
+    )
+    .map(node => node.props.children);
+
+/** Reports a new system font scale the way the OS does, as a window change. */
+const setFontScale = (fontScale: number): void => {
+  act(() => {
+    Dimensions.set({
+      window: { ...Dimensions.get('window'), fontScale },
+      screen: Dimensions.get('screen'),
+    });
+  });
+};
+
 describe('SaveRunPrompt', () => {
-  it('asks to save a completed run, with its time', () => {
+  const initialWindow = Dimensions.get('window');
+
+  afterEach(() => setFontScale(initialWindow.fontScale));
+
+  it('makes Save run the main action, with Reset beside it', () => {
     const tree = render();
 
-    expect(first(tree, 'text-save-run-summary').props.children).toBe(
-      '2.20s · 3 steps heard.',
-    );
-    expect(first(tree, 'btn-save-run').props.label).toBe('Save run');
+    expect(first(tree, 'btn-save-run').props).toMatchObject({
+      label: 'Save run',
+      variant: 'primary',
+      size: 'main',
+    });
+    expect(first(tree, 'btn-reset-run').props).toMatchObject({
+      label: 'Reset',
+      variant: 'secondary',
+      accessibilityLabel: 'Reset without saving',
+    });
+  });
+
+  it('says nothing more about a completed run', () => {
+    const tree = render();
+
+    expect(has(tree, 'text-save-run-note')).toBe(false);
     expect(has(tree, 'text-save-run-error')).toBe(false);
   });
 
-  it('says a run stopped early is kept as incomplete', () => {
-    const tree = render({ completed: false, totalTime: 1.4, heardCount: 1 });
+  it('says a run stopped early saves as incomplete', () => {
+    const tree = render({ completed: false });
 
-    expect(first(tree, 'text-save-run-summary').props.children).toBe(
-      'Stopped early at 1.40s: 1 of 3 steps heard. It is kept as incomplete and left out of your best and average.',
+    expect(first(tree, 'text-save-run-note').props.children).toBe(
+      'Saves as incomplete, left out of your best and average.',
     );
-    expect(first(tree, 'btn-save-run').props.label).toBe('Save as incomplete');
+    expect(first(tree, 'btn-save-run').props).toMatchObject({
+      label: 'Save run',
+      accessibilityLabel: 'Save run as incomplete',
+    });
   });
 
-  it('calls back on Save and on Discard', () => {
+  it('calls back on Save and on Reset', () => {
     const onSave = jest.fn();
-    const onDiscard = jest.fn();
-    const tree = render({ onSave, onDiscard });
+    const onReset = jest.fn();
+    const tree = render({ onSave, onReset });
 
     act(() => first(tree, 'btn-save-run').props.onPress());
-    act(() => first(tree, 'btn-discard-run').props.onPress());
+    act(() => first(tree, 'btn-reset-run').props.onPress());
 
     expect(onSave).toHaveBeenCalledTimes(1);
-    expect(onDiscard).toHaveBeenCalledTimes(1);
+    expect(onReset).toHaveBeenCalledTimes(1);
   });
 
   it('turns both buttons off while saving', () => {
@@ -71,9 +109,10 @@ describe('SaveRunPrompt', () => {
 
     expect(first(tree, 'btn-save-run').props).toMatchObject({
       label: 'Saving…',
+      busy: true,
       disabled: true,
     });
-    expect(first(tree, 'btn-discard-run').props.disabled).toBe(true);
+    expect(first(tree, 'btn-reset-run').props.disabled).toBe(true);
   });
 
   it('offers a retry when the device storage failed', () => {
@@ -85,29 +124,97 @@ describe('SaveRunPrompt', () => {
     expect(first(tree, 'btn-save-run').props.disabled).toBe(false);
   });
 
-  it('offers no retry for a run storage turned down, but can still discard it', () => {
+  it('offers no retry for a run storage turned down, but can still reset it', () => {
     const tree = render({ failure: 'invalid' });
 
     expect(first(tree, 'text-save-run-error').props.children).toBe(
       'This run cannot be saved.',
     );
     expect(first(tree, 'btn-save-run').props.disabled).toBe(true);
-    expect(first(tree, 'btn-discard-run').props.disabled).toBe(false);
+    expect(first(tree, 'btn-reset-run').props.disabled).toBe(false);
   });
 
-  it('stacks its buttons at a large text size', () => {
+  it('keeps the actions side by side, Save the wider, at a normal text size', () => {
+    setFontScale(1);
+    const tree = render();
+
+    const row = StyleSheet.flatten(
+      first(tree, 'row-save-run-actions').props.style,
+    );
+    expect(row.flexDirection).toBe('row');
+    const save = StyleSheet.flatten(first(tree, 'btn-save-run').props.style);
+    const reset = StyleSheet.flatten(first(tree, 'btn-reset-run').props.style);
+    expect(save.flex).toBe(2);
+    expect(reset.flex).toBe(1);
+  });
+
+  it('stacks its actions at a large text size', () => {
     // Jest's window has a font scale of 2.
     const tree = render();
 
-    const row = first(tree, 'btn-discard-run').parent?.parent;
-    expect(row?.props.style).toMatchObject({ flexDirection: 'column' });
+    const row = StyleSheet.flatten(
+      first(tree, 'row-save-run-actions').props.style,
+    );
+    expect(row.flexDirection).toBe('column');
   });
 
-  it('says the run is saved in place of the question', () => {
+  it('says the run is saved in place of the actions, with a way to view it', () => {
+    const onView = jest.fn();
+    const tree = render({ status: 'saved', onView });
+
+    expect(textsUnder(tree, 'text-run-saved')).toEqual(['Saved to Log']);
+    expect(has(tree, 'btn-save-run')).toBe(false);
+    expect(has(tree, 'btn-reset-run')).toBe(false);
+
+    act(() => first(tree, 'btn-view-run').props.onPress());
+    expect(onView).toHaveBeenCalledTimes(1);
+    expect(first(tree, 'btn-view-run').props).toMatchObject({
+      accessibilityRole: 'button',
+      accessibilityLabel: 'View in Log',
+    });
+  });
+
+  it.each([
+    ['not saved yet', { status: 'unsaved', failure: null }],
+    ['saving', { status: 'saving', failure: null }],
+    ['the save failed', { status: 'unsaved', failure: 'failed' }],
+    ['storage turned the run down', { status: 'unsaved', failure: 'invalid' }],
+  ] as const)('offers no way to view the run while %s', (_state, props) => {
+    const tree = render(props);
+
+    // Save on show rules out a prompt that renders nothing at all.
+    expect(has(tree, 'btn-save-run')).toBe(true);
+    expect(has(tree, 'btn-view-run')).toBe(false);
+  });
+
+  // This pins the style only: Jest cannot see text wrap, so whether the last
+  // word stays on show on repeat saves needs a check on a device.
+  it('gives the saved label the room left by VIEW', () => {
     const tree = render({ status: 'saved' });
 
-    expect(has(tree, 'text-run-saved')).toBe(true);
-    expect(has(tree, 'btn-save-run')).toBe(false);
-    expect(has(tree, 'btn-discard-run')).toBe(false);
+    const label = first(tree, 'text-run-saved').find(
+      node =>
+        typeof node.type === 'string' && node.props.children === 'Saved to Log',
+    );
+
+    // `flex` or `flexGrow` both take the room, so either passes.
+    const { flex, flexGrow } = StyleSheet.flatten(label.props.style);
+    expect((flex ?? 0) > 0 || (flexGrow ?? 0) > 0).toBe(true);
+  });
+
+  it('gives the view action a 48dp touch target', () => {
+    const tree = render({ status: 'saved' });
+
+    expect(
+      StyleSheet.flatten(first(tree, 'btn-view-run').props.style),
+    ).toMatchObject({ minWidth: 48, minHeight: 48 });
+  });
+
+  it('says a run stopped early was saved as incomplete', () => {
+    const tree = render({ status: 'saved', completed: false });
+
+    expect(textsUnder(tree, 'text-run-saved')).toEqual([
+      'Saved to Log as incomplete',
+    ]);
   });
 });

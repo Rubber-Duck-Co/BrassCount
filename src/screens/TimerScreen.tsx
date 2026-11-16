@@ -10,32 +10,34 @@ import {
 import {
   AccessibilityInfo,
   Linking,
+  ScrollView,
   StyleSheet,
-  TouchableOpacity,
   View,
 } from 'react-native';
 
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import {
   useIsFocused,
+  useRoute,
   useNavigation,
   type CompositeNavigationProp,
+  type RouteProp,
 } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import type { SemanticColors, Theme } from '@/theme/theme';
+import type { Theme } from '@/theme/theme';
 import type { Drill, DrillStep } from '@/types/drill';
 import type { MainTabParamList, RootStackParamList } from '@/types/navigation';
-import type { RunResult, RunStep, StepResult } from '@/types/run';
+import type { RunResult } from '@/types/run';
 import type { SessionInput } from '@/types/session';
 import { Button } from '@components/Button';
-import { Card } from '@components/Card';
+import { ClockBox } from '@components/ClockBox';
 import { DrillPicker } from '@components/DrillPicker';
-import { Icon } from '@components/Icon';
-import { ListRow } from '@components/ListRow';
+import { FailureNotice } from '@components/FailureNotice';
 import { SaveRunPrompt } from '@components/SaveRunPrompt';
 import { Screen } from '@components/Screen';
 import { SectionHeader } from '@components/SectionHeader';
+import { SplitsTable } from '@components/SplitsTable';
 import { Typography } from '@components/Typography';
 import {
   useDrillRun,
@@ -43,27 +45,16 @@ import {
   type DrillRunPhase,
 } from '@hooks/useDrillRun';
 import { useDrills } from '@hooks/useDrills';
-import {
-  useRunSave,
-  type RunSaveFailure,
-  type RunSaveStatus,
-} from '@hooks/useRunSave';
-import { useTheme, useThemedStyles } from '@hooks/useTheme';
-import { countShots, stepLabel, stepTypeLabel, totalPar } from '@utils/drill';
-import {
-  formatElapsed,
-  formatSeconds,
-  pluralize,
-  spokenSeconds,
-} from '@utils/format';
-import { shownDeltaSign } from '@utils/history';
-import { planRun } from '@utils/runDetection';
+import { useRunSave } from '@hooks/useRunSave';
+import { useThemedStyles } from '@hooks/useTheme';
+import { useTimerSettings } from '@hooks/useTimerSettings';
+import { countShots, stepTypeLabel, totalPar } from '@utils/drill';
+import { pluralize, spokenSeconds } from '@utils/format';
+import { planRun, timedSteps } from '@utils/runDetection';
+import { describeSplits, type SplitStage } from '@utils/splitRows';
+import { clockCaption, clockMeta, type ClockPhase } from '@utils/timerReadout';
 
-/** How often the running clock is redrawn. */
-const CLOCK_TICK_MS = 50;
-const NO_VALUE = '—';
-
-/** The Timer tab, which also pushes the editor over the tabs. */
+/** The Timer tab, which also jumps into the Drills and Setup tabs. */
 type Nav = CompositeNavigationProp<
   BottomTabNavigationProp<MainTabParamList, 'Timer'>,
   NativeStackNavigationProp<RootStackParamList>
@@ -146,316 +137,80 @@ const timingNote = (result: RunResult): string => {
 
 /**
  * A finished run as a screen reader should say it, with what can be done
- * with it: the prompt to save it appears under the timer.
+ * with it: the prompt to save it appears under the timer. A run with
+ * nothing heard never finishes: it goes back to ready.
  */
 const speakResult = (result: RunResult): string => {
-  if (result.results.length === 0) {
-    return 'Run stopped early, nothing heard';
-  }
   const run = result.completed
     ? `Run complete, ${speak(result.totalTime)}`
     : `Run stopped early, ${pluralize(result.results.length, 'step')} heard`;
-  return `${run}. Save it or discard it`;
-};
-
-type Tone = 'success' | 'danger' | 'neutral';
-
-const toneColor: Record<Tone, keyof SemanticColors> = {
-  success: 'success',
-  danger: 'danger',
-  neutral: 'textSecondary',
-};
-
-type SplitRow = {
-  subtitle?: string;
-  value: string;
-  tone: Tone;
-  /** The row as a screen reader should say it. */
-  spoken: string;
-};
-
-/** A step the timer cannot hear: a draw, a transition, a holster. */
-const describeSilentStep = (
-  title: string,
-  step: DrillStep,
-  countsTowardsNext: boolean,
-): SplitRow => {
-  if (step.par === undefined || !countsTowardsNext) {
-    return {
-      subtitle: 'not timed',
-      value: NO_VALUE,
-      tone: 'neutral',
-      spoken: `${title}, not timed`,
-    };
-  }
-  return {
-    subtitle: `par ${formatSeconds(step.par)}, counted with the next step`,
-    value: NO_VALUE,
-    tone: 'neutral',
-    spoken: `${title}, not timed. Its par of ${speak(step.par)} counts towards the next step`,
-  };
-};
-
-/** A step the timer listens for, before or after it has been heard. */
-const describeHeardStep = (
-  title: string,
-  planned: RunStep,
-  result: StepResult | undefined,
-): SplitRow => {
-  const par =
-    planned.par === undefined ? undefined : `par ${formatSeconds(planned.par)}`;
-  const spokenPar =
-    planned.par === undefined ? 'no par' : `par ${speak(planned.par)}`;
-
-  if (result === undefined) {
-    return {
-      subtitle: par,
-      value: NO_VALUE,
-      tone: 'neutral',
-      spoken: `${title}, ${spokenPar}, not heard yet`,
-    };
-  }
-
-  const value = formatSeconds(result.actual);
-  const took = `took ${speak(result.actual)}`;
-  if (result.delta === null) {
-    return {
-      value,
-      tone: 'neutral',
-      spoken: `${title}, ${spokenPar}, ${took}`,
-    };
-  }
-
-  const sign = shownDeltaSign(result.delta);
-  const size = formatSeconds(Math.abs(result.delta));
-  const againstPar =
-    sign === 0 ? 'on par' : `${size} ${sign < 0 ? 'under' : 'over'}`;
-  const spokenAgainstPar =
-    sign === 0
-      ? 'on par'
-      : `${speak(result.delta)} ${sign < 0 ? 'under' : 'over'} par`;
-  return {
-    subtitle: `${par} · ${againstPar}`,
-    value,
-    tone: sign === 0 ? 'neutral' : sign < 0 ? 'success' : 'danger',
-    spoken: `${title}, ${spokenPar}, ${took}, ${spokenAgainstPar}`,
-  };
+  return `${run}. Save it or reset it`;
 };
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
-    readout: {
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-      paddingVertical: theme.spacing.lg,
+    // Not padded itself: the scrolling content and the main action under
+    // it each take the gutter, so the content scrolls edge to edge.
+    content: { padding: theme.spacing.none, gap: theme.spacing.none },
+    scroll: { flex: 1 },
+    // No bottom padding: the main action's own gap separates the two.
+    scrollContent: {
+      flexGrow: 1,
+      paddingTop: theme.spacing.gutter,
+      paddingHorizontal: theme.spacing.gutter,
+      gap: theme.spacing.gutter,
     },
-    metaRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignSelf: 'stretch',
-      paddingHorizontal: theme.spacing.xs,
-    },
-    clock: {
-      alignItems: 'center',
-      gap: theme.spacing.sm,
-    },
-    startButton: {
-      width: 132,
-      height: 132,
-      borderRadius: 66,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: theme.spacing.xs,
-      marginTop: theme.spacing.md,
-    },
+    // Pinned under the scrolling content, so it never moves between states.
+    mainAction: { padding: theme.spacing.gutter, gap: theme.spacing.inset },
+    splits: { gap: theme.spacing.xs },
     stopGlyph: {
-      width: 26,
-      height: 26,
-      borderRadius: theme.radius.sm,
-      backgroundColor: theme.colors.textOnPrimary,
-    },
-    cancelGlyph: {
-      // On an inner view: a touchable that is rotated stops taking presses.
-      transform: [{ rotate: '45deg' }],
-    },
-    resetButton: {
-      paddingVertical: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.md,
-      marginTop: theme.spacing.xs,
-    },
-    locked: {
-      opacity: 0.5,
+      width: theme.sizes.iconLg,
+      height: theme.sizes.iconLg,
+      backgroundColor: theme.colors.textOnInverse,
     },
     timingNote: {
       paddingHorizontal: theme.spacing.xs,
     },
   });
 
-type FailureActionProps = {
-  failure: DrillRunFailure | null;
-  onCalibrate: () => void;
-};
-
 /**
- * The way out of a failure the header names, when there is one the
+ * The way out of a failure the notice names, when there is one the
  * shooter can take from here: the app's settings for a microphone that has
- * been turned off, the Calibration tab for a sound that has no threshold.
+ * been turned off, Calibration in Setup for a sound that has no threshold.
  */
-const FailureAction = ({ failure, onCalibrate }: FailureActionProps) => {
+const failureAction = (
+  failure: DrillRunFailure | null,
+  onCalibrate: () => void,
+) => {
   switch (failure?.kind) {
     case 'permission-blocked':
-      return (
-        <Button
-          label="Open settings"
-          variant="secondary"
-          onPress={openAppSettings}
-          testID="btn-open-settings"
-        />
-      );
+      return {
+        label: 'Open settings',
+        onPress: openAppSettings,
+        testID: 'btn-open-settings',
+      };
     case 'not-calibrated':
-      return (
-        <Button
-          label="Go to Calibration"
-          variant="secondary"
-          onPress={onCalibrate}
-          testID="btn-go-calibration"
-        />
-      );
+      return {
+        label: 'Go to Calibration',
+        onPress: onCalibrate,
+        testID: 'btn-go-calibration',
+      };
     default:
-      return null;
+      return undefined;
   }
-};
-
-type RunOutcomeProps = {
-  /** A run has finished and its times are on show. */
-  show: boolean;
-  /** What the run would save as; `null` when nothing was heard. */
-  session: SessionInput | null;
-  /** How many steps the run listened for. */
-  plannedCount: number;
-  saveStatus: RunSaveStatus;
-  saveFailure: RunSaveFailure | null;
-  onSave: () => void;
-  onDiscard: () => void;
-};
-
-/**
- * Under the timer once a run has finished: the prompt to save or discard
- * it, or why there is nothing to save.
- */
-const RunOutcome = ({
-  show,
-  session,
-  plannedCount,
-  saveStatus,
-  saveFailure,
-  onSave,
-  onDiscard,
-}: RunOutcomeProps) => {
-  const styles = useThemedStyles(createStyles);
-
-  if (!show) {
-    return null;
-  }
-  if (session === null) {
-    return (
-      <Typography
-        variant="caption"
-        color="textSecondary"
-        style={styles.timingNote}
-        testID="text-nothing-to-save"
-      >
-        Nothing was heard, so there is nothing to save.
-      </Typography>
-    );
-  }
-  return (
-    <SaveRunPrompt
-      completed={session.completed}
-      totalTime={session.totalTime}
-      heardCount={session.splits.length}
-      plannedCount={plannedCount}
-      status={saveStatus}
-      failure={saveFailure}
-      onSave={onSave}
-      onDiscard={onDiscard}
-    />
-  );
-};
-
-type RunClockProps = {
-  running: boolean;
-  /** The run's time once it has ended. `null` while there is none. */
-  finalSeconds: number | null;
-  /** The drill's total par. `null` when a step is untimed. */
-  parSeconds: number | null;
-  readElapsed: () => number;
-};
-
-/**
- * The big readout. It owns the tick, so the clock redraws many times a
- * second without the rest of the screen redrawing with it: the JS thread
- * is left free for the microphone readings during a run.
- */
-const RunClock = ({
-  running,
-  finalSeconds,
-  parSeconds,
-  readElapsed,
-}: RunClockProps) => {
-  const styles = useThemedStyles(createStyles);
-  const [ticked, setTicked] = useState(0);
-
-  useEffect(() => {
-    if (!running) {
-      return;
-    }
-    const id = setInterval(() => setTicked(readElapsed()), CLOCK_TICK_MS);
-    return () => {
-      clearInterval(id);
-      // The next run starts from zero, not from where this one got to.
-      setTicked(0);
-    };
-  }, [running, readElapsed]);
-
-  const elapsed = finalSeconds ?? (running ? ticked : 0);
-  // Judged as the time reads to the hundredth, like the rows under it: a
-  // run shown as 2.50 against a par of 2.50 is not over it.
-  const overPar =
-    parSeconds !== null && shownDeltaSign(elapsed - parSeconds) > 0;
-
-  return (
-    <View style={styles.clock}>
-      <Typography
-        variant="timer"
-        color={overPar ? 'danger' : running ? 'primary' : 'textPrimary'}
-        align="center"
-        testID="text-elapsed"
-      >
-        {formatElapsed(elapsed)}
-      </Typography>
-
-      <Typography
-        variant="overline"
-        color="textTertiary"
-        align="center"
-        testID="text-elapsed-caption"
-      >
-        {overPar ? 'OVER PAR' : 'SECONDS'}
-      </Typography>
-    </View>
-  );
 };
 
 /**
  * The shot timer. Times a run of a stored drill from the microphone, then
- * asks whether the run goes into History: nothing is saved until the
- * shooter says so, and a run that is not wanted is simply discarded.
+ * asks whether the run goes into Log: nothing is saved until the
+ * shooter says so, and a run that is not wanted is reset without saving.
+ * A run stopped with nothing heard goes straight back to ready.
  */
 export const TimerScreen = () => {
   const styles = useThemedStyles(createStyles);
-  const theme = useTheme();
   const navigation = useNavigation<Nav>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Timer'>>();
+  const { startDelay } = useTimerSettings();
 
   const { state: drillsState, reload: reloadDrills } = useDrills();
   const drills =
@@ -477,6 +232,7 @@ export const TimerScreen = () => {
   const steps = drill?.steps ?? NO_STEPS;
   // The steps the run listens for, with the pars they are judged against.
   const plan = useMemo(() => planRun(steps), [steps]);
+  const timed = useMemo(() => timedSteps(steps), [steps]);
 
   const {
     session,
@@ -538,6 +294,19 @@ export const TimerScreen = () => {
     }
   }, [failureText, isFocused, result]);
 
+  // A run stopped with nothing heard goes straight back to ready, with no
+  // result to announce, so the stop itself is said. Not when a failure
+  // ended it, which is said instead, nor when the tab was left: there is
+  // nothing to come back to.
+  const lastPhase = useRef<DrillRunPhase>(phase);
+  useEffect(() => {
+    const stoppedEmpty = lastPhase.current === 'running' && phase === 'idle';
+    lastPhase.current = phase;
+    if (stoppedEmpty && isFocused && failureText === null) {
+      AccessibilityInfo.announceForAccessibility('Run stopped, nothing heard');
+    }
+  }, [failureText, isFocused, phase]);
+
   const onPressStart = useCallback(() => {
     if (running || pending) {
       stop();
@@ -564,26 +333,52 @@ export const TimerScreen = () => {
     [reset, selectedDrill],
   );
 
+  // Each jump opens the screen over its tab's own first screen, not in
+  // place of it, so going back lands on the Drills list or on Setup.
   const createDrill = useCallback(
-    () => navigation.navigate('SequenceEditor', {}),
+    () =>
+      navigation.navigate('Drills', {
+        screen: 'SequenceEditor',
+        params: {},
+        initial: false,
+      }),
     [navigation],
   );
 
   const goToCalibration = useCallback(
-    () => navigation.navigate('Calibration'),
+    () =>
+      navigation.navigate('Setup', { screen: 'Calibration', initial: false }),
     [navigation],
   );
 
+  const viewSavedRun = useCallback(() => {
+    if (runDrill === null) {
+      return;
+    }
+    navigation.navigate('Log', {
+      screen: 'HistoryDetail',
+      params: { drillId: runDrill.id, drillName: runDrill.name },
+      initial: false,
+    });
+  }, [navigation, runDrill]);
+
   // The prompt's buttons go once it is answered, and a screen reader's
   // focus with them: it is put on the Start button, where the next run
-  // begins, rather than back at the top of the screen.
-  const startButtonRef = useRef<ComponentRef<typeof TouchableOpacity>>(null);
-  const focusStartButton = useCallback(() => {
+  // begins, rather than back at the top of the screen. The button only
+  // comes back with the render that answers the prompt, so each request is
+  // a state change and the focus is sent once that render has committed.
+  const startButtonRef = useRef<ComponentRef<typeof View>>(null);
+  const [focusStartRequests, setFocusStartRequests] = useState(0);
+  useEffect(() => {
     const button = startButtonRef.current;
-    if (button !== null) {
+    if (focusStartRequests > 0 && button !== null) {
       AccessibilityInfo.sendAccessibilityEvent(button, 'focus');
     }
-  }, []);
+  }, [focusStartRequests]);
+  const focusStartButton = useCallback(
+    () => setFocusStartRequests(count => count + 1),
+    [],
+  );
 
   const saveRun = useCallback(async () => {
     // `save` settles a failure into the prompt and never rejects.
@@ -591,80 +386,168 @@ export const TimerScreen = () => {
     if (stored !== null) {
       AccessibilityInfo.announceForAccessibility(
         stored.completed
-          ? 'Run saved to History'
-          : 'Run saved to History as incomplete',
+          ? 'Run saved to Log'
+          : 'Run saved to Log as incomplete',
       );
       focusStartButton();
     }
   }, [focusStartButton, save]);
 
-  const discardRun = useCallback(() => {
+  const resetRun = useCallback(() => {
     reset();
     // The prompt, and the reader's focus with it, is gone: say what happened.
-    AccessibilityInfo.announceForAccessibility('Run discarded');
+    AccessibilityInfo.announceForAccessibility('Run reset, not saved');
     focusStartButton();
   }, [focusStartButton, reset]);
 
-  const shotCount = countShots(steps);
-  const drillPar = totalPar(plan);
-  const onButtonColor = pending ? 'textOnWarning' : 'textOnPrimary';
   const noDrill = drillsState.status === 'ready' && drill === null;
-  // Reset sits under the Stop button: while a run is on it would throw
-  // the run away at a stray touch, and Stop already ends it. Nor while a
-  // run is being saved, which it would replace.
-  const resetLocked = running || pending || saving;
+  // The drill on the timer cannot change while a run is on, which picking
+  // another would throw away, nor while a run is being saved against it.
+  const drillLocked = running || pending || saving;
+
+  // A Load on the Drills tab names a drill to put on the timer. It is
+  // cleared at once, so a drill picked here later is never overridden by
+  // it, and ignored while the drill is locked by a run. An id that is no
+  // longer stored needs nothing more: the screen falls back as it does for
+  // any drill that goes. It is set before the drills read on focus have
+  // answered, so a drill made moments ago appears once they do.
+  const loadedDrillId = route.params?.drillId;
+  useEffect(() => {
+    if (loadedDrillId === undefined) {
+      return;
+    }
+    navigation.setParams({ drillId: undefined });
+    if (!drillLocked) {
+      selectDrill(loadedDrillId);
+      // Held even when it is the drill already on show as the newest, so a
+      // drill made later does not take its place.
+      setSelectedDrillId(loadedDrillId);
+    }
+  }, [loadedDrillId, navigation, drillLocked, selectDrill]);
+
+  // Every timed step's par, the step that ends the draw included: it is
+  // judged against its own par as well as the draw against the draw's.
+  const drillPar = totalPar(timed);
+  const finished = phase === 'finished' && result !== null;
+  const clockPhase: ClockPhase = pending
+    ? 'pending'
+    : running
+      ? 'running'
+      : finished
+        ? 'finished'
+        : 'ready';
+  const readout = {
+    phase: clockPhase,
+    shotCount: countShots(steps),
+    plannedCount: plan.length,
+    heardCount: results.length,
+    drillPar,
+    completed: result?.completed === true,
+    totalTime: result?.totalTime ?? null,
+    startDelay,
+  };
+
+  const splitStage: SplitStage = running
+    ? 'listening'
+    : finished
+      ? 'finished'
+      : 'before';
+  const splitRows = describeSplits({
+    steps,
+    plan,
+    results,
+    stage: splitStage,
+  });
+
+  // A finished run is offered for saving as the main action, with Reset
+  // beside it; one with nothing heard never finishes, it goes back to
+  // ready. Start comes back once the run is saved, under the line that says
+  // so, or once it is reset.
+  const offerSave = finished && session !== null;
+  const showStart = !offerSave || saveStatus === 'saved';
 
   return (
     <Screen
-      title="Shot Timer"
+      title="Timer"
+      wordmark={false}
       subtitle={
         failureText ??
         (noDrill ? 'Create a drill to start' : phaseMessage(phase, result))
       }
-      scrollable
+      contentStyle={styles.content}
       testID="screen-timer"
     >
-      <FailureAction failure={failure} onCalibrate={goToCalibration} />
-
-      <View>
-        <SectionHeader title="Drill" />
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        testID="scroll-timer-content"
+      >
         <DrillPicker
           state={drillsState}
           drill={drill}
-          locked={running || pending || saving}
+          locked={drillLocked}
           onSelect={selectDrill}
           onCreate={createDrill}
           onRetry={reloadDrills}
         />
-      </View>
 
-      {drill === null ? null : (
-        <>
-          <Card raised style={styles.readout} testID="card-readout">
-            <View style={styles.metaRow}>
-              <Typography variant="overline" color="textSecondary">
-                {pluralize(shotCount, 'shot').toUpperCase()}
-              </Typography>
-              {drillPar !== null ? (
-                <Typography variant="overline" color="textSecondary">
-                  {`PAR ${drillPar.toFixed(2)}S`}
-                </Typography>
-              ) : null}
-            </View>
+        {failureText === null ? null : (
+          <FailureNotice
+            message={failureText}
+            action={failureAction(failure, goToCalibration)}
+            testID="notice-timer-failure"
+          />
+        )}
 
-            <RunClock
+        {drill === null ? null : (
+          <>
+            <ClockBox
               running={running}
               finalSeconds={result === null ? null : result.totalTime}
               parSeconds={drillPar}
               readElapsed={readElapsed}
+              meta={clockMeta(readout)}
+              caption={clockCaption(readout)}
+              dimmed={pending}
             />
 
-            <TouchableOpacity
+            <View style={styles.splits}>
+              <SectionHeader title="Splits" />
+              <SplitsTable rows={splitRows} />
+            </View>
+
+            {/* A run in which nothing was heard has no timing to describe. */}
+            {result !== null && result.results.length > 0 ? (
+              <Typography
+                variant="caption"
+                color="textTertiary"
+                style={styles.timingNote}
+                testID="text-run-timing"
+              >
+                {timingNote(result)}
+              </Typography>
+            ) : null}
+          </>
+        )}
+      </ScrollView>
+
+      {drill === null ? null : (
+        <View style={styles.mainAction}>
+          {offerSave ? (
+            <SaveRunPrompt
+              completed={session.completed}
+              status={saveStatus}
+              failure={saveFailure}
+              onSave={saveRun}
+              onReset={resetRun}
+              onView={viewSavedRun}
+            />
+          ) : null}
+          {showStart ? (
+            <Button
               ref={startButtonRef}
-              onPress={onPressStart}
-              // Not while a run is being saved: it would replace the run.
-              disabled={saving}
-              accessibilityRole="button"
+              label={pending ? 'Cancel' : running ? 'Stop' : 'Start'}
               accessibilityLabel={
                 pending
                   ? 'Cancel start'
@@ -672,110 +555,14 @@ export const TimerScreen = () => {
                     ? 'Stop timer'
                     : 'Start timer'
               }
-              accessibilityState={{ disabled: saving }}
-              activeOpacity={0.85}
-              style={[
-                styles.startButton,
-                theme.elevation.raised,
-                {
-                  backgroundColor: pending
-                    ? theme.colors.warning
-                    : running
-                      ? theme.colors.danger
-                      : theme.colors.primary,
-                },
-              ]}
+              variant={pending ? 'secondary' : running ? 'stop' : 'primary'}
+              size="main"
+              leading={running ? <View style={styles.stopGlyph} /> : undefined}
+              onPress={onPressStart}
               testID="btn-start"
-            >
-              {pending ? (
-                <View style={styles.cancelGlyph}>
-                  <Icon name="plus" size={34} color={onButtonColor} />
-                </View>
-              ) : running ? (
-                <View style={styles.stopGlyph} />
-              ) : (
-                <Icon name="play" size={34} color="textOnPrimary" />
-              )}
-              <Typography variant="overline" color={onButtonColor}>
-                {pending ? 'CANCEL' : running ? 'STOP' : 'START'}
-              </Typography>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={reset}
-              disabled={resetLocked}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: resetLocked }}
-              style={[styles.resetButton, resetLocked && styles.locked]}
-              testID="btn-reset"
-            >
-              <Typography variant="label" color="textSecondary">
-                Reset
-              </Typography>
-            </TouchableOpacity>
-          </Card>
-
-          <RunOutcome
-            show={phase === 'finished' && result !== null}
-            session={session}
-            plannedCount={plan.length}
-            saveStatus={saveStatus}
-            saveFailure={saveFailure}
-            onSave={saveRun}
-            onDiscard={discardRun}
-          />
-
-          <View>
-            <SectionHeader title="Splits" />
-            <Card flush>
-              {steps.map((step, i) => {
-                const title = stepLabel(steps, i);
-                const planned = plan.find(item => item.stepId === step.id);
-                const row =
-                  planned === undefined
-                    ? describeSilentStep(
-                        title,
-                        step,
-                        steps
-                          .slice(i + 1)
-                          .some(later =>
-                            plan.some(item => item.stepId === later.id),
-                          ),
-                      )
-                    : describeHeardStep(
-                        title,
-                        planned,
-                        results.find(item => item.stepId === step.id),
-                      );
-                return (
-                  <ListRow
-                    key={step.id}
-                    index={i + 1}
-                    title={title}
-                    subtitle={row.subtitle}
-                    value={row.value}
-                    valueColor={toneColor[row.tone]}
-                    accessibilityLabel={row.spoken}
-                    divided={i < steps.length - 1}
-                    testID={`row-split-${i}`}
-                  />
-                );
-              })}
-            </Card>
-          </View>
-
-          {/* A run in which nothing was heard has no timing to describe. */}
-          {result !== null && result.results.length > 0 ? (
-            <Typography
-              variant="caption"
-              color="textTertiary"
-              style={styles.timingNote}
-              testID="text-run-timing"
-            >
-              {timingNote(result)}
-            </Typography>
+            />
           ) : null}
-        </>
+        </View>
       )}
     </Screen>
   );

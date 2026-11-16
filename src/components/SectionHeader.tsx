@@ -7,7 +7,10 @@ import { Typography } from './Typography';
 
 type SectionHeaderProps = {
   title: string;
-  /** Optional right-hand text action, e.g. "Add new". */
+  /**
+   * Optional right-hand text action, written as a sentence ("Reorder");
+   * it is shown in capitals and announced as written.
+   */
   actionLabel?: string;
   onActionPress?: () => void;
   /**
@@ -16,15 +19,27 @@ type SectionHeaderProps = {
    */
   actionAccessibilityLabel?: string;
   actionTestID?: string;
+  /**
+   * Muted directions opposite the title ("Swipe left to delete"), shown in
+   * capitals. Hidden from a screen reader, and left out when there is an
+   * action.
+   */
+  hint?: string;
+  /**
+   * What is happening right now ("Moving Shot 3 · Let go to drop"), shown in
+   * capitals opposite the title in place of an action or hint, and read out
+   * by a screen reader when it appears.
+   */
+  status?: string;
   testID?: string;
 };
 
 /**
  * Extra touch area around the text action, taking it up to the 48dp
  * minimum without pushing the header's line apart. The label line is
- * 18dp tall, plus the action's own padding.
+ * 14dp tall, plus the action's own padding.
  */
-const ACTION_HIT_SLOP = { top: 11, bottom: 11, left: 8, right: 8 };
+const ACTION_HIT_SLOP = { top: 13, bottom: 13, left: 8, right: 8 };
 
 const createStyles = (theme: Theme) =>
   StyleSheet.create({
@@ -32,45 +47,101 @@ const createStyles = (theme: Theme) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
+      gap: theme.spacing.md,
       marginBottom: theme.spacing.sm,
-      paddingHorizontal: theme.spacing.xs,
     },
+    // Capitals come from the style, not the string, so TalkBack reads the
+    // title as words instead of spelling out the letters.
+    title: { flexShrink: 1, textTransform: 'uppercase' },
+    // With a hint the title keeps its width and the hint wraps beside it:
+    // at a large font a short title such as a count must not break.
+    titleBesideHint: { flexShrink: 0 },
+    hint: { flexShrink: 1 },
     action: {
       paddingVertical: theme.spacing.xs,
-      paddingHorizontal: theme.spacing.xs,
+      paddingLeft: theme.spacing.xs,
+    },
+    actionLabel: {
+      textTransform: 'uppercase',
+      textDecorationLine: 'underline',
     },
   });
 
-/** Small all-caps label that groups the cards beneath it. */
+/**
+ * The Range Card section label (11 bold, 2px tracking, Pencil) that groups
+ * the ruled box beneath it, flush with the box's edge. Announced as a
+ * heading, so TalkBack can jump between sections.
+ */
 export const SectionHeader = ({
   title,
   actionLabel,
   onActionPress,
   actionAccessibilityLabel,
   actionTestID,
+  hint,
+  status,
   testID,
 }: SectionHeaderProps) => {
   const styles = useThemedStyles(createStyles);
+  const hasAction = !status && Boolean(actionLabel && onActionPress);
+  const showHint = !status && !hasAction && Boolean(hint);
 
   return (
     <View style={styles.row} testID={testID}>
-      <Typography variant="overline" color="textSecondary">
-        {title.toUpperCase()}
+      <Typography
+        variant="sectionLabel"
+        color="textSecondary"
+        accessibilityRole="header"
+        style={[styles.title, showHint && styles.titleBesideHint]}
+      >
+        {title}
       </Typography>
 
-      {actionLabel && onActionPress ? (
+      {status ? (
+        <Typography
+          variant="sectionLabel"
+          align="right"
+          accessibilityLiveRegion="polite"
+          style={[styles.title, styles.hint]}
+          testID={testID ? `${testID}-status` : undefined}
+        >
+          {status}
+        </Typography>
+      ) : hasAction ? (
         <TouchableOpacity
           onPress={onActionPress}
           accessibilityRole="button"
-          accessibilityLabel={actionAccessibilityLabel}
+          accessibilityLabel={actionAccessibilityLabel ?? actionLabel}
           hitSlop={ACTION_HIT_SLOP}
           style={styles.action}
           testID={actionTestID}
         >
-          <Typography variant="label" color="primary">
+          <Typography
+            variant="sectionLabel"
+            color="textPrimary"
+            style={styles.actionLabel}
+          >
             {actionLabel}
           </Typography>
         </TouchableOpacity>
+      ) : showHint ? (
+        // Directions for a gesture, which a screen reader does not use: the
+        // rows offer the same thing as an accessibility action.
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={styles.hint}
+          testID={testID ? `${testID}-hint` : undefined}
+        >
+          <Typography
+            variant="sectionLabel"
+            color="textSecondary"
+            align="right"
+            style={styles.title}
+          >
+            {hint}
+          </Typography>
+        </View>
       ) : null}
     </View>
   );

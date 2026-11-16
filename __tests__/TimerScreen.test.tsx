@@ -11,7 +11,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import {
   NavigationContainer,
   createNavigationContainerRef,
+  type NavigationContainerRefWithCurrent,
+  type NavigatorScreenParams,
 } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   act,
@@ -52,6 +55,11 @@ import {
   type PreferencesContextValue,
 } from '../src/store/PreferencesContext';
 import type { DrillInput } from '../src/types/drill';
+import type {
+  DrillsStackParamList,
+  LogStackParamList,
+  SetupStackParamList,
+} from '../src/types/navigation';
 import { DEFAULT_PROFILE } from '../src/types/profile';
 import { formatElapsed } from '../src/utils/format';
 
@@ -74,12 +82,15 @@ const prepareMock = jest.mocked(StartSequenceService.prepare);
 const mockedNativeAudioCapture = jest.mocked(NativeAudioCapture);
 
 type TestTabParamList = {
-  Timer: undefined;
+  /** A Load from the Drills tab names the drill to put on the timer. */
+  Timer: { drillId?: string } | undefined;
   Elsewhere: undefined;
-  /** Stands in for the tab a refusal to start sends the shooter to. */
-  Calibration: undefined;
-  /** Stands in for the editor the empty library sends the shooter to. */
-  SequenceEditor: { id?: string };
+  /** The tab whose editor the empty library sends the shooter to. */
+  Drills: NavigatorScreenParams<DrillsStackParamList> | undefined;
+  /** The tab whose Calibration a refusal to start sends the shooter to. */
+  Setup: NavigatorScreenParams<SetupStackParamList> | undefined;
+  /** The tab a saved run is viewed in. */
+  Log: NavigatorScreenParams<LogStackParamList> | undefined;
 };
 
 /** The drills the tests run, oldest first: the last is on the timer first. */
@@ -149,10 +160,40 @@ const metrics = {
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
 
-const Tab = createBottomTabNavigator<TestTabParamList>();
+type TestNavigationRef = NavigationContainerRefWithCurrent<TestTabParamList>;
 
-/** Stands in for the other tabs. */
+const Tab = createBottomTabNavigator<TestTabParamList>();
+const DrillsStack = createNativeStackNavigator<DrillsStackParamList>();
+const SetupStack = createNativeStackNavigator<SetupStackParamList>();
+const LogStack = createNativeStackNavigator<LogStackParamList>();
+
+/** Stands in for the other tabs and the screens inside them. */
 const Blank = () => null;
+
+/** The Drills tab's stack with blank screens: only its routes matter here. */
+const StubDrills = () => (
+  <DrillsStack.Navigator screenOptions={{ headerShown: false }}>
+    <DrillsStack.Screen name="DrillList" component={Blank} />
+    <DrillsStack.Screen name="SequenceEditor" component={Blank} />
+  </DrillsStack.Navigator>
+);
+
+/** The Setup tab's stack with blank screens. */
+const StubSetup = () => (
+  <SetupStack.Navigator screenOptions={{ headerShown: false }}>
+    <SetupStack.Screen name="SetupHome" component={Blank} />
+    <SetupStack.Screen name="Calibration" component={Blank} />
+  </SetupStack.Navigator>
+);
+
+/** The Log tab's stack with blank screens. */
+const StubLog = () => (
+  <LogStack.Navigator screenOptions={{ headerShown: false }}>
+    <LogStack.Screen name="HistoryList" component={Blank} />
+    <LogStack.Screen name="HistoryDetail" component={Blank} />
+    <LogStack.Screen name="RunComparison" component={Blank} />
+  </LogStack.Navigator>
+);
 
 /** Sits beside the screen so a test can calibrate the sounds it listens for. */
 const StoreHandle = ({
@@ -225,8 +266,9 @@ const renderScreen = async ({
                 <Tab.Navigator screenOptions={{ headerShown: false }}>
                   <Tab.Screen name="Timer" component={TimerScreen} />
                   <Tab.Screen name="Elsewhere" component={Blank} />
-                  <Tab.Screen name="Calibration" component={Blank} />
-                  <Tab.Screen name="SequenceEditor" component={Blank} />
+                  <Tab.Screen name="Drills" component={StubDrills} />
+                  <Tab.Screen name="Setup" component={StubSetup} />
+                  <Tab.Screen name="Log" component={StubLog} />
                 </Tab.Navigator>
               </NavigationContainer>
             </PreferencesProvider>
@@ -254,6 +296,12 @@ const renderScreen = async ({
   return {
     tree,
     navigationRef,
+    /** The routes stacked in one tab, bottom first. */
+    stackIn: (tab: keyof TestTabParamList): string[] | undefined =>
+      navigationRef
+        .getRootState()
+        ?.routes.find(route => route.name === tab)
+        ?.state?.routes.map(route => route.name),
     setSample: (...args: Parameters<typeof setSample>): void => {
       act(() => setSample(...args));
     },
@@ -282,19 +330,29 @@ const textsUnder = (node: ReactTestInstance): string[] =>
 const textsOf = (tree: ReactTestRenderer, testID: string): string[] =>
   textsUnder(first(tree, testID));
 
-/** Put the drill with this name on the timer, through the picker. */
+/** Put the drill with this name on the timer: open the drill box, pick it. */
 const pick = async (tree: ReactTestRenderer, name: string): Promise<void> => {
-  await act(async () => {
-    first(tree, 'select-drill').props.onChange(drillIds[name]);
-  });
-  await settle();
+  await press(tree, 'btn-drill-box');
+  await press(tree, `select-drill-option-${drillIds[name]}`);
 };
 
-const pickerLocked = (tree: ReactTestRenderer): boolean =>
-  first(tree, 'select-drill').props.disabled === true;
+const pickerLocked = (tree: ReactTestRenderer): boolean => {
+  const box = first(tree, 'btn-drill-box');
+  return (
+    box.props.disabled === true &&
+    box.props.accessibilityState?.disabled === true
+  );
+};
 
-const buttonLabel = (tree: ReactTestRenderer): string =>
-  first(tree, 'btn-start').props.accessibilityLabel;
+/** What the Start button says; `null` while Save and Reset stand in for it. */
+const buttonLabel = (tree: ReactTestRenderer): string | null =>
+  has(tree, 'btn-start')
+    ? first(tree, 'btn-start').props.accessibilityLabel
+    : null;
+
+/** A finished run is on offer: Save and Reset are the main action. */
+const offersSave = (tree: ReactTestRenderer): boolean =>
+  has(tree, 'btn-save-run') && !has(tree, 'btn-start');
 
 const subtitle = (tree: ReactTestRenderer): string =>
   first(tree, 'screen-timer').props.subtitle;
@@ -305,17 +363,43 @@ const elapsedText = (tree: ReactTestRenderer): string =>
 const clockCaption = (tree: ReactTestRenderer): string =>
   first(tree, 'text-elapsed-caption').props.children;
 
-/** One row of the Splits card, as the screen hands it to `ListRow`. */
-const split = (tree: ReactTestRenderer, index: number) => {
-  const {
-    title,
-    subtitle: line,
-    value,
-    valueColor,
-    accessibilityLabel,
-  } = first(tree, `row-split-${index}`).props;
-  return { title, subtitle: line, value, valueColor, accessibilityLabel };
+const clockMeta = (tree: ReactTestRenderer): string =>
+  first(tree, 'text-clock-meta').props.children;
+
+/** The theme colour the clock's figure is drawn in. */
+const clockColor = (tree: ReactTestRenderer): string =>
+  first(tree, 'text-elapsed').props.color;
+
+/**
+ * The main action is pinned under the scrolling content, so it is in the
+ * same place whatever the run is doing.
+ */
+const mainActionPinned = (tree: ReactTestRenderer): boolean => {
+  const action = has(tree, 'btn-start') ? 'btn-start' : 'btn-save-run';
+  return (
+    has(tree, action) &&
+    first(tree, 'scroll-timer-content').findAll(
+      node => node.props.testID === action,
+    ).length === 0
+  );
 };
+
+/** One row of the splits table, as the shooter sees and hears it. */
+const split = (tree: ReactTestRenderer, index: number) => {
+  const id = `row-split-${index}`;
+  const cell = (part: string) => first(tree, `${id}-${part}`).props;
+  return {
+    label: cell('label').children,
+    par: cell('par').children,
+    time: cell('time').children,
+    delta: cell('delta').children,
+    deltaColor: cell('delta').color,
+    accessibilityLabel: first(tree, id).props.accessibilityLabel,
+  };
+};
+
+/** The true minus sign the table puts in front of a time under par. */
+const MINUS = '\u2212';
 
 const timingNote = (tree: ReactTestRenderer): string | null => {
   const notes = tree.root.findAllByProps({ testID: 'text-run-timing' });
@@ -472,27 +556,61 @@ describe('TimerScreen', () => {
       expect(timingNote(tree)).toBeNull();
     });
 
-    it('shows a silent step as counting towards the step after it', async () => {
+    it('shows the TIMER header with no action in it', async () => {
       const { tree } = await renderScreen();
 
-      expect(split(tree, 0)).toMatchObject({
-        title: 'Draw',
-        subtitle: 'par 1.50s, counted with the next step',
-        value: '—',
-        accessibilityLabel:
-          'Draw, not timed. Its par of 1.5 seconds counts towards the next step',
+      expect(first(tree, 'screen-timer').props.title).toBe('Timer');
+      expect(first(tree, 'screen-timer').props.action).toBeUndefined();
+      expect(has(tree, 'btn-reset')).toBe(false);
+    });
+
+    it('leads its header with the title, without the BRASSCOUNT wordmark', async () => {
+      const { tree } = await renderScreen();
+
+      const header = textsOf(tree, 'screen-header');
+      expect(header).not.toContain('BRASSCOUNT');
+      expect(header[0]).toBe('Timer');
+    });
+
+    it('shows the drill in the drill box, ready to be changed', async () => {
+      const { tree } = await renderScreen();
+
+      expect(textsOf(tree, 'btn-drill-box')).toEqual(['DRILL', 'Bill Drill']);
+      expect(first(tree, 'btn-drill-box').props).toMatchObject({
+        accessibilityRole: 'button',
+        accessibilityLabel: 'Drill: Bill Drill. Change drill',
       });
     });
 
-    it('shows a heard step with the par it will be judged against', async () => {
+    it('shows the shots and par of the drill on the clock', async () => {
       const { tree } = await renderScreen();
 
-      // Its own 0.25 s plus the draw's 1.50 s.
+      // Bill Drill: six shots, 1.50 + 0.25 + 0.20 × 5.
+      expect(clockMeta(tree)).toBe('6 SHOTS · PAR 2.75');
+      expect(clockCaption(tree)).toBe('SECONDS');
+    });
+
+    it('shows the draw with the par it will be judged against', async () => {
+      const { tree } = await renderScreen();
+
+      expect(split(tree, 0)).toMatchObject({
+        label: 'Draw',
+        par: '1.50',
+        time: '—',
+        delta: '',
+        accessibilityLabel: 'Draw, par 1.5 seconds, not heard yet',
+      });
+    });
+
+    it('shows the shot that ends the draw with its own par', async () => {
+      const { tree } = await renderScreen();
+
       expect(split(tree, 1)).toMatchObject({
-        title: 'Shot 1',
-        subtitle: 'par 1.75s',
-        value: '—',
-        accessibilityLabel: 'Shot 1, par 1.75 seconds, not heard yet',
+        label: 'Shot 1',
+        par: '0.25',
+        time: '—',
+        delta: '',
+        accessibilityLabel: 'Shot 1, par 0.25 seconds, not heard yet',
       });
     });
 
@@ -503,8 +621,9 @@ describe('TimerScreen', () => {
       await pick(tree, 'Mozambique');
 
       expect(split(tree, 4)).toMatchObject({
-        title: 'Holster',
-        subtitle: 'not timed',
+        label: 'Holster',
+        delta: 'not timed',
+        deltaColor: 'textSecondary',
         accessibilityLabel: 'Holster, not timed',
       });
     });
@@ -516,8 +635,8 @@ describe('TimerScreen', () => {
       await pick(tree, 'Dot Torture');
 
       expect(split(tree, 6)).toMatchObject({
-        title: 'Rack',
-        subtitle: undefined,
+        label: 'Rack',
+        par: '—',
         accessibilityLabel: 'Rack, no par, not heard yet',
       });
     });
@@ -570,12 +689,54 @@ describe('TimerScreen', () => {
       });
     });
 
-    it('reads Cancel during the wait, since pressing it cancels the start', async () => {
+    it('labels the main action Start, Cancel and Stop as the run moves on', async () => {
+      const mainAction = (tree: ReactTestRenderer) => {
+        const { label, variant, size, accessibilityLabel } = first(
+          tree,
+          'btn-start',
+        ).props;
+        return { label, variant, size, accessibilityLabel };
+      };
+      const { tree } = await renderScreen();
+      expect(mainAction(tree)).toEqual({
+        label: 'Start',
+        variant: 'primary',
+        size: 'main',
+        accessibilityLabel: 'Start timer',
+      });
+
+      await press(tree, 'btn-start');
+      expect(mainAction(tree)).toEqual({
+        label: 'Cancel',
+        variant: 'secondary',
+        size: 'main',
+        accessibilityLabel: 'Cancel start',
+      });
+
+      hear(REQUESTED_AT - 40, ROOM_DB);
+      await beep();
+      expect(mainAction(tree)).toEqual({
+        label: 'Stop',
+        variant: 'stop',
+        size: 'main',
+        accessibilityLabel: 'Stop timer',
+      });
+      expect(
+        first(tree, 'btn-start').findAll(
+          node => node.props.accessibilityRole === 'button',
+        ),
+      ).not.toHaveLength(0);
+    });
+
+    it('says how long the wait for the beep can be', async () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-start');
 
-      expect(textsOf(tree, 'btn-start')).toEqual(['CANCEL']);
+      const { minMs, maxMs } = DEFAULT_PROFILE.startDelay;
+      expect(clockCaption(tree)).toBe(
+        `WAIT FOR THE BEEP · ${minMs / 1000}–${maxMs / 1000} S`,
+      );
     });
 
     it('names the sounds that still need calibrating and opens nothing', async () => {
@@ -601,8 +762,10 @@ describe('TimerScreen', () => {
       expect(subtitle(tree)).toBe('Calibrate Shot and Rack first');
     });
 
-    it('sends the shooter to Calibration from a refusal to start', async () => {
-      const { tree, navigationRef } = await renderScreen({ calibrate: false });
+    it('sends the shooter to Calibration in Setup from a refusal to start', async () => {
+      const { tree, navigationRef, stackIn } = await renderScreen({
+        calibrate: false,
+      });
       expect(has(tree, 'btn-go-calibration')).toBe(false);
       await press(tree, 'btn-start');
 
@@ -612,6 +775,8 @@ describe('TimerScreen', () => {
       });
 
       expect(navigationRef.getCurrentRoute()?.name).toBe('Calibration');
+      // Setup's own screen sits underneath, so back lands on Setup.
+      expect(stackIn('Setup')).toEqual(['SetupHome', 'Calibration']);
     });
 
     it('stops asking for calibration once the sounds it named are calibrated', async () => {
@@ -791,15 +956,28 @@ describe('TimerScreen', () => {
 
       shoot(ZERO + 1400);
 
-      expect(split(tree, 1)).toEqual({
-        title: 'Shot 1',
-        subtitle: 'par 1.75s · 0.35s under',
-        value: '1.40s',
-        valueColor: 'success',
+      // The first shot ends the draw: the draw takes its time.
+      expect(split(tree, 0)).toEqual({
+        label: 'Draw',
+        par: '1.50',
+        time: '1.40',
+        delta: `${MINUS}0.10`,
+        deltaColor: 'textPrimary',
         accessibilityLabel:
-          'Shot 1, par 1.75 seconds, took 1.4 seconds, 0.35 seconds under par',
+          'Draw, par 1.5 seconds, took 1.4 seconds, 0.1 seconds under par',
       });
-      expect(split(tree, 2).value).toBe('—');
+      // The same shot ends the draw, so it has the draw's time as well,
+      // judged against its own par.
+      expect(split(tree, 1)).toEqual({
+        label: 'Shot 1',
+        par: '0.25',
+        time: '1.40',
+        delta: '+1.15',
+        deltaColor: 'warning',
+        accessibilityLabel:
+          'Shot 1, par 0.25 seconds, took 1.4 seconds, 1.15 seconds over par',
+      });
+      expect(split(tree, 2)).toMatchObject({ time: '—', delta: 'listening' });
     });
 
     it('words a step that ran over its par as over, not by colour alone', async () => {
@@ -810,10 +988,12 @@ describe('TimerScreen', () => {
       shoot(ZERO + 1700);
 
       expect(split(tree, 2)).toEqual({
-        title: 'Shot 2',
-        subtitle: 'par 0.20s · 0.10s over',
-        value: '0.30s',
-        valueColor: 'danger',
+        label: 'Shot 2',
+        par: '0.20',
+        time: '0.30',
+        delta: '+0.10',
+        // Signal, the warning token, as well as the plus sign.
+        deltaColor: 'warning',
         accessibilityLabel:
           'Shot 2, par 0.2 seconds, took 0.3 seconds, 0.1 seconds over par',
       });
@@ -823,20 +1003,20 @@ describe('TimerScreen', () => {
       const { tree } = await renderScreen();
       await startRun(tree);
 
-      shoot(ZERO + 1750);
+      shoot(ZERO + 1500);
 
-      expect(split(tree, 1)).toMatchObject({
-        subtitle: 'par 1.75s · on par',
-        valueColor: 'textSecondary',
-        accessibilityLabel:
-          'Shot 1, par 1.75 seconds, took 1.75 seconds, on par',
+      expect(split(tree, 0)).toMatchObject({
+        time: '1.50',
+        delta: '0.00',
+        deltaColor: 'textPrimary',
+        accessibilityLabel: 'Draw, par 1.5 seconds, took 1.5 seconds, on par',
       });
     });
 
     it('shows the time of a step that has no par', async () => {
       const { tree } = await renderScreen();
-      // Dot Torture: its shots have no par, so the first is judged against
-      // the draw's 1.50 s alone and the second against nothing.
+      // Dot Torture: its shots have no par. The first ends the draw, which
+      // is judged against its 1.50 s; the second is judged against nothing.
       await pick(tree, 'Dot Torture');
       await startRun(tree);
 
@@ -844,10 +1024,11 @@ describe('TimerScreen', () => {
       shoot(ZERO + 1900);
 
       expect(split(tree, 2)).toEqual({
-        title: 'Shot 2',
-        subtitle: undefined,
-        value: '0.50s',
-        valueColor: 'textSecondary',
+        label: 'Shot 2',
+        par: '—',
+        time: '0.50',
+        delta: '',
+        deltaColor: 'textSecondary',
         accessibilityLabel: 'Shot 2, no par, took 0.5 seconds',
       });
     });
@@ -860,9 +1041,24 @@ describe('TimerScreen', () => {
 
       await tickAt(ZERO + 2400);
       expect(clockCaption(tree)).toBe('SECONDS');
+      expect(clockColor(tree)).toBe('textPrimary');
 
       await tickAt(ZERO + 2600);
       expect(clockCaption(tree)).toBe('OVER PAR');
+      // Signal, the warning token, and nothing else.
+      expect(clockColor(tree)).toBe('warning');
+      expect(first(tree, 'text-elapsed-caption').props.color).toBe('warning');
+    });
+
+    it('shows which step it is listening for', async () => {
+      const { tree } = await renderScreen();
+      await pick(tree, 'Failure to Stop');
+      await startRun(tree);
+      expect(clockMeta(tree)).toBe('SHOT 1 OF 3');
+
+      shoot(ZERO + 1400);
+
+      expect(clockMeta(tree)).toBe('SHOT 2 OF 3');
     });
   });
 
@@ -882,13 +1078,14 @@ describe('TimerScreen', () => {
 
       await completeRun(tree);
 
-      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(offersSave(tree)).toBe(true);
       expect(subtitle(tree)).toBe('Run complete');
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
-      expect([1, 2, 3].map(index => split(tree, index).value)).toEqual([
-        '1.40s',
-        '0.30s',
-        '0.50s',
+      expect(clockMeta(tree)).toBe('0.30 UNDER PAR');
+      expect([0, 2, 3].map(index => split(tree, index).time)).toEqual([
+        '1.40',
+        '0.30',
+        '0.50',
       ]);
     });
 
@@ -927,7 +1124,7 @@ describe('TimerScreen', () => {
 
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'Run complete, 2.2 seconds. Save it or discard it',
+        'Run complete, 2.2 seconds. Save it or reset it',
       );
     });
 
@@ -944,6 +1141,7 @@ describe('TimerScreen', () => {
 
       expect(elapsedText(tree)).toBe(formatElapsed(2.5));
       expect(clockCaption(tree)).toBe('SECONDS');
+      expect(clockMeta(tree)).toBe('ON PAR');
     });
 
     it('calls a run over par once its time reads a hundredth over', async () => {
@@ -958,11 +1156,14 @@ describe('TimerScreen', () => {
 
       expect(elapsedText(tree)).toBe(formatElapsed(2.51));
       expect(clockCaption(tree)).toBe('OVER PAR');
+      expect(clockColor(tree)).toBe('warning');
+      expect(clockMeta(tree)).toBe('0.01 OVER PAR');
     });
 
     it('starts the next run on the clock at zero, not where the last one stopped', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
+      await press(tree, 'btn-save-run');
 
       await press(tree, 'btn-start');
       hear(REQUESTED_AT - 40, ROOM_DB);
@@ -973,15 +1174,16 @@ describe('TimerScreen', () => {
       expect(elapsedText(tree)).toBe(formatElapsed(0));
     });
 
-    it('starts a fresh run from the finished one', async () => {
+    it('starts a fresh run once the finished one is reset', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
+      await press(tree, 'btn-reset-run');
 
       await press(tree, 'btn-start');
 
       expect(buttonLabel(tree)).toBe('Cancel start');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(split(tree, 1).value).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
       expect(timingNote(tree)).toBeNull();
     });
 
@@ -1029,14 +1231,17 @@ describe('TimerScreen', () => {
 
       await press(tree, 'btn-start');
 
-      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(offersSave(tree)).toBe(true);
       expect(subtitle(tree)).toBe('Run stopped early');
       expect(elapsedText(tree)).toBe(formatElapsed(1.4));
-      expect(split(tree, 1).value).toBe('1.40s');
+      expect(clockCaption(tree)).toBe('SECONDS · STOPPED EARLY');
+      expect(clockMeta(tree)).toBe('1 OF 6 HEARD');
+      expect(split(tree, 0).time).toBe('1.40');
+      expect(split(tree, 2)).toMatchObject({ time: '—', delta: 'not heard' });
       expect(mockedNativeAudioCapture.stop).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'Run stopped early, 1 step heard. Save it or discard it',
+        'Run stopped early, 1 step heard. Save it or reset it',
       );
     });
 
@@ -1047,7 +1252,7 @@ describe('TimerScreen', () => {
 
       shoot(ZERO + 1400);
 
-      expect(split(tree, 1).value).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
     });
 
     it('clears the run on Reset', async () => {
@@ -1056,12 +1261,12 @@ describe('TimerScreen', () => {
       shoot(ZERO + 1400);
       await press(tree, 'btn-start');
 
-      await press(tree, 'btn-reset');
+      await press(tree, 'btn-reset-run');
 
       expect(buttonLabel(tree)).toBe('Start timer');
       expect(subtitle(tree)).toBe('Ready when you are');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(split(tree, 1).value).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
       expect(timingNote(tree)).toBeNull();
       expect(mockedNativeAudioCapture.stop).toHaveBeenCalled();
     });
@@ -1081,6 +1286,51 @@ describe('TimerScreen', () => {
       expect(pickerLocked(tree)).toBe(false);
     });
 
+    it('labels the drill box as locked during a run', async () => {
+      const { tree } = await renderScreen();
+
+      await startRun(tree);
+
+      expect(textsOf(tree, 'btn-drill-box')).toEqual([
+        'DRILL · LOCKED DURING A RUN',
+        'Bill Drill',
+      ]);
+      expect(first(tree, 'btn-drill-box').props.accessibilityLabel).toBe(
+        'Drill: Bill Drill, locked during a run',
+      );
+    });
+
+    it('keeps the main action in the same place in every state', async () => {
+      const { tree, setSample } = await renderScreen({ calibrate: false });
+      const states: boolean[] = [];
+
+      // Blocked: a sound still to calibrate.
+      await press(tree, 'btn-start');
+      expect(subtitle(tree)).toBe('Calibrate Shot first');
+      states.push(mainActionPinned(tree));
+
+      // Calibrating the sound clears the refusal on its own.
+      setSample('shot', -4);
+      expect(subtitle(tree)).toBe('Ready when you are');
+      // Ready, then standing by, then running.
+      states.push(mainActionPinned(tree));
+      await press(tree, 'btn-start');
+      states.push(mainActionPinned(tree));
+      hear(REQUESTED_AT - 40, ROOM_DB);
+      await beep();
+      hear(ZERO, -20);
+      hear(ZERO + 400, ROOM_DB);
+      states.push(mainActionPinned(tree));
+
+      // Stopped early.
+      shoot(ZERO + 1400);
+      await press(tree, 'btn-start');
+      expect(subtitle(tree)).toBe('Run stopped early');
+      states.push(mainActionPinned(tree));
+
+      expect(states).toEqual([true, true, true, true, true]);
+    });
+
     it('clears the finished run when another drill is picked', async () => {
       const { tree } = await renderScreen();
       await startRun(tree);
@@ -1091,7 +1341,7 @@ describe('TimerScreen', () => {
 
       expect(subtitle(tree)).toBe('Ready when you are');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(split(tree, 1).value).toBe('—');
+      expect(split(tree, 0).time).toBe('—');
       expect(timingNote(tree)).toBeNull();
     });
 
@@ -1104,7 +1354,7 @@ describe('TimerScreen', () => {
       await pick(tree, 'Bill Drill');
 
       expect(subtitle(tree)).toBe('Run stopped early');
-      expect(split(tree, 1).value).toBe('1.40s');
+      expect(split(tree, 0).time).toBe('1.40');
     });
 
     it('finishes the run once when Stop is pressed twice', async () => {
@@ -1124,26 +1374,86 @@ describe('TimerScreen', () => {
       expect(startMock).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps Reset off while a run is on, so a stray touch cannot throw it away', async () => {
-      const resetOff = (tree: ReactTestRenderer): boolean => {
-        const reset = first(tree, 'btn-reset');
-        return (
-          reset.props.disabled === true &&
-          reset.props.accessibilityState?.disabled === true
-        );
-      };
+    it('offers no Reset while a run is on, so a stray touch cannot throw it away', async () => {
       const { tree } = await renderScreen();
-      expect(resetOff(tree)).toBe(false);
 
       await press(tree, 'btn-start');
-      expect(resetOff(tree)).toBe(true);
+      expect(has(tree, 'btn-reset-run')).toBe(false);
 
       hear(REQUESTED_AT - 40, ROOM_DB);
       await beep();
-      expect(resetOff(tree)).toBe(true);
+      shoot(ZERO + 1400);
+      expect(has(tree, 'btn-reset-run')).toBe(false);
 
       await press(tree, 'btn-start');
-      expect(resetOff(tree)).toBe(false);
+      expect(has(tree, 'btn-reset-run')).toBe(true);
+    });
+
+    it('goes straight back to ready when stopped with nothing heard', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+
+      await press(tree, 'btn-start');
+
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(subtitle(tree)).toBe('Ready when you are');
+      expect(elapsedText(tree)).toBe(formatElapsed(0));
+      expect(split(tree, 0).time).toBe('—');
+      expect(timingNote(tree)).toBeNull();
+      expect(has(tree, 'card-save-run')).toBe(false);
+      expect(pickerLocked(tree)).toBe(false);
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith('Run stopped, nothing heard');
+    });
+
+    it('says nothing on return when the tab was left mid-run with nothing heard', async () => {
+      const { tree, goTo } = await renderScreen();
+      await startRun(tree);
+
+      await goTo('Elsewhere');
+      await goTo('Timer');
+
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(subtitle(tree)).toBe('Ready when you are');
+      // By design: there is no run to come back to, so nothing to say.
+      expect(announce).not.toHaveBeenCalled();
+    });
+
+    it('says only that the microphone failed when it will not close on a stop with nothing heard', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+      mockedNativeAudioCapture.stop.mockRejectedValue(
+        new Error('close failed'),
+      );
+
+      await press(tree, 'btn-start');
+
+      expect(subtitle(tree)).toBe('The microphone could not be used');
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(has(tree, 'card-save-run')).toBe(false);
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith('The microphone could not be used');
+    });
+
+    it('says why, over a ready timer, when the app is left with nothing heard', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+
+      act(() => {
+        DeviceEventEmitter.emit(AUDIO_CAPTURE_ERROR_EVENT, {
+          code: 'INTERRUPTED',
+          message: 'left the app',
+        });
+      });
+      await settle();
+
+      expect(subtitle(tree)).toBe('The run stopped because the app was left');
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(has(tree, 'card-save-run')).toBe(false);
+      expect(announce).toHaveBeenCalledTimes(1);
+      expect(announce).toHaveBeenCalledWith(
+        'The run stopped because the app was left',
+      );
     });
 
     it('ends the run with what was heard when the app is left', async () => {
@@ -1160,8 +1470,8 @@ describe('TimerScreen', () => {
       await settle();
 
       expect(subtitle(tree)).toBe('The run stopped because the app was left');
-      expect(buttonLabel(tree)).toBe('Start timer');
-      expect(split(tree, 1).value).toBe('1.40s');
+      expect(offersSave(tree)).toBe(true);
+      expect(split(tree, 0).time).toBe('1.40');
       expect(elapsedText(tree)).toBe(formatElapsed(1.4));
     });
 
@@ -1177,10 +1487,10 @@ describe('TimerScreen', () => {
 
       await goTo('Timer');
       expect(subtitle(tree)).toBe('Run stopped early');
-      expect(split(tree, 1).value).toBe('1.40s');
+      expect(split(tree, 0).time).toBe('1.40');
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'Run stopped early, 1 step heard. Save it or discard it',
+        'Run stopped early, 1 step heard. Save it or reset it',
       );
     });
 
@@ -1199,7 +1509,7 @@ describe('TimerScreen', () => {
 
       expect(announce).toHaveBeenCalledTimes(1);
       expect(announce).toHaveBeenCalledWith(
-        'The run stopped because the app was left. Run stopped early, 1 step heard. Save it or discard it',
+        'The run stopped because the app was left. Run stopped early, 1 step heard. Save it or reset it',
       );
     });
 
@@ -1236,7 +1546,8 @@ describe('TimerScreen', () => {
       expect(first(tree, 'select-drill').props.value).toBe(
         drillIds['Bill Drill'],
       );
-      expect(split(tree, 6).title).toBe('Shot 6');
+      expect(textsOf(tree, 'btn-drill-box')).toContain('Bill Drill');
+      expect(split(tree, 6).label).toBe('Shot 6');
     });
 
     it('offers every stored drill, with its shots and par', async () => {
@@ -1263,9 +1574,9 @@ describe('TimerScreen', () => {
       getAll.mockRestore();
     });
 
-    it('sends the shooter to create a drill when there is none', async () => {
+    it('sends the shooter to create a drill in Drills when there is none', async () => {
       await AsyncStorage.clear();
-      const { tree, navigationRef } = await renderScreen();
+      const { tree, navigationRef, stackIn } = await renderScreen();
 
       expect(has(tree, 'state-timer-drills-empty')).toBe(true);
       expect(has(tree, 'btn-start')).toBe(false);
@@ -1277,7 +1588,12 @@ describe('TimerScreen', () => {
           .props.onPress();
         await jest.advanceTimersByTimeAsync(0);
       });
-      expect(navigationRef.getCurrentRoute()?.name).toBe('SequenceEditor');
+      expect(navigationRef.getCurrentRoute()).toMatchObject({
+        name: 'SequenceEditor',
+        params: {},
+      });
+      // The drill list sits underneath, so back lands on Drills.
+      expect(stackIn('Drills')).toEqual(['DrillList', 'SequenceEditor']);
     });
 
     it('offers to read the drills again when they cannot be read', async () => {
@@ -1327,6 +1643,116 @@ describe('TimerScreen', () => {
     });
   });
 
+  describe('loading a drill from the Drills tab', () => {
+    /** What Load on a Drills row does: switch to the Timer, naming the drill. */
+    const load = async (
+      navigationRef: TestNavigationRef,
+      drillId: string,
+    ): Promise<void> => {
+      await act(async () => {
+        navigationRef.navigate('Timer', { drillId });
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      await settle();
+    };
+
+    const timerParams = (navigationRef: TestNavigationRef) =>
+      navigationRef.getRootState()?.routes.find(route => route.name === 'Timer')
+        ?.params;
+
+    it('puts the drill a Load names on the timer', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(navigationRef.getCurrentRoute()?.name).toBe('Timer');
+      expect(first(tree, 'select-drill').props.value).toBe(drillIds.Mozambique);
+      expect(textsOf(tree, 'btn-drill-box')).toContain('Mozambique');
+    });
+
+    it('clears the Load once it is used', async () => {
+      const { navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(timerParams(navigationRef)).toEqual({ drillId: undefined });
+    });
+
+    it('keeps a drill picked after a Load when the tab is revisited', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+      await load(navigationRef, drillIds.Mozambique);
+
+      await pick(tree, 'Dot Torture');
+      await goTo('Elsewhere');
+      await goTo('Timer');
+      await settle();
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Dot Torture'],
+      );
+    });
+
+    it('keeps the loaded drill on the timer after a newer drill is made', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+      // Already on show, as the drill changed most recently.
+      await load(navigationRef, drillIds['Bill Drill']);
+      await goTo('Elsewhere');
+
+      await saveDrill(
+        { name: 'Box Drill', steps: [{ type: 'shot', par: 2 }] },
+        { getTimestamp: () => '2026-10-02T08:00:00.000Z' },
+      );
+      await goTo('Timer');
+      await settle();
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Bill Drill'],
+      );
+    });
+
+    it('loads the same drill again after another was picked', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await load(navigationRef, drillIds.Mozambique);
+      await pick(tree, 'Dot Torture');
+      await goTo('Elsewhere');
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(first(tree, 'select-drill').props.value).toBe(drillIds.Mozambique);
+    });
+
+    it('falls back to the newest drill when the loaded one no longer exists', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await goTo('Elsewhere');
+      const gone = drillIds.Mozambique;
+      await deleteDrillById(gone);
+
+      await load(navigationRef, gone);
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Bill Drill'],
+      );
+      expect(has(tree, 'btn-start')).toBe(true);
+    });
+
+    it('ignores a Load while a run is on, the drill being locked', async () => {
+      const { tree, navigationRef } = await renderScreen();
+      await startRun(tree);
+
+      await load(navigationRef, drillIds.Mozambique);
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Bill Drill'],
+      );
+      expect(buttonLabel(tree)).toBe('Stop timer');
+      expect(timerParams(navigationRef)).toEqual({ drillId: undefined });
+    });
+  });
+
   describe('saving a run', () => {
     /** Failure to Stop, start to finish: 2.20 s over three shots. */
     const completeRun = async (tree: ReactTestRenderer): Promise<void> => {
@@ -1351,12 +1777,8 @@ describe('TimerScreen', () => {
 
       await completeRun(tree);
 
-      expect(textsOf(tree, 'card-save-run')).toEqual([
-        'Save this run?',
-        '2.20s · 3 steps heard.',
-        'Discard',
-        'Save run',
-      ]);
+      expect(textsOf(tree, 'card-save-run')).toEqual(['Reset', 'Save run']);
+      expect(offersSave(tree)).toBe(true);
       expect(await loadSessions()).toEqual([]);
     });
 
@@ -1382,7 +1804,9 @@ describe('TimerScreen', () => {
         totalTime: 2.2,
         completed: true,
         splits: [
-          { label: 'Shot 1', par: 1.75, actual: 1.4, delta: -0.35 },
+          { label: 'Draw', par: 1.5, actual: 1.4, delta: -0.1 },
+          // The shot that ended the draw, with the draw's time.
+          { label: 'Shot 1', par: 0.25, actual: 1.4, delta: 1.15 },
           { label: 'Shot 2', par: 0.25, actual: 0.3, delta: 0.05 },
           { label: 'Shot 3', par: 0.5, actual: 0.5, delta: 0 },
         ],
@@ -1396,10 +1820,12 @@ describe('TimerScreen', () => {
 
       await press(tree, 'btn-save-run');
 
-      expect(textsOf(tree, 'card-save-run')).toEqual(['Saved to History']);
-      expect(announce).toHaveBeenCalledWith('Run saved to History');
-      // The run stays on show.
+      expect(textsOf(tree, 'text-run-saved')).toEqual(['Saved to Log']);
+      expect(announce).toHaveBeenCalledWith('Run saved to Log');
+      // The run stays on show, and Start is back under the saved line.
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
+      expect(buttonLabel(tree)).toBe('Start timer');
+      expect(has(tree, 'btn-save-run')).toBe(false);
     });
 
     it('saves a run once however often Save is pressed', async () => {
@@ -1420,11 +1846,11 @@ describe('TimerScreen', () => {
 
       await stoppedRun(tree);
 
-      expect(first(tree, 'btn-save-run').props.label).toBe(
-        'Save as incomplete',
+      expect(first(tree, 'btn-save-run').props.accessibilityLabel).toBe(
+        'Save run as incomplete',
       );
-      expect(textsOf(tree, 'text-save-run-summary')).toEqual([
-        'Stopped early at 1.40s: 1 of 3 steps heard. It is kept as incomplete and left out of your best and average.',
+      expect(textsOf(tree, 'text-save-run-note')).toEqual([
+        'Saves as incomplete, left out of your best and average.',
       ]);
     });
 
@@ -1439,14 +1865,37 @@ describe('TimerScreen', () => {
       expect(session).toMatchObject({
         totalTime: 1.4,
         completed: false,
-        splits: [{ label: 'Shot 1', actual: 1.4 }],
+        splits: [
+          { label: 'Draw', actual: 1.4 },
+          { label: 'Shot 1', actual: 1.4 },
+        ],
       });
-      expect(textsOf(tree, 'card-save-run')).toEqual([
-        'Saved to History as incomplete',
+      expect(textsOf(tree, 'text-run-saved')).toEqual([
+        'Saved to Log as incomplete',
       ]);
-      expect(announce).toHaveBeenCalledWith(
-        'Run saved to History as incomplete',
-      );
+      expect(announce).toHaveBeenCalledWith('Run saved to Log as incomplete');
+    });
+
+    it('offers a run stopped early in Log only once it is saved', async () => {
+      const { tree, navigationRef } = await renderScreen();
+      await stoppedRun(tree);
+
+      expect(offersSave(tree)).toBe(true);
+      expect(has(tree, 'btn-view-run')).toBe(false);
+
+      await press(tree, 'btn-save-run');
+      await act(async () => {
+        first(tree, 'btn-view-run').props.onPress();
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigationRef.getCurrentRoute()).toMatchObject({
+        name: 'HistoryDetail',
+        params: {
+          drillId: drillIds['Failure to Stop'],
+          drillName: 'Failure to Stop',
+        },
+      });
     });
 
     it('offers to save a run ended by leaving the tab, once back', async () => {
@@ -1464,42 +1913,35 @@ describe('TimerScreen', () => {
       ]);
     });
 
-    it('has nothing to save when nothing was heard', async () => {
-      const { tree } = await renderScreen();
-      await startRun(tree);
-
-      await press(tree, 'btn-start');
-
-      expect(has(tree, 'card-save-run')).toBe(false);
-      expect(has(tree, 'text-nothing-to-save')).toBe(true);
-      expect(announce).toHaveBeenCalledWith('Run stopped early, nothing heard');
-    });
-
-    it('drops the run on Discard and stores nothing', async () => {
+    it('drops the run on Reset and stores nothing', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
       announce.mockClear();
 
-      await press(tree, 'btn-discard-run');
+      await press(tree, 'btn-reset-run');
 
       expect(await loadSessions()).toEqual([]);
       expect(has(tree, 'card-save-run')).toBe(false);
       expect(subtitle(tree)).toBe('Ready when you are');
       expect(elapsedText(tree)).toBe(formatElapsed(0));
-      expect(announce).toHaveBeenCalledWith('Run discarded');
+      expect(announce).toHaveBeenCalledWith('Run reset, not saved');
     });
 
-    it('drops an unsaved run when the next one starts, and offers the new one', async () => {
+    it('holds Start back until a finished run is saved or reset', async () => {
       const { tree } = await renderScreen();
       await completeRun(tree);
 
+      expect(has(tree, 'btn-start')).toBe(false);
+      expect(mainActionPinned(tree)).toBe(true);
+
+      await press(tree, 'btn-reset-run');
       await startRun(tree);
       shoot(ZERO + 1400);
       await press(tree, 'btn-start');
 
       expect(await loadSessions()).toEqual([]);
-      expect(first(tree, 'btn-save-run').props.label).toBe(
-        'Save as incomplete',
+      expect(first(tree, 'btn-save-run').props.accessibilityLabel).toBe(
+        'Save run as incomplete',
       );
     });
 
@@ -1512,7 +1954,7 @@ describe('TimerScreen', () => {
       shoot(ZERO + 1400);
       await press(tree, 'btn-start');
 
-      expect(textsOf(tree, 'card-save-run')[0]).toBe('Save this run?');
+      expect(offersSave(tree)).toBe(true);
       await press(tree, 'btn-save-run');
       expect(await loadSessions()).toHaveLength(2);
     });
@@ -1551,10 +1993,35 @@ describe('TimerScreen', () => {
         label: 'Saving…',
         disabled: true,
       });
-      expect(first(tree, 'btn-discard-run').props.disabled).toBe(true);
-      expect(first(tree, 'btn-start').props.disabled).toBe(true);
-      expect(first(tree, 'btn-reset').props.disabled).toBe(true);
+      expect(first(tree, 'btn-reset-run').props.disabled).toBe(true);
+      expect(has(tree, 'btn-start')).toBe(false);
       expect(pickerLocked(tree)).toBe(true);
+    });
+
+    it('drops a Load from the Drills tab while the run is being saved', async () => {
+      const { tree, navigationRef, goTo } = await renderScreen();
+      await completeRun(tree);
+      jest
+        .spyOn(AsyncStorage, 'setItem')
+        .mockImplementationOnce(() => new Promise(() => {}));
+      await press(tree, 'btn-save-run');
+      await goTo('Elsewhere');
+
+      await act(async () => {
+        navigationRef.navigate('Timer', { drillId: drillIds.Mozambique });
+        await jest.advanceTimersByTimeAsync(0);
+      });
+      await settle();
+
+      expect(first(tree, 'select-drill').props.value).toBe(
+        drillIds['Failure to Stop'],
+      );
+      expect(first(tree, 'btn-save-run').props.label).toBe('Saving…');
+      // Dropped, not held: nothing changes the drill once the save is done.
+      expect(
+        navigationRef.getRootState()?.routes.find(r => r.name === 'Timer')
+          ?.params,
+      ).toEqual({ drillId: undefined });
     });
 
     it('drops an unsaved run when another drill is picked', async () => {
@@ -1593,11 +2060,11 @@ describe('TimerScreen', () => {
       await goTo('Timer');
       await settle();
 
-      expect(textsOf(tree, 'card-save-run')).toEqual(['Saved to History']);
+      expect(textsOf(tree, 'text-run-saved')).toEqual(['Saved to Log']);
       expect(elapsedText(tree)).toBe(formatElapsed(2.2));
     });
 
-    it('puts a screen reader on the Start button once the run is saved or discarded', async () => {
+    it('puts a screen reader on the Start button once the run is saved or reset', async () => {
       const focus = jest
         .spyOn(AccessibilityInfo, 'sendAccessibilityEvent')
         .mockImplementation(() => {});
@@ -1611,7 +2078,7 @@ describe('TimerScreen', () => {
       expect(focus).toHaveBeenLastCalledWith(expect.anything(), 'focus');
 
       await completeRun(tree);
-      await press(tree, 'btn-discard-run');
+      await press(tree, 'btn-reset-run');
       expect(focus).toHaveBeenCalledTimes(2);
     });
 
@@ -1631,15 +2098,155 @@ describe('TimerScreen', () => {
       await goTo('Timer');
       await settle();
 
-      expect(split(tree, 1).title).toBe('Shot 1');
+      expect(split(tree, 1).label).toBe('Shot 1');
       await press(tree, 'btn-save-run');
 
       const [session] = await loadSessions();
       expect(session.splits.map(item => item.label)).toEqual([
+        'Draw',
         'Shot 1',
         'Shot 2',
         'Shot 3',
       ]);
+    });
+  });
+
+  describe('the Range Card layout', () => {
+    /** Failure to Stop, start to finish: 2.20 s over three shots. */
+    const completeRun = async (tree: ReactTestRenderer): Promise<void> => {
+      await pick(tree, 'Failure to Stop');
+      await startRun(tree);
+      shoot(ZERO + 1400);
+      shoot(ZERO + 1700);
+      shoot(ZERO + 2200);
+      await settle();
+    };
+
+    it('scrolls a long splits list above the pinned main action', async () => {
+      const made = await saveDrill(
+        {
+          name: 'ZZ Twelve',
+          steps: Array.from({ length: 12 }, () => ({
+            type: 'shot' as const,
+            par: 0.3,
+          })),
+        },
+        { getTimestamp: () => '2026-10-02T08:00:00.000Z' },
+      );
+      const { tree } = await renderScreen();
+      expect(first(tree, 'select-drill').props.value).toBe(made.id);
+
+      const scroll = first(tree, 'scroll-timer-content');
+      expect(
+        scroll.findAll(node => node.props.testID === 'table-splits').length,
+      ).toBeGreaterThan(0);
+      expect(split(tree, 11).label).toBe('Shot 12');
+      expect(mainActionPinned(tree)).toBe(true);
+    });
+
+    it('opens the drill sheet titled Drill, its shots and par set as figures', async () => {
+      const { tree } = await renderScreen();
+
+      expect(first(tree, 'select-drill').props).toMatchObject({
+        title: 'Drill',
+        figureDescriptions: true,
+      });
+    });
+
+    it('shows why a run cannot start in a notice, with the way out in it', async () => {
+      const { tree } = await renderScreen({ calibrate: false });
+      expect(has(tree, 'notice-timer-failure')).toBe(false);
+
+      await press(tree, 'btn-start');
+
+      const notice = first(tree, 'notice-timer-failure');
+      expect(notice.props.message).toBe('Calibrate Shot first');
+      expect(
+        notice.findAll(node => node.props.testID === 'btn-go-calibration')
+          .length,
+      ).toBeGreaterThan(0);
+    });
+
+    it('offers the settings inside the notice when the microphone is turned off', async () => {
+      checkPermission.mockResolvedValue(false);
+      requestPermission.mockResolvedValue(
+        PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN,
+      );
+      const { tree } = await renderScreen();
+
+      await press(tree, 'btn-start');
+
+      const notice = first(tree, 'notice-timer-failure');
+      expect(notice.props.message).toBe(
+        'Microphone access is turned off. Allow it in Settings.',
+      );
+      expect(
+        notice.findAll(node => node.props.testID === 'btn-open-settings')
+          .length,
+      ).toBeGreaterThan(0);
+    });
+
+    it('says the app was left in a notice with no action, the run still offered', async () => {
+      const { tree } = await renderScreen();
+      await startRun(tree);
+      shoot(ZERO + 1400);
+
+      act(() => {
+        DeviceEventEmitter.emit(AUDIO_CAPTURE_ERROR_EVENT, {
+          code: 'INTERRUPTED',
+          message: 'left the app',
+        });
+      });
+      await settle();
+
+      const notice = first(tree, 'notice-timer-failure');
+      expect(notice.props).toMatchObject({
+        message: 'The run stopped because the app was left',
+        action: undefined,
+      });
+      expect(offersSave(tree)).toBe(true);
+      expect(await loadSessions()).toEqual([]);
+    });
+
+    it('puts Reset beside Save run in the main action, not in the header', async () => {
+      const { tree } = await renderScreen();
+      await completeRun(tree);
+
+      expect(first(tree, 'btn-reset-run').props).toMatchObject({
+        label: 'Reset',
+        variant: 'secondary',
+        accessibilityLabel: 'Reset without saving',
+      });
+      expect(has(tree, 'btn-reset')).toBe(false);
+      expect(mainActionPinned(tree)).toBe(true);
+    });
+
+    it('opens the saved run’s drill in Log from the saved line', async () => {
+      const { tree, navigationRef, stackIn } = await renderScreen();
+      await completeRun(tree);
+      await press(tree, 'btn-save-run');
+
+      await act(async () => {
+        first(tree, 'btn-view-run').props.onPress();
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigationRef.getCurrentRoute()).toMatchObject({
+        name: 'HistoryDetail',
+        params: {
+          drillId: drillIds['Failure to Stop'],
+          drillName: 'Failure to Stop',
+        },
+      });
+      // The Log list sits underneath, so back lands on it.
+      expect(stackIn('Log')).toEqual(['HistoryList', 'HistoryDetail']);
+
+      await act(async () => {
+        navigationRef.goBack();
+        await jest.advanceTimersByTimeAsync(0);
+      });
+
+      expect(navigationRef.getCurrentRoute()?.name).toBe('HistoryList');
     });
   });
 });

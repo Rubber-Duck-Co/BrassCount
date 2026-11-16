@@ -24,8 +24,9 @@ export const MAX_SESSION_SECONDS = 86_400;
 export const MAX_SPLIT_LABEL_LENGTH = 40;
 /**
  * Longest par a split may carry, in seconds. A step that cannot be heard
- * (a draw, a holster) has its par counted into the next step that can, so
- * a split's par can be the sum of every par in a drill: at most
+ * (a draw out of first place, a transition, a holster) has its par counted
+ * into the next step that can, so a split's par can be the sum of every
+ * par in a drill: at most
  * `MAX_DRILL_STEPS` steps of `MAX_STEP_PAR_SECONDS` each.
  */
 export const MAX_SPLIT_PAR_SECONDS = MAX_DRILL_STEPS * MAX_STEP_PAR_SECONDS;
@@ -43,14 +44,16 @@ export interface SessionSplit {
   /**
    * The par the step was judged against at the time of the run, in
    * seconds: its own par plus that of any silent step in front of it (see
-   * `RunStep.par`). Left off when none of them had one; History then
+   * `RunStep.par`). Left off when none of them had one; Log then
    * shows the par the drill has for the step now (`fillMissingPars`),
    * without changing what is stored.
    */
   par?: number;
   /**
    * Seconds this step took, measured from the previous step (or from the
-   * timer start, for the first step).
+   * timer start, for the first step). A draw's split runs from the timer
+   * start to the first step heard, which ends the draw; that step's split
+   * follows it with the same time, judged against its own par.
    */
   actual: number;
   /**
@@ -76,7 +79,7 @@ export interface Session {
   totalTime: number;
   /**
    * Whether every step the run listened for was heard. `false` for a run
-   * stopped early, which History lists but leaves out of its best and
+   * stopped early, which Log lists but leaves out of its best and
    * average times.
    */
   completed: boolean;

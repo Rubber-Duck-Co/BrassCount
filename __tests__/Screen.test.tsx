@@ -1,9 +1,13 @@
-import { Keyboard, ScrollView } from 'react-native';
+import { createRef } from 'react';
+
+import { Keyboard, ScrollView, StyleSheet } from 'react-native';
 
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { Screen } from '../src/components/Screen';
+import { Typography } from '../src/components/Typography';
+import { sizes } from '../src/theme/theme';
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -46,6 +50,24 @@ const bottomPadding = (tree: ReactTestRenderer): unknown => {
 
 let tree: ReactTestRenderer | undefined;
 
+const render = (element: React.ReactElement): ReactTestRenderer => {
+  act(() => {
+    tree = create(
+      <SafeAreaProvider initialMetrics={metrics}>{element}</SafeAreaProvider>,
+    );
+  });
+  return tree as ReactTestRenderer;
+};
+
+const byTestId = (rendered: ReactTestRenderer, testID: string) =>
+  rendered.root.findAllByProps({ testID })[0];
+
+/** The text a reader sees, one entry per rendered Typography. */
+const texts = (rendered: ReactTestRenderer): string[] =>
+  rendered.root
+    .findAllByType(Typography)
+    .map(node => [node.props.children].flat().join(''));
+
 afterEach(() => {
   jest.restoreAllMocks();
   if (tree) {
@@ -72,5 +94,215 @@ describe('Screen', () => {
 
     act(() => keyboard.hide());
     expect(bottomPadding(tree as ReactTestRenderer)).toBe(before);
+  });
+
+  it('shows the BRASSCOUNT wordmark when there is no back link', () => {
+    const rendered = render(<Screen title="Timer">{null}</Screen>);
+
+    expect(texts(rendered)).toContain('BRASSCOUNT');
+    expect(rendered.root.findAllByProps({ testID: 'btn-back' })).toHaveLength(
+      0,
+    );
+  });
+
+  it('replaces the wordmark with a back link that goes back', () => {
+    const onBack = jest.fn();
+    const rendered = render(
+      <Screen title="Settings" onBack={onBack} backLabel="Profile">
+        {null}
+      </Screen>,
+    );
+
+    const back = byTestId(rendered, 'btn-back');
+    expect(texts(rendered)).not.toContain('BRASSCOUNT');
+    expect(texts(rendered)).toContain('PROFILE');
+    expect(back.props.accessibilityRole).toBe('button');
+    expect(back.props.accessibilityLabel).toBe('Back to Profile');
+
+    act(() => back.props.onPress());
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('announces a plain back link as going back', () => {
+    const rendered = render(
+      <Screen title="Settings" onBack={jest.fn()}>
+        {null}
+      </Screen>,
+    );
+
+    expect(texts(rendered)).toContain('BACK');
+    expect(byTestId(rendered, 'btn-back').props.accessibilityLabel).toBe(
+      'Go back',
+    );
+  });
+
+  it('shrinks the wordmark, never the action, when the top row is tight', () => {
+    const rendered = render(
+      <Screen
+        title="Profile"
+        action={{ label: 'Settings', onPress: jest.fn() }}
+      >
+        {null}
+      </Screen>,
+    );
+
+    const wordmark = rendered.root
+      .findAllByType(Typography)
+      .find(node => node.props.children === 'BRASSCOUNT');
+    const action = byTestId(rendered, 'btn-header-action');
+    expect(wordmark?.props.adjustsFontSizeToFit).toBe(true);
+    expect(wordmark?.props.numberOfLines).toBe(1);
+    expect(StyleSheet.flatten(action.props.style).flexShrink ?? 0).toBe(0);
+  });
+
+  it('leads with the title, and no wordmark, when the wordmark is off', () => {
+    const rendered = render(
+      <Screen title="Timer" subtitle="Ready" wordmark={false}>
+        {null}
+      </Screen>,
+    );
+
+    const header = byTestId(rendered, 'screen-header');
+    const title = header
+      .findAllByType(Typography)
+      .filter(node => node.props.accessibilityRole === 'header');
+    expect(texts(rendered)).not.toContain('BRASSCOUNT');
+    expect(texts(rendered)).toEqual(['Timer', 'Ready']);
+    expect(title).toHaveLength(1);
+    expect(StyleSheet.flatten(header.props.style).minHeight).toBe(
+      sizes.headerCompactMin,
+    );
+  });
+
+  it('keeps a back link and the title under it when the wordmark is off', () => {
+    const rendered = render(
+      <Screen title="Settings" onBack={jest.fn()} wordmark={false}>
+        {null}
+      </Screen>,
+    );
+
+    const header = byTestId(rendered, 'screen-header');
+    expect(byTestId(rendered, 'btn-back')).toBeDefined();
+    expect(texts(rendered)).toEqual(['BACK', 'Settings']);
+    expect(StyleSheet.flatten(header.props.style).minHeight).toBe(
+      sizes.headerMin,
+    );
+  });
+
+  it('shrinks the title, never the action, beside it when the wordmark is off', () => {
+    const onPress = jest.fn();
+    const rendered = render(
+      <Screen
+        title="A drill with a long name"
+        action={{ label: 'Settings', onPress }}
+        wordmark={false}
+      >
+        {null}
+      </Screen>,
+    );
+
+    const title = rendered.root
+      .findAllByType(Typography)
+      .find(node => node.props.accessibilityRole === 'header');
+    const action = byTestId(rendered, 'btn-header-action');
+    expect(title?.props.adjustsFontSizeToFit).toBe(true);
+    expect(title?.props.minimumFontScale).toBe(0.6);
+    expect(title?.props.numberOfLines).toBe(1);
+    expect(StyleSheet.flatten(title?.props.style)).toMatchObject({
+      flex: 1,
+      minWidth: 0,
+    });
+    expect(StyleSheet.flatten(action.props.style).flexShrink ?? 0).toBe(0);
+
+    act(() => action.props.onPress());
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds the action to the right with no title when the wordmark is off', () => {
+    const rendered = render(
+      <Screen action={{ label: 'Save', onPress: jest.fn() }} wordmark={false}>
+        {null}
+      </Screen>,
+    );
+
+    const header = byTestId(rendered, 'screen-header');
+    expect(texts(rendered)).toEqual(['SAVE']);
+    expect(
+      header
+        .findAllByType(Typography)
+        .filter(node => node.props.accessibilityRole === 'header'),
+    ).toHaveLength(0);
+    expect(byTestId(rendered, 'btn-header-action')).toBeDefined();
+  });
+
+  it('calls the header action when it is pressed', () => {
+    const onPress = jest.fn();
+    const rendered = render(
+      <Screen title="Drills" action={{ label: '+ New', onPress }}>
+        {null}
+      </Screen>,
+    );
+
+    const action = byTestId(rendered, 'btn-header-action');
+    expect(texts(rendered)).toContain('+ NEW');
+    expect(action.props.accessibilityRole).toBe('button');
+    expect(action.props.accessibilityLabel).toBe('+ New');
+    expect(action.props.accessibilityState).toEqual({ disabled: false });
+
+    act(() => action.props.onPress());
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('greys a disabled action, ignores presses and announces it as disabled', () => {
+    const rendered = render(
+      <Screen
+        title="Editor"
+        action={{ label: 'Save', onPress: jest.fn() }}
+        actionDisabled
+      >
+        {null}
+      </Screen>,
+    );
+
+    const action = byTestId(rendered, 'btn-header-action');
+    expect(action.props.disabled).toBe(true);
+    expect(action.props.accessibilityState).toEqual({ disabled: true });
+    expect(action.findByType(Typography).props.color).toBe('disabled');
+  });
+
+  it('gives the header a minimum height, never a fixed one', () => {
+    const rendered = render(<Screen title="Timer">{null}</Screen>);
+
+    const style = StyleSheet.flatten(
+      byTestId(rendered, 'screen-header').props.style,
+    );
+    expect(style.minHeight).toBe(sizes.headerMin);
+    expect(style.height).toBeUndefined();
+  });
+
+  it('hands its scroll view to scrollRef, so a screen can scroll it', () => {
+    const scrollRef = createRef<ScrollView>();
+
+    render(
+      <Screen title="Edit drill" scrollable scrollRef={scrollRef}>
+        {null}
+      </Screen>,
+    );
+
+    expect(typeof scrollRef.current?.scrollTo).toBe('function');
+  });
+
+  it('keeps the header out of the scrolling content', () => {
+    const rendered = render(
+      <Screen title="History" scrollable>
+        {null}
+      </Screen>,
+    );
+
+    const scroll = rendered.root.findByType(ScrollView);
+    expect(scroll.findAllByProps({ testID: 'screen-header' })).toHaveLength(0);
+    expect(
+      rendered.root.findAllByProps({ testID: 'screen-header' }),
+    ).not.toHaveLength(0);
   });
 });

@@ -39,19 +39,19 @@ const renderScreen = (): ReactTestRenderer => {
   act(() => {
     tree = create(
       <SafeAreaProvider initialMetrics={metrics}>
-        <ProfileScreen />
+        <SetupScreen />
       </SafeAreaProvider>,
     );
   });
   return tree as ReactTestRenderer;
 };
 
-it('renders the profile screen', () => {
+it('renders the setup screen', () => {
   const tree = renderScreen();
 
-  expect(
-    tree.root.findAllByProps({ testID: 'screen-profile' }),
-  ).not.toHaveLength(0);
+  expect(tree.root.findAllByProps({ testID: 'screen-setup' })).not.toHaveLength(
+    0,
+  );
 });
 ```
 

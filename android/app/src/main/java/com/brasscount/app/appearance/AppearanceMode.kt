@@ -12,7 +12,12 @@ const val PREFERENCE_SYSTEM = "system"
 const val PREFERENCE_LIGHT = "light"
 const val PREFERENCE_DARK = "dark"
 
-private val KNOWN_PREFERENCES = setOf(PREFERENCE_SYSTEM, PREFERENCE_LIGHT, PREFERENCE_DARK)
+/** Range Card's two extra schemes; both are dark, so the window is too. */
+const val PREFERENCE_FIELD = "field"
+const val PREFERENCE_NIGHT = "night"
+
+private val KNOWN_PREFERENCES =
+  setOf(PREFERENCE_SYSTEM, PREFERENCE_LIGHT, PREFERENCE_DARK, PREFERENCE_FIELD, PREFERENCE_NIGHT)
 
 /** Whether [preference] is one of the values JS may store. */
 fun isKnownPreference(preference: String?): Boolean = preference in KNOWN_PREFERENCES
@@ -24,6 +29,6 @@ fun isKnownPreference(preference: String?): Boolean = preference in KNOWN_PREFER
 fun nightModeFor(preference: String?): NightMode =
   when (preference) {
     PREFERENCE_LIGHT -> NightMode.LIGHT
-    PREFERENCE_DARK -> NightMode.DARK
+    PREFERENCE_DARK, PREFERENCE_FIELD, PREFERENCE_NIGHT -> NightMode.DARK
     else -> NightMode.FOLLOW_SYSTEM
   }

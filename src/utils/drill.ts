@@ -1,3 +1,4 @@
+import { CALIBRATION_SOUNDS } from '@/types/calibration';
 import {
   MAX_STEP_PAR_SECONDS,
   type Drill,
@@ -75,6 +76,32 @@ export const totalPar = (
   return roundPar(sum);
 };
 
+/** Whether the timer can hear a step of this type: it has a calibrated sound. */
+const isHeardType = (type: DrillStepType): boolean =>
+  CALIBRATION_SOUNDS.some(sound => sound === type);
+
+/**
+ * Where the step whose sound ends the draw sits, counted from 0: the first
+ * step the timer can hear after a draw in first place. The draw is timed
+ * from the beep to that sound, and so is the step itself, against its own
+ * par (see `timedSteps`).
+ *
+ * `null` when the drill does not open with a draw, or nothing heard follows
+ * it. A draw anywhere else, kept by a drill stored before the editor held
+ * a draw to first place, stays a silent step (see `timedSteps`).
+ */
+export const drawEndPosition = (
+  steps: readonly Pick<DrillStep, 'type'>[],
+): number | null => {
+  if (steps[0]?.type !== 'draw') {
+    return null;
+  }
+  const position = steps.findIndex(
+    (step, i) => i > 0 && isHeardType(step.type),
+  );
+  return position < 0 ? null : position;
+};
+
 const STEP_TYPE_LABELS: Record<DrillStepType, string> = {
   draw: 'Draw',
   shot: 'Shot',
@@ -87,6 +114,22 @@ const STEP_TYPE_LABELS: Record<DrillStepType, string> = {
 /** A step type as it is named on screen: `shot` reads "Shot". */
 export const stepTypeLabel = (type: DrillStepType): string =>
   STEP_TYPE_LABELS[type];
+
+const STEP_TYPE_DESCRIPTIONS: Record<DrillStepType, string> = {
+  draw: 'From the holster',
+  shot: 'One round downrange',
+  reload: 'Magazine change',
+  rack: 'Cycle the slide',
+  transition: 'Move to the next target',
+  holster: 'Make safe',
+};
+
+/**
+ * What a step type means, under its name in the editor and in the step
+ * type sheet: `draw` reads "From the holster".
+ */
+export const stepTypeDescription = (type: DrillStepType): string =>
+  STEP_TYPE_DESCRIPTIONS[type];
 
 /**
  * What to call the step at `position` in an ordered step list.
@@ -119,13 +162,16 @@ export const stepLabel = (
 /**
  * A drill in one line, under its name: its shot count, then its total par
  * (`3 shots · Par 2.50s`). A drill with an untimed step has no total par,
- * so the par is left out.
+ * so the par is left out, or with `markUntimed` replaced by the word
+ * (`2 shots · untimed`), as the Drills library shows it.
  */
 export const describeDrill = (
   drill: Pick<Drill, 'shotCount' | 'totalPar'>,
+  { markUntimed = false }: { markUntimed?: boolean } = {},
 ): string => {
   const shots = pluralize(drill.shotCount, 'shot');
-  return drill.totalPar === null
-    ? shots
-    : `${shots} · Par ${formatSeconds(drill.totalPar)}`;
+  if (drill.totalPar !== null) {
+    return `${shots} · Par ${formatSeconds(drill.totalPar)}`;
+  }
+  return markUntimed ? `${shots} · untimed` : shots;
 };

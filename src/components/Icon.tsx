@@ -10,14 +10,26 @@ export type IconName =
   | 'target'
   | 'user'
   | 'plus'
+  | 'close'
   | 'play'
   | 'chevron'
   | 'check'
   | 'pencil'
-  | 'settings';
+  | 'refresh'
+  | 'settings'
+  | 'warning'
+  | 'grip';
 
 /** Angles of the gear's eight teeth, in degrees. */
 const GEAR_TEETH = [0, 45, 90, 135, 180, 225, 270, 315];
+
+/**
+ * The warning triangle's sides run from its base corners, 0.08 and 0.92
+ * across at 0.86 down, to its apex at the middle, 0.12 down: as a share of
+ * the icon, each is this long and this steep, in degrees.
+ */
+const WARNING_SIDE = Math.hypot(0.42, 0.74);
+const WARNING_ANGLE = (Math.atan2(0.74, 0.42) * 180) / Math.PI;
 
 type IconProps = {
   name: IconName;
@@ -173,6 +185,26 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
         </View>
       );
 
+    case 'close':
+      return (
+        <View key={name} style={box}>
+          <View
+            style={bar({
+              width: size * 0.9,
+              height: stroke,
+              transform: [{ rotate: '45deg' }],
+            })}
+          />
+          <View
+            style={bar({
+              width: size * 0.9,
+              height: stroke,
+              transform: [{ rotate: '-45deg' }],
+            })}
+          />
+        </View>
+      );
+
     case 'play':
       // Triangle via the classic transparent-border trick — no SVG needed.
       return (
@@ -190,6 +222,33 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
               borderLeftColor: tint,
             }}
           />
+        </View>
+      );
+
+    case 'grip':
+      // Two columns of three dots, the mark of a row that can be dragged.
+      return (
+        <View key={name} style={box}>
+          <View
+            style={{
+              flexDirection: 'row',
+              flexWrap: 'wrap',
+              width: size * 0.55,
+              columnGap: size * 0.15,
+              rowGap: size * 0.15,
+            }}
+          >
+            {[0, 1, 2, 3, 4, 5].map(dot => (
+              <View
+                key={dot}
+                style={{
+                  width: size * 0.2,
+                  height: size * 0.2,
+                  backgroundColor: tint,
+                }}
+              />
+            ))}
+          </View>
         </View>
       );
 
@@ -257,6 +316,39 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
         </View>
       );
 
+    case 'refresh':
+      // An open ring, its gap at the top right, with an arrow's corner
+      // at the gap: reload.
+      return (
+        <View key={name} style={box}>
+          <View
+            style={[
+              ring(size * 0.67, stroke),
+              {
+                borderTopColor: 'transparent',
+                transform: [{ rotate: '45deg' }],
+              },
+            ]}
+          />
+          <View
+            style={bar({
+              left: size * 0.83 - stroke / 2,
+              top: size * 0.17,
+              width: stroke,
+              height: size * 0.21 + stroke / 2,
+            })}
+          />
+          <View
+            style={bar({
+              left: size * 0.62,
+              top: size * 0.38 - stroke / 2,
+              width: size * 0.21 + stroke / 2,
+              height: stroke,
+            })}
+          />
+        </View>
+      );
+
     case 'settings':
       // A gear: a thick ring with eight teeth, each a short bar turned to
       // its angle and then pushed out from the centre along it.
@@ -277,6 +369,56 @@ export const Icon = ({ name, size = 24, color = 'textPrimary' }: IconProps) => {
             />
           ))}
           <View style={ring(size * 0.62, stroke * 1.4)} />
+        </View>
+      );
+
+    case 'warning':
+      // A triangle on its base, drawn as three bars, with an exclamation
+      // mark inside: a bar and a dot.
+      return (
+        <View key={name} style={box}>
+          <View
+            style={bar({
+              left: size * (0.29 - WARNING_SIDE / 2),
+              top: size * 0.49 - stroke / 2,
+              width: size * WARNING_SIDE,
+              height: stroke,
+              transform: [{ rotate: `-${WARNING_ANGLE}deg` }],
+            })}
+          />
+          <View
+            style={bar({
+              left: size * (0.71 - WARNING_SIDE / 2),
+              top: size * 0.49 - stroke / 2,
+              width: size * WARNING_SIDE,
+              height: stroke,
+              transform: [{ rotate: `${WARNING_ANGLE}deg` }],
+            })}
+          />
+          <View
+            style={bar({
+              left: size * 0.08,
+              top: size * 0.86 - stroke / 2,
+              width: size * 0.84,
+              height: stroke,
+            })}
+          />
+          <View
+            style={bar({
+              left: size * 0.5 - stroke / 2,
+              top: size * 0.4,
+              width: stroke,
+              height: size * 0.24,
+            })}
+          />
+          <View
+            style={bar({
+              left: size * 0.5 - stroke / 2,
+              top: size * 0.7,
+              width: stroke,
+              height: stroke,
+            })}
+          />
         </View>
       );
   }

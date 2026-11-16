@@ -1,4 +1,4 @@
-import { DBFS_MIN } from '@/types/calibration';
+import { CALIBRATION_SOUNDS, DBFS_MIN } from '@/types/calibration';
 import type {
   CalibrationSamples,
   CalibrationSound,
@@ -89,3 +89,12 @@ export const testOutcome = (
     ? 'passed'
     : 'failed';
 };
+
+/**
+ * How many sounds have a threshold this session, of the
+ * `CALIBRATION_SOUNDS.length` there are. Setup flags the Calibration row
+ * while it is short of all of them.
+ */
+export const countCalibratedSounds = (state: CalibrationState): number =>
+  CALIBRATION_SOUNDS.filter(sound => state[sound].status === 'calibrated')
+    .length;

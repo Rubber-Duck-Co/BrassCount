@@ -165,14 +165,30 @@ describe('drillStorage service', () => {
       const saved = await saveDrill(
         {
           name: 'Mozambique',
-          steps: [{ type: 'draw', par: 1.5 }, { type: 'shot' }],
+          steps: [{ type: 'shot', par: 1.5 }, { type: 'shot' }],
         },
         fakes(),
       );
 
       expect(saved.totalPar).toBeNull();
-      expect(saved.shotCount).toBe(1);
+      expect(saved.shotCount).toBe(2);
       expect(saved.steps[1]).toEqual({ id: 'id-3', type: 'shot' });
+    });
+
+    it('adds the par of the shot that ends a draw to the draw’s in the total par', async () => {
+      const saved = await saveDrill(
+        {
+          name: 'Failure to Stop',
+          steps: [
+            { type: 'draw', par: 1.5 },
+            { type: 'shot', par: 1 },
+            { type: 'shot', par: 0.25 },
+          ],
+        },
+        fakes(),
+      );
+
+      expect(saved.totalPar).toBe(2.75);
     });
 
     it('keeps a step id the caller supplies', async () => {

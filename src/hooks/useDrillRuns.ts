@@ -43,7 +43,7 @@ type Loaded = { drillId: string; state: DrillRunsState };
 const LOADING: DrillRunsState = { status: 'loading' };
 
 /**
- * Loads the runs of one drill for the History detail screen and reads them
+ * Loads the runs of one drill for the Log detail screen and reads them
  * again each time the screen regains focus: it stays mounted behind the
  * other tabs, where runs are saved and the drill renamed or deleted.
  *
