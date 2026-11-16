@@ -29,7 +29,7 @@ describe('profile field checks', () => {
 
   describe('name', () => {
     it('accepts an ordinary name', () => {
-      expect(profileNameError('Marty McFly')).toBeNull();
+      expect(profileNameError('Mr Duck')).toBeNull();
     });
 
     it('accepts a blank name, which clears the stored one', () => {
@@ -68,7 +68,7 @@ describe('profile field checks', () => {
 
   describe('shared rules', () => {
     it('normalizes a name to one trimmed line, or null when blank', () => {
-      expect(normalizeProfileName('  Doc \t\n  Brown ')).toBe('Doc Brown');
+      expect(normalizeProfileName('  Mrs \t\n  Goose ')).toBe('Mrs Goose');
       expect(normalizeProfileName(' \n ')).toBeNull();
     });
 
@@ -78,20 +78,20 @@ describe('profile field checks', () => {
     });
 
     it('takes the handle body after an optional @', () => {
-      expect(profileHandleBody(' @marty ')).toBe('marty');
-      expect(profileHandleBody('marty')).toBe('marty');
+      expect(profileHandleBody(' @duck ')).toBe('duck');
+      expect(profileHandleBody('duck')).toBe('duck');
       expect(profileHandleBody('@')).toBe('');
     });
   });
 
   describe('handle', () => {
     it('accepts a handle with or without its @', () => {
-      expect(profileHandleError('@martymcfly')).toBeNull();
-      expect(profileHandleError('martymcfly')).toBeNull();
+      expect(profileHandleError('@mrduck')).toBeNull();
+      expect(profileHandleError('mrduck')).toBeNull();
     });
 
     it('accepts dots, underscores and hyphens', () => {
-      expect(profileHandleError('@marty.mc_fly-85')).toBeNull();
+      expect(profileHandleError('@mr.big_duck-42')).toBeNull();
     });
 
     it('accepts a blank handle or a lone @, which clear the stored one', () => {
@@ -116,10 +116,10 @@ describe('profile field checks', () => {
     });
 
     it('rejects characters a handle cannot use', () => {
-      expect(profileHandleError('@marty mcfly')).not.toBeNull();
-      expect(profileHandleError('@marty!')).not.toBeNull();
-      expect(profileHandleError('@@marty')).not.toBeNull();
-      expect(profileHandleError('@márty')).not.toBeNull();
+      expect(profileHandleError('@mr duck')).not.toBeNull();
+      expect(profileHandleError('@duck!')).not.toBeNull();
+      expect(profileHandleError('@@duck')).not.toBeNull();
+      expect(profileHandleError('@dück')).not.toBeNull();
     });
   });
 
@@ -130,8 +130,8 @@ describe('profile field checks', () => {
     const names = [
       '',
       '   ',
-      'Marty McFly',
-      '  Marty \t McFly  ',
+      'Mr Duck',
+      '  Mr \t Duck  ',
       'a'.repeat(MAX_PROFILE_NAME_LENGTH),
       'a'.repeat(MAX_PROFILE_NAME_LENGTH + 1),
       `${'a'.repeat(MAX_PROFILE_NAME_LENGTH)}   `,
@@ -146,12 +146,12 @@ describe('profile field checks', () => {
     const handles = [
       '',
       '@',
-      ' @marty ',
-      'marty',
-      '@marty.mc_fly-85',
-      '@@marty',
-      '@marty mcfly',
-      '@marty!',
+      ' @duck ',
+      'duck',
+      '@mr.big_duck-42',
+      '@@duck',
+      '@mr duck',
+      '@duck!',
       'márty',
       'a'.repeat(MAX_PROFILE_HANDLE_LENGTH),
       `@${'a'.repeat(MAX_PROFILE_HANDLE_LENGTH)}`,

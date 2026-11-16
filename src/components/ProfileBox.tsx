@@ -135,7 +135,7 @@ const ProfileEditor = ({ profile, onSave, onCancel }: ProfileEditorProps) => {
         label="Handle"
         value={handle}
         onChangeText={setHandle}
-        placeholder={`${HANDLE_PREFIX}martymcfly`}
+        placeholder={HANDLE_PREFIX}
         maxLength={MAX_PROFILE_HANDLE_LENGTH + HANDLE_PREFIX.length}
         autoCapitalize="none"
         autoCorrect={false}

@@ -358,21 +358,21 @@ describe('SetupScreen', () => {
     });
 
     it('shows the stored name, the handle and counts on one line, and the initials', async () => {
-      await updateProfile({ name: 'Marty McFly', handle: 'martymcfly' });
+      await updateProfile({ name: 'Mr Duck', handle: 'mrduck' });
       await seedDrill();
       await seedRuns(2);
 
       const { tree } = await renderScreen();
 
-      expect(textOf(tree, 'text-profile-name')).toBe('Marty McFly');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mr Duck');
       expect(textOf(tree, 'text-profile-meta')).toBe(
-        '@martymcfly · 2 runs · 1 drill',
+        '@mrduck · 2 runs · 1 drill',
       );
-      expect(tree.root.findAllByProps({ children: 'MM' })).not.toHaveLength(0);
+      expect(tree.root.findAllByProps({ children: 'MD' })).not.toHaveLength(0);
     });
 
     it('reads the shooter out as one phrase, apart from Edit', async () => {
-      await updateProfile({ name: 'Marty McFly', handle: 'martymcfly' });
+      await updateProfile({ name: 'Mr Duck', handle: 'mrduck' });
       await seedDrill();
       await seedRuns(1);
 
@@ -382,7 +382,7 @@ describe('SetupScreen', () => {
         node => node.props.accessible === true,
       );
       expect(identity?.props.accessibilityLabel).toBe(
-        'Marty McFly, @martymcfly, 1 run, 1 drill',
+        'Mr Duck, @mrduck, 1 run, 1 drill',
       );
       expect(identity?.findAllByProps({ testID: 'btn-edit-profile' })).toEqual(
         [],
@@ -415,9 +415,9 @@ describe('SetupScreen', () => {
       await settle();
       expect(has(tree, 'text-profile-loading')).toBe(true);
 
-      await updateProfile({ name: 'Marty McFly' });
+      await updateProfile({ name: 'Mr Duck' });
       await goTo('SetupHome');
-      expect(textOf(tree, 'text-profile-name')).toBe('Marty McFly');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mr Duck');
     });
 
     it('picks up runs and drills saved while another tab was open', async () => {
@@ -435,7 +435,7 @@ describe('SetupScreen', () => {
 
   describe('editing the profile', () => {
     it('opens the form in the box, with the stored name and handle', async () => {
-      await updateProfile({ name: 'Marty McFly', handle: '@martymcfly' });
+      await updateProfile({ name: 'Mr Duck', handle: '@mrduck' });
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
@@ -443,10 +443,10 @@ describe('SetupScreen', () => {
       expect(has(tree, 'form-profile')).toBe(true);
       expect(has(tree, 'text-profile-name')).toBe(false);
       expect(byTestId(tree, 'input-profile-name')[0].props.value).toBe(
-        'Marty McFly',
+        'Mr Duck',
       );
       expect(byTestId(tree, 'input-profile-handle')[0].props.value).toBe(
-        '@martymcfly',
+        '@mrduck',
       );
       // The settings stay below the form.
       expect(has(tree, 'row-appearance')).toBe(true);
@@ -462,22 +462,32 @@ describe('SetupScreen', () => {
       );
     });
 
+    it('shows a bare @ as the empty handle placeholder', async () => {
+      const { tree } = await renderScreen();
+
+      await press(tree, 'btn-edit-profile');
+
+      expect(byTestId(tree, 'input-profile-handle')[0].props.placeholder).toBe(
+        '@',
+      );
+    });
+
     it('saves what was typed and shows it as stored', async () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', '  Doc   Brown ');
-      type(tree, 'input-profile-handle', 'doc.brown');
+      type(tree, 'input-profile-name', '  Mrs   Goose ');
+      type(tree, 'input-profile-handle', 'mrs.goose');
       await press(tree, 'btn-save-profile');
 
       expect(has(tree, 'form-profile')).toBe(false);
-      expect(textOf(tree, 'text-profile-name')).toBe('Doc Brown');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mrs Goose');
       expect(textOf(tree, 'text-profile-meta')).toBe(
-        '@doc.brown · 0 runs · 0 drills',
+        '@mrs.goose · 0 runs · 0 drills',
       );
       expect(await loadProfile()).toMatchObject({
-        name: 'Doc Brown',
-        handle: '@doc.brown',
+        name: 'Mrs Goose',
+        handle: '@mrs.goose',
       });
     });
 
@@ -500,7 +510,7 @@ describe('SetupScreen', () => {
     });
 
     it('clears the name and handle when the fields are emptied', async () => {
-      await updateProfile({ name: 'Marty McFly', handle: '@martymcfly' });
+      await updateProfile({ name: 'Mr Duck', handle: '@mrduck' });
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
@@ -518,7 +528,7 @@ describe('SetupScreen', () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', 'Doc Brown');
+      type(tree, 'input-profile-name', 'Mrs Goose');
       await press(tree, 'btn-save-profile');
 
       expect((await loadProfile()).appearance).toBe('dark');
@@ -526,21 +536,21 @@ describe('SetupScreen', () => {
     });
 
     it('discards what was typed on cancel', async () => {
-      await updateProfile({ name: 'Marty McFly' });
+      await updateProfile({ name: 'Mr Duck' });
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', 'Biff Tannen');
+      type(tree, 'input-profile-name', 'Mr Swan');
       await press(tree, 'btn-cancel-profile');
 
       expect(has(tree, 'form-profile')).toBe(false);
-      expect(textOf(tree, 'text-profile-name')).toBe('Marty McFly');
-      expect((await loadProfile()).name).toBe('Marty McFly');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mr Duck');
+      expect((await loadProfile()).name).toBe('Mr Duck');
 
       // Reopening starts from the stored profile, not the abandoned draft.
       await press(tree, 'btn-edit-profile');
       expect(byTestId(tree, 'input-profile-name')[0].props.value).toBe(
-        'Marty McFly',
+        'Mr Duck',
       );
     });
 
@@ -550,7 +560,7 @@ describe('SetupScreen', () => {
       await press(tree, 'btn-edit-profile');
       expect(saveButton(tree).props.disabled).toBe(false);
 
-      type(tree, 'input-profile-handle', '@doc brown');
+      type(tree, 'input-profile-handle', '@mrs goose');
 
       expect(textOf(tree, 'input-profile-handle-error')).toMatch(/letters/);
       expect(has(tree, 'input-profile-handle-hint')).toBe(false);
@@ -566,8 +576,8 @@ describe('SetupScreen', () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-handle', '@doc brown');
-      type(tree, 'input-profile-handle', '@doc_brown');
+      type(tree, 'input-profile-handle', '@mrs goose');
+      type(tree, 'input-profile-handle', '@mrs_goose');
 
       expect(has(tree, 'input-profile-handle-error')).toBe(false);
       expect(saveButton(tree).props.disabled).toBe(false);
@@ -582,14 +592,14 @@ describe('SetupScreen', () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', 'Doc Brown');
+      type(tree, 'input-profile-name', 'Mrs Goose');
       await press(tree, 'btn-save-profile');
 
       expect(textOf(tree, 'text-profile-save-error')).toBe(
         'Could not save your profile. Try again.',
       );
       expect(byTestId(tree, 'input-profile-name')[0].props.value).toBe(
-        'Doc Brown',
+        'Mrs Goose',
       );
       expect(saveButton(tree).props.disabled).toBe(false);
 
@@ -598,7 +608,7 @@ describe('SetupScreen', () => {
 
       expect(update).toHaveBeenCalledTimes(2);
       expect(has(tree, 'form-profile')).toBe(false);
-      expect(textOf(tree, 'text-profile-name')).toBe('Doc Brown');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mrs Goose');
     });
 
     it('does not show the service’s own wording for a rejected value', async () => {
@@ -628,7 +638,7 @@ describe('SetupScreen', () => {
       const { tree } = await renderScreen();
 
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', 'Doc Brown');
+      type(tree, 'input-profile-name', 'Mrs Goose');
       await press(tree, 'btn-save-profile');
 
       expect(saveButton(tree).props.label).toBe('Saving…');
@@ -639,18 +649,18 @@ describe('SetupScreen', () => {
       );
 
       await act(async () => {
-        finishSave({ ...DEFAULT_PROFILE, name: 'Doc Brown' });
+        finishSave({ ...DEFAULT_PROFILE, name: 'Mrs Goose' });
       });
 
       expect(has(tree, 'form-profile')).toBe(false);
-      expect(textOf(tree, 'text-profile-name')).toBe('Doc Brown');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mrs Goose');
     });
 
     it('keeps a just-saved name when an older read lands after it', async () => {
-      await updateProfile({ name: 'Marty McFly' });
+      await updateProfile({ name: 'Mr Duck' });
       const { tree, goTo } = await renderScreen();
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', 'Doc Brown');
+      type(tree, 'input-profile-name', 'Mrs Goose');
 
       // The refresh on returning to the tab reads the profile before the
       // save below, but only answers after it.
@@ -666,14 +676,14 @@ describe('SetupScreen', () => {
       await goTo('SetupHome');
 
       await press(tree, 'btn-save-profile');
-      expect(textOf(tree, 'text-profile-name')).toBe('Doc Brown');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mrs Goose');
 
       await act(async () => {
         releaseRead();
       });
       await settle();
 
-      expect(textOf(tree, 'text-profile-name')).toBe('Doc Brown');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mrs Goose');
     });
   });
 
@@ -684,7 +694,7 @@ describe('SetupScreen', () => {
         .mockRejectedValueOnce(
           new ProfileStorageError('unreadable', 'STORAGE_FAILURE'),
         );
-      await updateProfile({ name: 'Marty McFly' });
+      await updateProfile({ name: 'Mr Duck' });
 
       const { tree } = await renderScreen();
 
@@ -711,15 +721,15 @@ describe('SetupScreen', () => {
       await settle();
 
       expect(has(tree, 'state-profile-error')).toBe(false);
-      expect(textOf(tree, 'text-profile-name')).toBe('Marty McFly');
+      expect(textOf(tree, 'text-profile-name')).toBe('Mr Duck');
     });
 
     it('keeps the profile and a half-typed edit when a refresh fails', async () => {
-      await updateProfile({ name: 'Marty McFly' });
+      await updateProfile({ name: 'Mr Duck' });
       await seedDrill();
       const { tree, goTo } = await renderScreen();
       await press(tree, 'btn-edit-profile');
-      type(tree, 'input-profile-name', 'Doc Brown');
+      type(tree, 'input-profile-name', 'Mrs Goose');
 
       jest
         .spyOn(ProfileStorageService, 'load')
@@ -731,7 +741,7 @@ describe('SetupScreen', () => {
 
       expect(has(tree, 'state-profile-error')).toBe(false);
       expect(byTestId(tree, 'input-profile-name')[0].props.value).toBe(
-        'Doc Brown',
+        'Mrs Goose',
       );
 
       // The next visit reads again, and this time storage answers.
