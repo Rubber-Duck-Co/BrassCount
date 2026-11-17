@@ -54,9 +54,24 @@ commit and moves that same bundle through the tracks:
 | `build`      | —              | `internal`         | none               |
 | `internal`   | Internal       | `internal`         | none               |
 | `staging`    | Closed (alpha) | `staging`          | required reviewers |
+| `beta`       | Open (beta)    | `beta`             | required reviewers |
 | `production` | Production     | `production`       | required reviewers |
 
-Production is a full release to every user; there is no staged rollout.
+Open testing is public: anyone can join from the store listing, so approve
+`beta` only for a build you would be happy for strangers to run. Production is
+promoted from open testing, and is a full release to every user; there is no
+staged rollout.
+
+### Setting up open testing
+
+Before the first promotion to `beta`, in Play Console → Testing → Open testing:
+
+- choose the countries or regions it is available in, and any tester limit;
+- give a feedback email address or URL.
+
+Open testing makes the app visible on the store, so check the store listing
+and App content declarations (privacy policy, data safety, content rating,
+target audience, ads) before the first promotion.
 
 ### Starting a release
 
@@ -78,7 +93,7 @@ upload-key signing setup.
 | `BRASSCOUNT_UPLOAD_STORE_PASSWORD`  | same                                              | Keystore password                               |
 | `BRASSCOUNT_UPLOAD_KEY_ALIAS`       | same                                              | Key alias                                       |
 | `BRASSCOUNT_UPLOAD_KEY_PASSWORD`    | same                                              | Key password                                    |
-| `PLAY_SERVICE_ACCOUNT_JSON`         | all three environments, or the repository         | The Play service account's JSON key             |
+| `PLAY_SERVICE_ACCOUNT_JSON`         | all four environments, or the repository          | The Play service account's JSON key             |
 | `PLAY_RELEASE_STATUS` (variable)    | repository; only until the app is first published | `draft`                                         |
 
 An environment's secrets are only visible to jobs that name that environment.
@@ -119,7 +134,8 @@ The repository is public, so the logs and artifacts of every run are too.
 
 ### Things to know
 
-- **Name the environments exactly `internal`, `staging` and `production`.**
+- **Name the environments exactly `internal`, `staging`, `beta` and
+  `production`.**
   GitHub creates an unknown environment on first use with no reviewers, so a
   misspelt name removes the approval.
 - **Restrict each environment to `main`** (Deployment branches and tags).
@@ -140,11 +156,12 @@ Each Play step is a lane in `android/fastlane/Fastfile` that first asks Play
 whether the build is already on its target track, and skips itself if so. When
 an approval expired, was rejected by mistake, or a job failed, start the
 workflow again with the same `sha`: it rebuilds the bundle (same versionCode),
-skips the upload and any promotion that already happened, and waits for the
-remaining approvals.
+skips the upload and any promotion that already happened, and asks for every
+approval again. Approve the steps that already happened too: their lanes skip
+themselves, and rejecting one stops the run before the remaining steps.
 
 This only works while the build is still on the track it is promoted from. Once
-a newer version has replaced it on internal or closed testing, finish the old
+a newer version has replaced it on internal, closed or open testing, finish the old
 one in Play Console or ship the newer one instead. A draft counts as being on
 its track, so while `PLAY_RELEASE_STATUS` is `draft`, finish drafts in Play
 Console rather than by dispatching again.

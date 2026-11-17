@@ -4,7 +4,8 @@ run-name: Release ${{ inputs.sha || 'tip of main' }}
 
 # Builds one signed bundle from a version-bump commit and moves that same
 # bundle through the Play tracks: internal, then closed testing (behind the
-# `staging` environment's approval), then production (behind `production`'s).
+# `staging` environment's approval), then open testing (behind `beta`'s), then
+# production (behind `production`'s).
 #
 # Started only by hand (workflow_dispatch), for a version-bump commit on main.
 # Nothing starts it automatically: not the version bump, and not the bot's tag.
@@ -207,7 +208,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # The three Play jobs check out this workflow's own commit (the tip of main)
+  # The Play jobs check out this workflow's own commit (the tip of main)
   # for the Fastfile and Gemfile.lock, not the commit being released, which
   # may predate them.
   internal:
@@ -289,9 +290,45 @@ jobs:
           FASTLANE_SKIP_UPDATE_CHECK: '1'
         run: bundle exec fastlane android promote from:internal to:alpha version_code:"$VERSION_CODE"
 
+  beta:
+    name: Promote to open testing
+    needs: [build, staging]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Waits for the environment's required reviewers.
+    environment: beta
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@b3aaceaef7e0ee231b499e7b5f49c03fc1d32199 # v1.338.0
+        with:
+          ruby-version: '3.3'
+          working-directory: android
+
+      - name: Install fastlane
+        working-directory: android
+        env:
+          BUNDLE_FROZEN: 'true'
+        run: bundle install
+
+      # Open testing is public: anyone can join from the store listing.
+      - name: Promote closed testing to open testing
+        working-directory: android
+        env:
+          SUPPLY_JSON_KEY_DATA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          VERSION_CODE: ${{ needs.build.outputs.version-code }}
+          FASTLANE_OPT_OUT_USAGE: '1'
+          FASTLANE_SKIP_UPDATE_CHECK: '1'
+        run: bundle exec fastlane android promote from:alpha to:beta version_code:"$VERSION_CODE"
+
   production:
     name: Promote to production
-    needs: [build, staging]
+    needs: [build, beta]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     # Waits for the environment's required reviewers.
@@ -316,11 +353,11 @@ jobs:
         run: bundle install
 
       # A completed release goes to every user at once: there is no staged rollout.
-      - name: Promote closed testing to production
+      - name: Promote open testing to production
         working-directory: android
         env:
           SUPPLY_JSON_KEY_DATA: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           VERSION_CODE: ${{ needs.build.outputs.version-code }}
           FASTLANE_OPT_OUT_USAGE: '1'
           FASTLANE_SKIP_UPDATE_CHECK: '1'
-        run: bundle exec fastlane android promote from:alpha to:production version_code:"$VERSION_CODE"
+        run: bundle exec fastlane android promote from:beta to:production version_code:"$VERSION_CODE"
