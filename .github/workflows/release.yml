@@ -190,6 +190,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          # The release notes read the history since the last production tag.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Ruby
@@ -203,6 +205,26 @@ jobs:
         env:
           BUNDLE_FROZEN: 'true'
         run: bundle install
+
+      # Play's "What's new", in the listing's default language. The promotions
+      # carry it to every later track.
+      - name: Write the Play release notes
+        env:
+          SHA: ${{ needs.build.outputs.sha }}
+          VERSION_CODE: ${{ needs.build.outputs.version-code }}
+        run: |
+          # Not piped, so a git failure stops the step.
+          tags="$(git tag --merged "$SHA" --no-contains "$SHA" --list 'v*' --sort=-v:refname)"
+          # No match means no earlier production release.
+          previous="$(grep -m 1 -E '^v[0-9]+\.[0-9]+\.[0-9]+$' <<< "$tags" || true)"
+          dir="$RUNNER_TEMP/play-metadata/en-GB/changelogs"
+          mkdir -p "$dir"
+          node scripts/release-notes.js --play "$SHA" ${previous:+"$previous"} > "$dir/$VERSION_CODE.txt"
+          if [ ! -s "$dir/$VERSION_CODE.txt" ]; then
+            echo "::error::The Play release notes are empty."
+            exit 1
+          fi
+          cat "$dir/$VERSION_CODE.txt"; echo
 
       - name: Download the bundle
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -221,7 +243,8 @@ jobs:
           bundle exec fastlane android upload_internal \
             version_code:"$VERSION_CODE" \
             aab:"$RUNNER_TEMP/release/bundle/release/app-release.aab" \
-            mapping:"$RUNNER_TEMP/release/mapping/release/mapping.txt"
+            mapping:"$RUNNER_TEMP/release/mapping/release/mapping.txt" \
+            metadata:"$RUNNER_TEMP/play-metadata"
 
   staging:
     name: Promote to closed testing
