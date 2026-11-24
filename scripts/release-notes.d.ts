@@ -27,6 +27,9 @@ export interface ReleaseNotesOptions {
 
 export function parseCommit(commit: Commit): ParsedCommit;
 export function buildNotes(input: NotesInput): string;
+export function buildPlayNotes(
+  input: Pick<NotesInput, 'previous' | 'commits'>,
+): string;
 export function parseLog(log: string): Commit[];
 export function releaseNotes(
   args: readonly string[],

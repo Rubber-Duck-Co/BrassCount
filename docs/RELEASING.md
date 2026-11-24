@@ -107,8 +107,7 @@ holds for patch, minor and major bumps alike.
 - the first release gets a short note instead of the whole history.
 
 Title a CI or tooling fix `ci(...)`, `build(...)` or `chore(...)`, not `fix(...)`,
-or it is listed under Fixes. The release is titled with its tag (`v1.2.3`). The
-notes are not sent to Play's "What's new".
+or it is listed under Fixes. The release is titled with its tag (`v1.2.3`).
 
 - **Both are made by the Versionator 9000 app**, with a token that can only
   write repository contents. Unlike `GITHUB_TOKEN`'s, its tags and releases
@@ -123,6 +122,17 @@ notes are not sent to Play's "What's new".
   production release is not live until it is finished in Play Console. Once it
   is, and the variable is deleted, dispatch the run again for the same `sha`:
   the Play lanes skip themselves and only the tag and release are made.
+
+### What's new on Play
+
+The `internal` job writes Play's "What's new" (en-GB, the listing's default
+language) with `release-notes.js --play` from the same PR titles: the New and
+Fixes lines as plain text, without PR numbers, cut at whole lines to Play's
+500 characters. A range with only maintenance says "Bug fixes and
+improvements."; the first release says "First release.". The text is uploaded
+with the bundle, and every promotion copies it to the next track. To reword it,
+edit the release in Play Console before approving the next stage. A
+re-dispatch that skips the upload keeps the text already on Play.
 
 ### Secrets and variables
 

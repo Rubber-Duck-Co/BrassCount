@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Prints the GitHub release notes for a tag, built from the PR merge commits
-// on main since the previous tag.
-//   node scripts/release-notes.js <tag> [previous-tag]
+// Prints release notes built from the PR merge commits on main since the
+// previous tag: markdown for the GitHub release, or with --play the plain
+// text for Play's "What's new".
+//   node scripts/release-notes.js [--play] <tag-or-sha> [previous-tag]
 const { execFileSync } = require('node:child_process');
 
 const SECTIONS = [
@@ -17,6 +18,9 @@ const CONVENTIONAL = /^(\w+)(?:\(([^)]+)\))?!?:\s+(.+)$/;
 // Record and field separators in the git log format.
 const RECORD = '\x1e';
 const FIELD = '\x1f';
+// Play's limit for "What's new", per language.
+const PLAY_LIMIT = 500;
+const PLAY_MORE = '…and more fixes';
 
 const capitalise = text => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -52,6 +56,12 @@ function formatEntry({ scope, text, pr }) {
   return `- ${label}${text}${pr ? ` (#${pr})` : ''}`;
 }
 
+const toEntries = commits =>
+  commits.filter(commit => !BUMP_COMMIT.test(commit.subject)).map(parseCommit);
+
+const sectionItems = (entries, section) =>
+  entries.filter(entry => section.types.includes(entry.type));
+
 function buildNotes({ tag, previous, commits, repo, date }) {
   const lines = [`Released to Google Play on ${date}.`];
   if (!previous) {
@@ -59,9 +69,7 @@ function buildNotes({ tag, previous, commits, repo, date }) {
     return `${lines.join('\n')}\n`;
   }
 
-  const entries = commits
-    .filter(commit => !BUMP_COMMIT.test(commit.subject))
-    .map(parseCommit);
+  const entries = toEntries(commits);
   if (entries.length === 0) {
     lines.push('', `No changes since ${previous}.`);
   }
@@ -69,7 +77,7 @@ function buildNotes({ tag, previous, commits, repo, date }) {
     entry => !SECTIONS.some(section => section.types.includes(entry.type)),
   );
   for (const section of SECTIONS) {
-    const items = entries.filter(entry => section.types.includes(entry.type));
+    const items = sectionItems(entries, section);
     if (items.length > 0) {
       lines.push('', `### ${section.title}`, '', ...items.map(formatEntry));
     }
@@ -87,6 +95,41 @@ function buildNotes({ tag, previous, commits, repo, date }) {
   const compare = `https://github.com/${repo}/compare/${previous}...${tag}`;
   lines.push('', `**Full changelog:** [${previous}...${tag}](${compare})`);
   return `${lines.join('\n')}\n`;
+}
+
+const formatPlayEntry = ({ scope, text }) =>
+  `• ${scope ? `${capitalise(scope)}: ` : ''}${text}`;
+
+// Cuts whole lines to fit the limit, never ending on a section heading.
+function fitPlayLimit(lines) {
+  if (lines.join('\n').length <= PLAY_LIMIT) {
+    return lines.join('\n');
+  }
+  const kept = [];
+  for (const line of lines) {
+    if ([...kept, line, PLAY_MORE].join('\n').length > PLAY_LIMIT) {
+      break;
+    }
+    kept.push(line);
+  }
+  while (kept.length > 0 && !kept[kept.length - 1].startsWith('• ')) {
+    kept.pop();
+  }
+  return [...kept, PLAY_MORE].join('\n');
+}
+
+function buildPlayNotes({ previous, commits }) {
+  if (!previous) {
+    return 'First release.';
+  }
+  const entries = toEntries(commits);
+  const lines = SECTIONS.flatMap(section => {
+    const items = sectionItems(entries, section);
+    return items.length > 0
+      ? [section.title, ...items.map(formatPlayEntry)]
+      : [];
+  });
+  return lines.length > 0 ? fitPlayLimit(lines) : 'Bug fixes and improvements.';
 }
 
 function parseLog(log) {
@@ -110,11 +153,20 @@ const readGitLog = range =>
   );
 
 function releaseNotes(
-  [tag, previous],
+  args,
   { env = process.env, readLog = readGitLog, now = new Date() } = {},
 ) {
+  const play = args.includes('--play');
+  const [tag, previous] = args.filter(arg => arg !== '--play');
   if (!tag) {
-    throw new Error('Usage: release-notes.js <tag> [previous-tag]');
+    throw new Error(
+      'Usage: release-notes.js [--play] <tag-or-sha> [previous-tag]',
+    );
+  }
+  const readCommits = () =>
+    previous ? parseLog(readLog(`${previous}..${tag}`)) : [];
+  if (play) {
+    return buildPlayNotes({ previous, commits: readCommits() });
   }
   const repo = env.GITHUB_REPOSITORY;
   if (previous && !repo) {
@@ -126,8 +178,7 @@ function releaseNotes(
     year: 'numeric',
     timeZone: 'UTC',
   });
-  const commits = previous ? parseLog(readLog(`${previous}..${tag}`)) : [];
-  return buildNotes({ tag, previous, commits, repo, date });
+  return buildNotes({ tag, previous, commits: readCommits(), repo, date });
 }
 
 if (require.main === module) {
@@ -139,4 +190,10 @@ if (require.main === module) {
   }
 }
 
-module.exports = { parseCommit, buildNotes, parseLog, releaseNotes };
+module.exports = {
+  parseCommit,
+  buildNotes,
+  buildPlayNotes,
+  parseLog,
+  releaseNotes,
+};

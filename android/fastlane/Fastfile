@@ -14,7 +14,8 @@ skip_docs
 default_platform(:android)
 
 platform :android do
-  # Uploads the bundle and its R8 mapping to the internal track.
+  # Uploads the bundle, its R8 mapping and its "What's new" to the internal
+  # track. The promotions copy the release, notes included.
   lane :upload_internal do |options|
     version_code = Integer(options.fetch(:version_code))
     next if already_on_track?('internal', version_code)
@@ -26,9 +27,11 @@ platform :android do
       release_status: ENV.fetch('RELEASE_STATUS'),
       aab: options.fetch(:aab),
       mapping: options.fetch(:mapping),
+      # Only <language>/changelogs/<version_code>.txt, as "What's new".
+      metadata_path: options.fetch(:metadata),
       skip_upload_apk: true,
       skip_upload_metadata: true,
-      skip_upload_changelogs: true,
+      skip_upload_changelogs: false,
       skip_upload_images: true,
       skip_upload_screenshots: true
     )

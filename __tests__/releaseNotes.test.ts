@@ -1,5 +1,6 @@
 import {
   buildNotes,
+  buildPlayNotes,
   parseCommit,
   parseLog,
   releaseNotes,
@@ -227,5 +228,94 @@ describe('releaseNotes', () => {
     expect(() =>
       releaseNotes(['v0.2.0', 'v0.1.0'], { env: {}, readLog: () => '', now }),
     ).toThrow(Error);
+  });
+});
+
+describe('buildPlayNotes', () => {
+  it('lists New and Fixes as plain text without maintenance or PR numbers', () => {
+    const notes = buildPlayNotes({
+      previous: 'v0.1.0',
+      commits: [
+        merge('chore: bump version (minor) [skip ci]'),
+        merge('ci(release): add a beta stage (#8)'),
+        merge('fix(timer): keep the last word (#4)'),
+        merge('feat(editor): hold-and-drag step reordering #minor (#3)'),
+        merge('feat: export runs (#2)'),
+      ],
+    });
+
+    expect(notes).toBe(
+      [
+        'New',
+        '• Editor: Hold-and-drag step reordering',
+        '• Export runs',
+        'Fixes',
+        '• Timer: Keep the last word',
+      ].join('\n'),
+    );
+  });
+
+  it('cuts whole lines to stay within 500 characters', () => {
+    const commits = Array.from({ length: 30 }, (_, index) =>
+      merge(
+        `fix(timer): correct the split rounding case number ${index} (#${index})`,
+      ),
+    );
+
+    const notes = buildPlayNotes({ previous: 'v0.1.0', commits });
+
+    expect(notes.length).toBeLessThanOrEqual(500);
+    expect(notes.startsWith('Fixes\n• Timer: Correct')).toBe(true);
+    expect(notes.endsWith('\n…and more fixes')).toBe(true);
+    expect(notes).not.toContain('number 29');
+  });
+
+  it('does not end on a heading when the cut falls after one', () => {
+    // Nine features fill the limit up to the Fixes heading, but not its first line.
+    const notes = buildPlayNotes({
+      previous: 'v0.1.0',
+      commits: [
+        ...Array.from({ length: 9 }, (_, index) =>
+          merge(`feat: a long description of feature ${index} for the timer`),
+        ),
+        ...Array.from({ length: 3 }, (_, index) =>
+          merge(`fix: a long description of fix number ${index} for the timer`),
+        ),
+      ],
+    });
+
+    expect(notes).not.toContain('Fixes');
+    expect(notes.endsWith('feature 8 for the timer\n…and more fixes')).toBe(
+      true,
+    );
+  });
+
+  it('says bug fixes and improvements when there is only maintenance', () => {
+    expect(
+      buildPlayNotes({
+        previous: 'v0.1.0',
+        commits: [merge('ci: cache nothing (#9)')],
+      }),
+    ).toBe('Bug fixes and improvements.');
+  });
+
+  it('says first release when there is no previous tag', () => {
+    expect(buildPlayNotes({ previous: undefined, commits: [] })).toBe(
+      'First release.',
+    );
+  });
+});
+
+describe('releaseNotes --play', () => {
+  it('writes the Play notes for the range without needing the repository', () => {
+    const readLog = jest.fn(() => 'fix: keep the split (#4)\x1f\x1e');
+
+    const notes = releaseNotes(['--play', 'abc123', 'v0.1.0'], {
+      env: {},
+      readLog,
+    });
+
+    expect(readLog).toHaveBeenCalledWith('v0.1.0..abc123');
+    expect(notes).toBe('Fixes\n• Keep the split');
   });
 });
