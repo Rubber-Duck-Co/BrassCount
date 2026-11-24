@@ -120,7 +120,7 @@ holds for patch, minor and major bumps alike.
 | `BRASSCOUNT_UPLOAD_KEY_ALIAS`       | same                                              | Key alias                                       |
 | `BRASSCOUNT_UPLOAD_KEY_PASSWORD`    | same                                              | Key password                                    |
 | `PLAY_SERVICE_ACCOUNT_JSON`         | all four environments, or the repository          | The Play service account's JSON key             |
-| `BOT_APP_ID`, `BOT_PRIVATE_KEY`     | repository (shared with the version bump)         | The Versionator 9000 app's ID and private key   |
+| `BOT_APP_ID`, `BOT_PRIVATE_KEY`     | organization (shared with the version bump)       | The Versionator 9000 app's ID and private key   |
 | `PLAY_RELEASE_STATUS` (variable)    | repository; only until the app is first published | `draft`                                         |
 
 An environment's secrets are only visible to jobs that name that environment.

@@ -223,5 +223,5 @@ In addition to the per-PR checks, the repository runs a few other automated work
 
 - **Autolabeler** — labels every PR based on the "Type of Change" checkboxes in the PR template.
 - **Security audit** — `npm audit` runs weekly and whenever `package.json` / `package-lock.json` change on `main`.
-- **Version bump** — after merge to `main`, a bot bumps the version (patch, or `#minor` / `#major` from the PR title) and creates a `v*` tag.
+- **Version bump** — after merge to `main`, a bot bumps the version (patch, or `#minor` / `#major` from the PR title) and creates no tag; the `v*` tag and GitHub release are made when that version reaches production (`docs/RELEASING.md`).
 - **Stale bot** — issues without activity for 30 days and PRs without activity for 21 days are marked stale; keep the conversation active or apply the `pinned` / `WIP` / `in-progress` label to exempt.

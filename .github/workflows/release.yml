@@ -390,7 +390,9 @@ jobs:
         id: token
         uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         with:
-          app-id: ${{ secrets.BOT_APP_ID }}
+          # client-id replaces the deprecated app-id and takes the app's
+          # numeric ID too.
+          client-id: ${{ secrets.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_PRIVATE_KEY }}
           permission-contents: write
 
@@ -413,8 +415,9 @@ jobs:
           read -r type target <<< "$found"
           # An annotated tag points at a tag object: follow it to the commit.
           while [ "$type" = tag ]; do
-            read -r type target <<< "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$target" \
+            object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$target" \
               --jq '.object.type + " " + .object.sha')"
+            read -r type target <<< "$object"
           done
           if [ "$target" != "$SHA" ]; then
             echo "::error::$TAG already exists on $target, not on the released commit $SHA. Find out why before moving or deleting it."
@@ -435,16 +438,24 @@ jobs:
           # The notes start at the highest lower version's tag, not the newest
           # tag, so they cover what changed since the previous production
           # release. The first release has none and covers all history.
-          previous="$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" \
+          tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" \
               --jq '.[].ref | ltrimstr("refs/tags/")' \
-            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-            | sort -uV \
-            | awk -v tag="$TAG" '$0 == tag { print prev } { prev = $0 }')"
-          notes_start=()
+            | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+            | sort -uV)"
+          if ! grep -qxF "$TAG" <<< "$tags"; then
+            echo "::error::$TAG is not among the repository's tags, though the step before made or found it."
+            exit 1
+          fi
+          previous="$(awk -v tag="$TAG" '$0 == tag { print prev } { prev = $0 }' <<< "$tags")"
+          options=()
           if [ -n "$previous" ]; then
-            notes_start=(--notes-start-tag "$previous")
+            options+=(--notes-start-tag "$previous")
+          fi
+          # An older version released after a newer one does not take Latest.
+          if [ "$(tail -n 1 <<< "$tags")" != "$TAG" ]; then
+            options+=(--latest=false)
           fi
           # No assets: the repository is public and the R8 mapping undoes the
           # obfuscation. The bundle stays in the run's artifact.
           gh release create "$TAG" --verify-tag --title "BrassCount ${TAG#v}" \
-            --generate-notes "${notes_start[@]}"
+            --generate-notes "${options[@]}"
