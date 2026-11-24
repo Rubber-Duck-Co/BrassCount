@@ -1,4 +1,9 @@
-import { buildNotes, parseCommit } from '../scripts/release-notes';
+import {
+  buildNotes,
+  parseCommit,
+  parseLog,
+  releaseNotes,
+} from '../scripts/release-notes';
 
 const merge = (subject: string, body = '') => ({ subject, body });
 
@@ -38,6 +43,35 @@ describe('parseCommit', () => {
       text: 'Reset the clock on a new run',
       pr: '12',
     });
+  });
+
+  it('keeps the subject of a default merge message with no body', () => {
+    expect(
+      parseCommit(merge('Merge pull request #12 from owner/branch')),
+    ).toMatchObject({ type: undefined, pr: '12' });
+  });
+
+  it('accepts any scope, a missing scope and a capitalised type', () => {
+    expect(
+      parseCommit(merge('feat(timer/ui): split the readout (#1)')),
+    ).toEqual({
+      type: 'feat',
+      scope: 'timer/ui',
+      text: 'Split the readout',
+      pr: '1',
+    });
+    expect(parseCommit(merge('Fix: handle a missing mic'))).toEqual({
+      type: 'fix',
+      scope: undefined,
+      text: 'Handle a missing mic',
+      pr: undefined,
+    });
+  });
+
+  it('takes the PR number only from the end of the subject', () => {
+    expect(
+      parseCommit(merge('fix: undo (#3) from the timer (#14)  ')),
+    ).toMatchObject({ text: 'Undo (#3) from the timer', pr: '14' });
   });
 
   it('keeps a subject that is not a conventional commit as plain text', () => {
@@ -94,6 +128,24 @@ describe('buildNotes', () => {
     );
   });
 
+  it('files perf under Fixes, add under New and counts Maintenance', () => {
+    const notes = buildNotes({
+      ...base,
+      commits: [
+        merge('perf(history): load runs lazily (#7)'),
+        merge('add: a drill template'),
+        merge('docs: explain calibration (#6)'),
+        merge('test(timer): cover the reset (#5)'),
+      ],
+    });
+
+    expect(notes).toContain('### New\n\n- A drill template\n');
+    expect(notes).toContain(
+      '### Fixes\n\n- **History:** Load runs lazily (#7)\n',
+    );
+    expect(notes).toContain('<summary>Maintenance (2)</summary>');
+  });
+
   it('leaves out sections with no changes', () => {
     const notes = buildNotes({
       ...base,
@@ -103,6 +155,16 @@ describe('buildNotes', () => {
     expect(notes).toContain('### Fixes\n\n- Handle a missing mic (#5)');
     expect(notes).not.toContain('### New');
     expect(notes).not.toContain('Maintenance');
+  });
+
+  it('says there were no changes when the range holds only bumps', () => {
+    const notes = buildNotes({
+      ...base,
+      commits: [merge('chore: bump version (patch) [skip ci]')],
+    });
+
+    expect(notes).toContain('No changes since v0.1.0.');
+    expect(notes).not.toContain('###');
   });
 
   it('writes one line instead of the whole history for the first release', () => {
@@ -115,5 +177,55 @@ describe('buildNotes', () => {
     expect(notes).toBe(
       'Released to Google Play on 24 November 2026.\n\nThe first release of BrassCount on Google Play.\n',
     );
+  });
+});
+
+describe('parseLog', () => {
+  it('splits git log records into subjects and bodies', () => {
+    const log =
+      'feat: a (#2)\x1f### Summary\r\n\r\nText\n\x1e\n' +
+      'chore: bump version (patch) [skip ci]\x1f\x1e\n';
+
+    expect(parseLog(log)).toEqual([
+      { subject: 'feat: a (#2)', body: '### Summary\r\n\r\nText' },
+      { subject: 'chore: bump version (patch) [skip ci]', body: '' },
+    ]);
+  });
+
+  it('returns no commits for an empty log', () => {
+    expect(parseLog('')).toEqual([]);
+  });
+});
+
+describe('releaseNotes', () => {
+  const now = new Date('2026-11-24T12:00:00Z');
+  const env = { GITHUB_REPOSITORY: 'owner/repo' };
+
+  it('reads the log for the range between the two tags', () => {
+    const readLog = jest.fn(() => 'fix: keep the split (#4)\x1f\x1e');
+
+    const notes = releaseNotes(['v0.2.0', 'v0.1.0'], { env, readLog, now });
+
+    expect(readLog).toHaveBeenCalledWith('v0.1.0..v0.2.0');
+    expect(notes).toContain('Released to Google Play on 24 November 2026.');
+    expect(notes).toContain('- Keep the split (#4)');
+  });
+
+  it('reads no log for the first release', () => {
+    const readLog = jest.fn(() => '');
+
+    releaseNotes(['v0.1.0'], { env: {}, readLog, now });
+
+    expect(readLog).not.toHaveBeenCalled();
+  });
+
+  it('rejects a missing tag', () => {
+    expect(() => releaseNotes([], { env, now })).toThrow(Error);
+  });
+
+  it('rejects a missing repository when there is a previous tag', () => {
+    expect(() =>
+      releaseNotes(['v0.2.0', 'v0.1.0'], { env: {}, readLog: () => '', now }),
+    ).toThrow(Error);
   });
 });

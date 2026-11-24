@@ -104,10 +104,11 @@ holds for patch, minor and major bumps alike.
 - each line is the scope in bold, then the description with `#minor` /
   `#major` removed, then the PR number;
 - bump commits, branch commits and PR descriptions are left out;
-- the first release gets one line instead of the whole history.
+- the first release gets a short note instead of the whole history.
 
-Title a CI or tooling fix `ci(...)` or `chore(...)`, not `fix(...)`, or it is
-listed under Fixes. The notes are not sent to Play's "What's new".
+Title a CI or tooling fix `ci(...)`, `build(...)` or `chore(...)`, not `fix(...)`,
+or it is listed under Fixes. The release is titled with its tag (`v1.2.3`). The
+notes are not sent to Play's "What's new".
 
 - **Both are made by the Versionator 9000 app**, with a token that can only
   write repository contents. Unlike `GITHUB_TOKEN`'s, its tags and releases

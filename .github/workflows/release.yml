@@ -380,6 +380,8 @@ jobs:
           persist-credentials: false
 
       - name: Publish the GitHub release
+        # With pipefail, so a failed tag listing stops the step.
+        shell: bash
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           GH_REPO: ${{ github.repository }}
@@ -399,10 +401,11 @@ jobs:
           fi
           # The notes start at the next-lower version's tag.
           previous="$(awk -v tag="$TAG" '$0 == tag { print prev } { prev = $0 }' <<< "$tags")"
-          node scripts/release-notes.js "$TAG" ${previous:+"$previous"} > "$RUNNER_TEMP/notes.md"
+          # The script needs no token.
+          env -u GH_TOKEN node scripts/release-notes.js "$TAG" ${previous:+"$previous"} > "$RUNNER_TEMP/notes.md"
           options=()
           if [ "$(tail -n 1 <<< "$tags")" != "$TAG" ]; then
             options+=(--latest=false)
           fi
-          gh release create "$TAG" --verify-tag --title "BrassCount ${TAG#v}" \
+          gh release create "$TAG" --verify-tag --title "$TAG" \
             --notes-file "$RUNNER_TEMP/notes.md" "${options[@]}"
