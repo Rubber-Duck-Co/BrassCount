@@ -2,19 +2,9 @@ name: Release (Google Play)
 
 run-name: Release ${{ inputs.sha || 'tip of main' }}
 
-# Builds one signed bundle from a version-bump commit and moves that same
-# bundle through the Play tracks: internal, then closed testing (behind the
-# `staging` environment's approval), then open testing (behind `beta`'s), then
-# production (behind `production`'s).
-#
-# Started only by hand (workflow_dispatch), for a version-bump commit on main.
-# Nothing starts it automatically: not the version bump, and not the bot's tag.
-#
-# Every Play step is a lane in android/fastlane/Fastfile that skips itself
-# when the build is already on the target track, so a release that stopped
-# part-way is finished by dispatching it again for the same commit.
-#
-# Secrets and setup: docs/RELEASING.md.
+# Moves one signed bundle through internal, closed and open testing to
+# production, then tags it and publishes the GitHub release. Re-dispatch the
+# same sha to finish a run that stopped part-way. Setup: docs/RELEASING.md.
 
 on:
   workflow_dispatch:
@@ -28,47 +18,36 @@ permissions:
   contents: read
 
 # One release at a time, so an older run cannot promote over a newer one.
-# A run waiting for approval holds the group, and GitHub keeps only one run
-# queued behind it: dispatching a third cancels the queued one.
 concurrency:
   group: play-release
   cancel-in-progress: false
 
 env:
   PACKAGE_NAME: com.rubberduckco.brasscount
-  # The first commit whose release build is signed with the upload key.
-  # Anything older would produce a debug-signed bundle that Play rejects.
+  # Older commits build a debug-signed bundle that Play rejects.
   FIRST_RELEASABLE_SHA: ef4238dbf70998db36d985534a8c5fbc10cf4cea
-  # Play only accepts `draft` releases through the API until the app has been
-  # published once. Set the repository variable PLAY_RELEASE_STATUS to `draft`
-  # until then, and delete it afterwards.
+  # Set to `draft` until the app is first published.
   RELEASE_STATUS: ${{ vars.PLAY_RELEASE_STATUS || 'completed' }}
-  # Reads the version back from the built bundle. The checksum is the one
-  # GitHub publishes for the release asset; change both together.
+  # Change the version and checksum together.
   BUNDLETOOL_VERSION: '1.18.3'
   BUNDLETOOL_SHA256: a099cfa1543f55593bc2ed16a70a7c67fe54b1747bb7301f37fdfd6d91028e29
 
-# This repository is public, so every log line and artifact of a run is too.
-# Rules this file keeps to, and that a change to it must keep:
-#   - a secret is passed through `env` on the one step that needs it, never
-#     written into a `run` script with ${{ }};
-#   - no step that holds a secret prints its environment or runs with
-#     `set -x`, `--verbose`, `--debug`, `--info` or `--stacktrace`;
-#   - every action is pinned to a commit, so a moved tag cannot swap in code
-#     that reads the secrets; fastlane and every gem it loads are pinned with
-#     checksums by android/Gemfile.lock;
-#   - no job restores a cache, which other workflows could have written;
-#   - the artifact holds only what Play publishes anyway (bundle, R8 mapping).
+# The repo and its logs are public:
+#   - pass secrets through `env` on the one step that needs them, never ${{ }} in `run`;
+#   - no `set -x` or verbose/debug flags on a step that holds a secret;
+#   - pin actions to commits, and restore no caches;
+#   - attach no release assets (the R8 mapping undoes the obfuscation);
+#   - never put the bot key and the Play key in the same job.
 
 jobs:
   build:
     name: Build signed bundle
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Declared so the job can read the upload-key secrets when they are stored
-    # on the environment. `internal` has no approval rule.
+    # For the upload-key secrets; it has no approval rule.
     environment: internal
     outputs:
+      sha: ${{ steps.commit.outputs.sha }}
       version-name: ${{ steps.version.outputs.name }}
       version-code: ${{ steps.version.outputs.code }}
 
@@ -91,12 +70,11 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ inputs.sha || github.sha }}
-          # Full history: the checks below walk the ancestry.
           fetch-depth: 0
-          # Do not leave the job's token in .git/config for later steps.
           persist-credentials: false
 
       - name: Check the commit is a releasable version bump
+        id: commit
         run: |
           sha="$(git rev-parse HEAD)"
           git fetch --no-tags origin main
@@ -108,13 +86,11 @@ jobs:
             echo "::error::$sha is older than the upload-key signing setup ($FIRST_RELEASABLE_SHA) and cannot be released."
             exit 1
           fi
-          # Every other commit carries the previous bump's version number with
-          # different code, so only a commit that changes VERSION.txt has a
-          # version of its own.
           if ! git diff --name-only "$sha^" "$sha" | grep -qx 'VERSION.txt'; then
             echo "::error::$sha does not change VERSION.txt. Release the version-bump commit that follows it on main."
             exit 1
           fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -157,9 +133,6 @@ jobs:
           fi
           printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/upload.keystore"
 
-      # All ABIs: no -PreactNativeArchitectures here, unlike the debug build.
-      # build.gradle reads the four values as Gradle properties and fails the
-      # build if any is missing, so a debug-signed bundle cannot come out.
       - name: Build the release bundle
         working-directory: android
         env:
@@ -174,8 +147,6 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/upload.keystore"
 
-      # Read from the bundle that is uploaded, not worked out from VERSION.txt
-      # again, so the promote jobs always name the build Play actually has.
       - name: Read the version from the bundle
         id: version
         working-directory: android/app/build/outputs/bundle/release
@@ -196,8 +167,7 @@ jobs:
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "### BrassCount $name (versionCode $code) from \`$(git rev-parse --short HEAD)\`" >> "$GITHUB_STEP_SUMMARY"
 
-      # The two paths share android/app/build/outputs, so the artifact holds
-      # bundle/release/app-release.aab and mapping/release/mapping.txt.
+      # The artifact holds bundle/release/app-release.aab and mapping/release/mapping.txt.
       - name: Upload the bundle and R8 mapping
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -208,9 +178,7 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # The Play jobs check out this workflow's own commit (the tip of main)
-  # for the Fastfile and Gemfile.lock, not the commit being released, which
-  # may predate them.
+  # The Play jobs use the Fastfile from main, not the one in the released commit.
   internal:
     name: Upload to internal testing
     needs: build
@@ -260,7 +228,6 @@ jobs:
     needs: [build, internal]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Waits for the environment's required reviewers.
     environment: staging
 
     steps:
@@ -295,7 +262,6 @@ jobs:
     needs: [build, staging]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Waits for the environment's required reviewers.
     environment: beta
 
     steps:
@@ -316,7 +282,6 @@ jobs:
           BUNDLE_FROZEN: 'true'
         run: bundle install
 
-      # Open testing is public: anyone can join from the store listing.
       - name: Promote closed testing to open testing
         working-directory: android
         env:
@@ -331,7 +296,6 @@ jobs:
     needs: [build, beta]
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Waits for the environment's required reviewers.
     environment: production
 
     steps:
@@ -352,7 +316,6 @@ jobs:
           BUNDLE_FROZEN: 'true'
         run: bundle install
 
-      # A completed release goes to every user at once: there is no staged rollout.
       - name: Promote open testing to production
         working-directory: android
         env:
@@ -361,3 +324,88 @@ jobs:
           FASTLANE_OPT_OUT_USAGE: '1'
           FASTLANE_SKIP_UPDATE_CHECK: '1'
         run: bundle exec fastlane android promote from:beta to:production version_code:"$VERSION_CODE"
+
+  # Uses the bot's token so that its tags and releases trigger other workflows.
+  publish-release:
+    name: Tag and publish the GitHub release
+    needs: [build, production]
+    # A draft isn't live yet: re-dispatch once it is.
+    if: (vars.PLAY_RELEASE_STATUS || 'completed') == 'completed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Create a token for the bot
+        id: token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          # Also takes the numeric app ID.
+          client-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Tag the released commit
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TAG: v${{ needs.build.outputs.version-name }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          # A prefix match: v1.2.3 also finds v1.2.30.
+          found="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" \
+            --jq '.[] | select(.ref == "refs/tags/" + $ENV.TAG) | .object.type + " " + .object.sha')"
+          if [ -z "$found" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$TAG" -f sha="$SHA" --silent
+            echo "Tagged $SHA as $TAG."
+            exit 0
+          fi
+          read -r type target <<< "$found"
+          # Follow an annotated tag to its commit.
+          while [ "$type" = tag ]; do
+            object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$target" \
+              --jq '.object.type + " " + .object.sha')"
+            read -r type target <<< "$object"
+          done
+          if [ "$target" != "$SHA" ]; then
+            echo "::error::$TAG already exists on $target, not on the released commit $SHA. Find out why before moving or deleting it."
+            exit 1
+          fi
+          echo "$TAG is already on $SHA; skipping."
+
+      # After tagging, so the new tag is fetched for the notes.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Publish the GitHub release
+        # With pipefail, so a failed tag listing stops the step.
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v${{ needs.build.outputs.version-name }}
+        run: |
+          if gh release view "$TAG" --json tagName > /dev/null 2>&1; then
+            echo "The GitHub release for $TAG already exists; skipping."
+            exit 0
+          fi
+          tags="$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" \
+              --jq '.[].ref | ltrimstr("refs/tags/")' \
+            | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } \
+            | sort -uV)"
+          if ! grep -qxF "$TAG" <<< "$tags"; then
+            echo "::error::$TAG is not among the repository's tags, though the step before made or found it."
+            exit 1
+          fi
+          # The notes start at the next-lower version's tag.
+          previous="$(awk -v tag="$TAG" '$0 == tag { print prev } { prev = $0 }' <<< "$tags")"
+          # The script needs no token.
+          env -u GH_TOKEN node scripts/release-notes.js "$TAG" ${previous:+"$previous"} > "$RUNNER_TEMP/notes.md"
+          options=()
+          if [ "$(tail -n 1 <<< "$tags")" != "$TAG" ]; then
+            options+=(--latest=false)
+          fi
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" "${options[@]}"

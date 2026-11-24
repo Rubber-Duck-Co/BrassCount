@@ -95,7 +95,7 @@ export const Chip = ({ label, selected = false, onPress }: ChipProps) => (
 
 ### JavaScript Files
 
-The only `.js` files are tooling: root config files and `.claude/hooks/`. They are CommonJS; use JSDoc where types improve clarity. Application code is always TypeScript.
+The only `.js` files are tooling: root config files, `.claude/hooks/` and `scripts/`. They are CommonJS; use JSDoc where types improve clarity. Application code is always TypeScript.
 
 ## Immutability
 

@@ -57,6 +57,9 @@ commit and moves that same bundle through the tracks:
 | `beta`       | Open (beta)    | `beta`             | required reviewers |
 | `production` | Production     | `production`       | required reviewers |
 
+After `production`, `publish-release` tags the released commit and publishes
+its GitHub release (see [Tags and GitHub releases](#tags-and-github-releases)).
+
 Open testing is public: anyone can join from the store listing, so approve
 `beta` only for a build you would be happy for strangers to run. Production is
 promoted from open testing, and is a full release to every user; there is no
@@ -76,14 +79,50 @@ target audience, ads) before the first promotion.
 ### Starting a release
 
 Every release is started by hand, whether the bump was a patch, minor or major:
-nothing starts the workflow automatically, not the version bump nor the bot's
-tag. Actions → Release (Google Play) → Run workflow, on `main`. Leave `sha`
-empty for the tip of `main`, or give the full 40-character SHA of the
-version-bump commit to release.
+nothing starts the workflow automatically, not even the version bump. Actions
+→ Release (Google Play) → Run workflow, on `main`. Leave `sha` empty for the
+tip of `main`, or give the full 40-character SHA of the version-bump commit to
+release.
 
 The workflow only accepts a commit that is on `main`, changes `VERSION.txt` (a
 bump commit, the only kind with a version of its own) and is not older than the
 upload-key signing setup.
+
+### Tags and GitHub releases
+
+The version bump on `main` creates no tag. A `v*` tag means the version
+reached production: once `production` passes, the `publish-release` job tags
+the released commit (the `sha` the run was given, not the tip of `main`)
+`v<versionName>`, read from the bundle, and publishes a GitHub release. This
+holds for patch, minor and major bumps alike.
+
+`scripts/release-notes.js` writes the notes from the PR merge commits on
+`main` since the previous production release, so the PR titles are the notes:
+
+- `feat` and `add` go under **New**, `fix` and `perf` under **Fixes**, and
+  every other type in a collapsed **Maintenance** list;
+- each line is the scope in bold, then the description with `#minor` /
+  `#major` removed, then the PR number;
+- bump commits, branch commits and PR descriptions are left out;
+- the first release gets a short note instead of the whole history.
+
+Title a CI or tooling fix `ci(...)`, `build(...)` or `chore(...)`, not `fix(...)`,
+or it is listed under Fixes. The release is titled with its tag (`v1.2.3`). The
+notes are not sent to Play's "What's new".
+
+- **Both are made by the Versionator 9000 app**, with a token that can only
+  write repository contents. Unlike `GITHUB_TOKEN`'s, its tags and releases
+  start other workflows, so a workflow `on: release` or `on: push: tags` runs
+  when a version ships.
+- **The release has no assets.** The repository is public and `mapping.txt`
+  undoes the R8 obfuscation; the bundle stays in the run's 90-day artifact.
+- **Running it again is safe.** An existing tag on the same commit and an
+  existing release are skipped. A tag on a different commit fails the job:
+  find out why before moving or deleting it.
+- **Nothing is tagged while `PLAY_RELEASE_STATUS` is `draft`**, because the
+  production release is not live until it is finished in Play Console. Once it
+  is, and the variable is deleted, dispatch the run again for the same `sha`:
+  the Play lanes skip themselves and only the tag and release are made.
 
 ### Secrets and variables
 
@@ -94,6 +133,7 @@ upload-key signing setup.
 | `BRASSCOUNT_UPLOAD_KEY_ALIAS`       | same                                              | Key alias                                       |
 | `BRASSCOUNT_UPLOAD_KEY_PASSWORD`    | same                                              | Key password                                    |
 | `PLAY_SERVICE_ACCOUNT_JSON`         | all four environments, or the repository          | The Play service account's JSON key             |
+| `BOT_APP_ID`, `BOT_PRIVATE_KEY`     | organization (shared with the version bump)       | The Versionator 9000 app's ID and private key   |
 | `PLAY_RELEASE_STATUS` (variable)    | repository; only until the app is first published | `draft`                                         |
 
 An environment's secrets are only visible to jobs that name that environment.
@@ -156,9 +196,10 @@ Each Play step is a lane in `android/fastlane/Fastfile` that first asks Play
 whether the build is already on its target track, and skips itself if so. When
 an approval expired, was rejected by mistake, or a job failed, start the
 workflow again with the same `sha`: it rebuilds the bundle (same versionCode),
-skips the upload and any promotion that already happened, and asks for every
-approval again. Approve the steps that already happened too: their lanes skip
-themselves, and rejecting one stops the run before the remaining steps.
+skips the upload, any promotion and the tag or GitHub release that already
+happened, and asks for every approval again. Approve the steps that already
+happened too: their lanes skip themselves, and rejecting one stops the run
+before the remaining steps.
 
 This only works while the build is still on the track it is promoted from. Once
 a newer version has replaced it on internal, closed or open testing, finish the old
