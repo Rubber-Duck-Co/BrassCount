@@ -93,9 +93,21 @@ upload-key signing setup.
 The version bump on `main` creates no tag. A `v*` tag means the version
 reached production: once `production` passes, the `publish-release` job tags
 the released commit (the `sha` the run was given, not the tip of `main`)
-`v<versionName>`, read from the bundle, and publishes a GitHub release whose
-generated notes cover the PRs since the previous production release. This
+`v<versionName>`, read from the bundle, and publishes a GitHub release. This
 holds for patch, minor and major bumps alike.
+
+`scripts/release-notes.js` writes the notes from the PR merge commits on
+`main` since the previous production release, so the PR titles are the notes:
+
+- `feat` and `add` go under **New**, `fix` and `perf` under **Fixes**, and
+  every other type in a collapsed **Maintenance** list;
+- each line is the scope in bold, then the description with `#minor` /
+  `#major` removed, then the PR number;
+- bump commits, branch commits and PR descriptions are left out;
+- the first release gets one line instead of the whole history.
+
+Title a CI or tooling fix `ci(...)` or `chore(...)`, not `fix(...)`, or it is
+listed under Fixes. The notes are not sent to Play's "What's new".
 
 - **Both are made by the Versionator 9000 app**, with a token that can only
   write repository contents. Unlike `GITHUB_TOKEN`'s, its tags and releases
