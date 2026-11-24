@@ -266,8 +266,51 @@ describe('buildPlayNotes', () => {
 
     expect(notes.length).toBeLessThanOrEqual(500);
     expect(notes.startsWith('Fixes\n• Timer: Correct')).toBe(true);
-    expect(notes.endsWith('\n…and more fixes')).toBe(true);
+    expect(notes.endsWith('\n…and more')).toBe(true);
     expect(notes).not.toContain('number 29');
+  });
+
+  it('keeps text of exactly 500 characters whole', () => {
+    // 'Fixes\n• ' is 8 characters.
+    const notes = buildPlayNotes({
+      previous: 'v0.1.0',
+      commits: [merge(`fix: ${'a'.repeat(492)}`)],
+    });
+
+    expect(notes).toBe(`Fixes\n• A${'a'.repeat(491)}`);
+    expect(notes).toHaveLength(500);
+  });
+
+  it('keeps a line when it and the suffix make exactly 500 characters', () => {
+    // 'Fixes\n• ' + 482 + '\n…and more' is 500.
+    const notes = buildPlayNotes({
+      previous: 'v0.1.0',
+      commits: [
+        merge(`fix: ${'a'.repeat(482)}`),
+        merge(`fix: ${'b'.repeat(40)}`),
+      ],
+    });
+
+    expect(notes).toBe(`Fixes\n• A${'a'.repeat(481)}\n…and more`);
+    expect(notes).toHaveLength(500);
+  });
+
+  it('falls back to a generic line when the first change alone is too long', () => {
+    const notes = buildPlayNotes({
+      previous: 'v0.1.0',
+      commits: [merge(`fix: ${'a'.repeat(493)}`)],
+    });
+
+    expect(notes).toBe('Bug fixes and improvements.');
+  });
+
+  it('removes backticks from the plain text', () => {
+    expect(
+      buildPlayNotes({
+        previous: 'v0.1.0',
+        commits: [merge('fix(history): handle `null` splits (#3)')],
+      }),
+    ).toBe('Fixes\n• History: Handle null splits');
   });
 
   it('does not end on a heading when the cut falls after one', () => {
@@ -285,9 +328,7 @@ describe('buildPlayNotes', () => {
     });
 
     expect(notes).not.toContain('Fixes');
-    expect(notes.endsWith('feature 8 for the timer\n…and more fixes')).toBe(
-      true,
-    );
+    expect(notes.endsWith('feature 8 for the timer\n…and more')).toBe(true);
   });
 
   it('says bug fixes and improvements when there is only maintenance', () => {

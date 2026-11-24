@@ -213,10 +213,17 @@ jobs:
           SHA: ${{ needs.build.outputs.sha }}
           VERSION_CODE: ${{ needs.build.outputs.version-code }}
         run: |
-          previous="$(git tag --merged "$SHA" --no-contains "$SHA" --list 'v*' --sort=-v:refname | head -n 1)"
+          # Not piped, so a git failure stops the step.
+          tags="$(git tag --merged "$SHA" --no-contains "$SHA" --list 'v*' --sort=-v:refname)"
+          # No match means no earlier production release.
+          previous="$(grep -m 1 -E '^v[0-9]+\.[0-9]+\.[0-9]+$' <<< "$tags" || true)"
           dir="$RUNNER_TEMP/play-metadata/en-GB/changelogs"
           mkdir -p "$dir"
           node scripts/release-notes.js --play "$SHA" ${previous:+"$previous"} > "$dir/$VERSION_CODE.txt"
+          if [ ! -s "$dir/$VERSION_CODE.txt" ]; then
+            echo "::error::The Play release notes are empty."
+            exit 1
+          fi
           cat "$dir/$VERSION_CODE.txt"; echo
 
       - name: Download the bundle

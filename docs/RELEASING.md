@@ -128,11 +128,16 @@ or it is listed under Fixes. The release is titled with its tag (`v1.2.3`).
 The `internal` job writes Play's "What's new" (en-GB, the listing's default
 language) with `release-notes.js --play` from the same PR titles: the New and
 Fixes lines as plain text, without PR numbers, cut at whole lines to Play's
-500 characters. A range with only maintenance says "Bug fixes and
-improvements."; the first release says "First release.". The text is uploaded
-with the bundle, and every promotion copies it to the next track. To reword it,
-edit the release in Play Console before approving the next stage. A
-re-dispatch that skips the upload keeps the text already on Play.
+500 characters and then ending "…and more". A range with only maintenance says
+"Bug fixes and improvements."; a release with no earlier `v*` tag says "First
+release.". The text is uploaded with the bundle, and every promotion copies it
+to the next track. To reword it, edit the release in Play Console before
+approving the next stage. A re-dispatch that skips the upload keeps the text
+already on Play.
+
+The notes start at the last `v*` tag, so tag a release before starting the
+next one: a draft finished in Play Console stays untagged until it is
+dispatched again, and the next release would then say "First release.".
 
 ### Secrets and variables
 

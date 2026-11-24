@@ -20,7 +20,8 @@ const RECORD = '\x1e';
 const FIELD = '\x1f';
 // Play's limit for "What's new", per language.
 const PLAY_LIMIT = 500;
-const PLAY_MORE = '…and more fixes';
+const PLAY_MORE = '…and more';
+const PLAY_FALLBACK = 'Bug fixes and improvements.';
 
 const capitalise = text => text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -97,10 +98,12 @@ function buildNotes({ tag, previous, commits, repo, date }) {
   return `${lines.join('\n')}\n`;
 }
 
+// Plain text: Play shows backticks literally.
 const formatPlayEntry = ({ scope, text }) =>
-  `• ${scope ? `${capitalise(scope)}: ` : ''}${text}`;
+  `• ${scope ? `${capitalise(scope)}: ` : ''}${text}`.replaceAll('`', '');
 
 // Cuts whole lines to fit the limit, never ending on a section heading.
+// String length counts an emoji as two, so the cut errs on the short side.
 function fitPlayLimit(lines) {
   if (lines.join('\n').length <= PLAY_LIMIT) {
     return lines.join('\n');
@@ -115,7 +118,7 @@ function fitPlayLimit(lines) {
   while (kept.length > 0 && !kept[kept.length - 1].startsWith('• ')) {
     kept.pop();
   }
-  return [...kept, PLAY_MORE].join('\n');
+  return kept.length > 0 ? [...kept, PLAY_MORE].join('\n') : PLAY_FALLBACK;
 }
 
 function buildPlayNotes({ previous, commits }) {
@@ -129,7 +132,7 @@ function buildPlayNotes({ previous, commits }) {
       ? [section.title, ...items.map(formatPlayEntry)]
       : [];
   });
-  return lines.length > 0 ? fitPlayLimit(lines) : 'Bug fixes and improvements.';
+  return lines.length > 0 ? fitPlayLimit(lines) : PLAY_FALLBACK;
 }
 
 function parseLog(log) {
