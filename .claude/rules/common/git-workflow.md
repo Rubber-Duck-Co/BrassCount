@@ -28,7 +28,7 @@ Do not end a commit message with a `Co-Authored-By: Claude …` line on this rep
 
 ## Versioning
 
-Never hand-edit `package.json`'s `version`, `package-lock.json`'s version, or `VERSION.txt`. On merge to `main` a bot bumps all three and creates a `v*` tag.
+Never hand-edit `package.json`'s `version`, `package-lock.json`'s version, or `VERSION.txt`. On merge to `main` a bot bumps all three; the `v*` tag and GitHub release are made only when that version reaches production (`docs/RELEASING.md`).
 
 The bump is a **patch** unless the PR title contains `#minor` or `#major`:
 

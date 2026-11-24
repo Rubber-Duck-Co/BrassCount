@@ -8,7 +8,11 @@ run-name: Release ${{ inputs.sha || 'tip of main' }}
 # production (behind `production`'s).
 #
 # Started only by hand (workflow_dispatch), for a version-bump commit on main.
-# Nothing starts it automatically: not the version bump, and not the bot's tag.
+# Nothing starts it automatically, not even the version bump.
+#
+# Once the build is on production, publish-release tags the released commit
+# `v<versionName>` and publishes a GitHub release with generated notes. That is
+# the only place a v* tag is made, so a tag means the version reached users.
 #
 # Every Play step is a lane in android/fastlane/Fastfile that skips itself
 # when the build is already on the target track, so a release that stopped
@@ -58,7 +62,9 @@ env:
 #     that reads the secrets; fastlane and every gem it loads are pinned with
 #     checksums by android/Gemfile.lock;
 #   - no job restores a cache, which other workflows could have written;
-#   - the artifact holds only what Play publishes anyway (bundle, R8 mapping).
+#   - the artifact holds only what Play publishes anyway (bundle, R8 mapping),
+#     and the GitHub release attaches nothing: the mapping undoes R8;
+#   - the bot's app key and the Play key are never in the same job.
 
 jobs:
   build:
@@ -69,6 +75,9 @@ jobs:
     # on the environment. `internal` has no approval rule.
     environment: internal
     outputs:
+      # The commit that was built, which publish-release tags: a run can be
+      # given an older commit than the tip of main.
+      sha: ${{ steps.commit.outputs.sha }}
       version-name: ${{ steps.version.outputs.name }}
       version-code: ${{ steps.version.outputs.code }}
 
@@ -97,6 +106,7 @@ jobs:
           persist-credentials: false
 
       - name: Check the commit is a releasable version bump
+        id: commit
         run: |
           sha="$(git rev-parse HEAD)"
           git fetch --no-tags origin main
@@ -115,6 +125,7 @@ jobs:
             echo "::error::$sha does not change VERSION.txt. Release the version-bump commit that follows it on main."
             exit 1
           fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -361,3 +372,79 @@ jobs:
           FASTLANE_OPT_OUT_USAGE: '1'
           FASTLANE_SKIP_UPDATE_CHECK: '1'
         run: bundle exec fastlane android promote from:beta to:production version_code:"$VERSION_CODE"
+
+  # Tags the released commit and publishes its GitHub release, as the
+  # Versionator 9000 app: unlike GITHUB_TOKEN's, its tags and releases start
+  # workflows that listen for them. No environment, so no Play key here.
+  # Safe to run again for the same commit: what exists already is skipped.
+  publish-release:
+    name: Tag and publish the GitHub release
+    needs: [build, production]
+    # A draft is not live yet: tag it by dispatching again once it is.
+    if: (vars.PLAY_RELEASE_STATUS || 'completed') == 'completed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Create a token for the bot
+        id: token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ secrets.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_PRIVATE_KEY }}
+          permission-contents: write
+
+      # build checked the version is x.y.z, so it is safe in a ref and in jq.
+      - name: Tag the released commit
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          TAG: v${{ needs.build.outputs.version-name }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          # matching-refs is a prefix match (v1.2.3 also finds v1.2.30).
+          found="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$TAG" \
+            --jq '.[] | select(.ref == "refs/tags/" + $ENV.TAG) | .object.type + " " + .object.sha')"
+          if [ -z "$found" ]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$TAG" -f sha="$SHA" --silent
+            echo "Tagged $SHA as $TAG."
+            exit 0
+          fi
+          read -r type target <<< "$found"
+          # An annotated tag points at a tag object: follow it to the commit.
+          while [ "$type" = tag ]; do
+            read -r type target <<< "$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$target" \
+              --jq '.object.type + " " + .object.sha')"
+          done
+          if [ "$target" != "$SHA" ]; then
+            echo "::error::$TAG already exists on $target, not on the released commit $SHA. Find out why before moving or deleting it."
+            exit 1
+          fi
+          echo "$TAG is already on $SHA; skipping."
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v${{ needs.build.outputs.version-name }}
+        run: |
+          if gh release view "$TAG" --json tagName > /dev/null 2>&1; then
+            echo "The GitHub release for $TAG already exists; skipping."
+            exit 0
+          fi
+          # The notes start at the highest lower version's tag, not the newest
+          # tag, so they cover what changed since the previous production
+          # release. The first release has none and covers all history.
+          previous="$(gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v" \
+              --jq '.[].ref | ltrimstr("refs/tags/")' \
+            | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -uV \
+            | awk -v tag="$TAG" '$0 == tag { print prev } { prev = $0 }')"
+          notes_start=()
+          if [ -n "$previous" ]; then
+            notes_start=(--notes-start-tag "$previous")
+          fi
+          # No assets: the repository is public and the R8 mapping undoes the
+          # obfuscation. The bundle stays in the run's artifact.
+          gh release create "$TAG" --verify-tag --title "BrassCount ${TAG#v}" \
+            --generate-notes "${notes_start[@]}"

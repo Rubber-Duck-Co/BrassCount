@@ -19,5 +19,6 @@ jobs:
           app-id: ${{ secrets.BOT_APP_ID }}
           app-private-key: ${{ secrets.BOT_PRIVATE_KEY }}
           files: package.json,package-lock.json,VERSION.txt
-          create-tag: true
-          tag-prefix: 'v'
+          # The v* tag marks a version that reached production, so
+          # release.yml creates it, not the bump.
+          create-tag: false
