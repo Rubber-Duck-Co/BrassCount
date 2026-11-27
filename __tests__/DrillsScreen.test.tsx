@@ -44,6 +44,7 @@ type TestTabParamList = {
   Drills: undefined;
   Elsewhere: undefined;
   SequenceEditor: { id?: string };
+  PresetLibrary: undefined;
   /** Where Load sends a drill, as the tab of that name does in the app. */
   Timer: { drillId?: string } | undefined;
 };
@@ -129,6 +130,7 @@ const mountScreen = (): Harness => {
               <Tab.Screen name="Elsewhere" component={Blank} />
               <Tab.Screen name="Timer" component={Blank} />
               <Tab.Screen name="SequenceEditor" component={Blank} />
+              <Tab.Screen name="PresetLibrary" component={Blank} />
             </Tab.Navigator>
           </NavigationContainer>
         </SafeAreaProvider>
@@ -375,7 +377,7 @@ describe('DrillsScreen', () => {
       const { tree, currentRoute } = await renderScreen();
 
       expect(textsOf(tree, 'state-drills-empty')).toContain(
-        'Create a drill and it will show up here, ready to time.',
+        'Start from a preset or create your own.',
       );
       const [newDrill] = byTestId(tree, 'state-drills-empty')[0].findAll(
         node => node.props.label === 'New drill',
@@ -391,6 +393,56 @@ describe('DrillsScreen', () => {
         name: 'SequenceEditor',
         params: {},
       });
+    });
+  });
+
+  describe('opening the presets', () => {
+    it('offers Add from presets under New drill', async () => {
+      await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree } = await renderScreen();
+
+      expect(textsOf(tree, 'btn-browse-presets')).toEqual(['Add from presets']);
+      const presets = byTestId(tree, 'btn-browse-presets').find(
+        node => node.props.accessibilityRole === 'button',
+      );
+      expect(presets?.props.accessibilityState).toMatchObject({
+        disabled: false,
+      });
+      const texts = textsOf(tree, 'list-drills');
+      expect(texts.indexOf('Add from presets')).toBeGreaterThan(
+        texts.indexOf('New drill'),
+      );
+      expect(byTestId(tree, 'btn-browse-presets')[0].props.variant).toBe(
+        'secondary',
+      );
+    });
+
+    it('opens the presets from Add from presets', async () => {
+      await seedDrill(BILL_DRILL, '2026-09-01T10:00:00.000Z');
+      const { tree, currentRoute } = await renderScreen();
+
+      await press(tree, 'btn-browse-presets');
+
+      expect(currentRoute()?.name).toBe('PresetLibrary');
+    });
+
+    it('offers Browse presets in the empty state, opening the presets', async () => {
+      const { tree, currentRoute } = await renderScreen();
+
+      const [browse] = byTestId(tree, 'btn-browse-presets-empty');
+      expect(browse.props).toMatchObject({
+        label: 'Browse presets',
+        variant: 'secondary',
+      });
+      // The empty state has its own: the list's footer stays out of the way.
+      expect(has(tree, 'btn-browse-presets')).toBe(false);
+
+      await act(async () => {
+        browse.props.onPress();
+      });
+      await settle();
+
+      expect(currentRoute()?.name).toBe('PresetLibrary');
     });
   });
 

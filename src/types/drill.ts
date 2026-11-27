@@ -86,3 +86,16 @@ export interface DrillInput {
 
 /** Fields that can be changed on an existing drill; omitted ones are kept. */
 export type DrillChanges = Partial<DrillInput>;
+
+/**
+ * A standard drill the Presets screen offers. It is never stored as it is:
+ * adding one saves `drill` as a new drill of the shooter's own, which they
+ * can then edit or delete like any other.
+ */
+export interface PresetDrill {
+  /** Stable key for the list. Not the id of a drill saved from it. */
+  id: string;
+  /** One line under the name, saying what the drill is. */
+  description: string;
+  drill: DrillInput;
+}

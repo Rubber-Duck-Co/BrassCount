@@ -35,15 +35,14 @@ export const MainTabs = () => (
       component={DrillsStack}
       options={{ title: 'Drills' }}
       listeners={({ navigation, route }) => ({
-        // Pressing the tab already in use would pop the stack back to the
-        // library, dropping a draft open in the editor. Leaving the editor
-        // is its back link's job, so the press is ignored there.
+        // Pressing the tab already in use pops the stack back to the
+        // library, which would drop a draft open in the editor. Leaving the
+        // editor is its back link's job, so the press is ignored there; the
+        // presets hold nothing to lose and go back to the library.
         tabPress: event => {
-          const focusedRoute = getFocusedRouteNameFromRoute(route);
           if (
             navigation.isFocused() &&
-            focusedRoute !== undefined &&
-            focusedRoute !== 'DrillList'
+            getFocusedRouteNameFromRoute(route) === 'SequenceEditor'
           ) {
             event.preventDefault();
           }

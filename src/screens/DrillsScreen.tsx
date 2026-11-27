@@ -54,8 +54,8 @@ const createStyles = (theme: Theme) =>
     list: { flex: 1 },
     listContent: { paddingBottom: theme.spacing.gutter },
     listHeader: { gap: theme.spacing.gutter },
-    // The New drill button, a gutter under the last row.
-    listFooter: { paddingTop: theme.spacing.gutter },
+    // New drill a gutter under the last row, Add from presets under it.
+    listFooter: { paddingTop: theme.spacing.gutter, gap: theme.spacing.inset },
     // The rows draw the ruled box between them: Ink down both sides, a 2px
     // rule above the first and below the last, 1px Rule lines between.
     rowFrame: {
@@ -208,10 +208,16 @@ type DrillsStatusProps = {
   status: 'loading' | 'error' | 'empty';
   onRetry: () => void;
   onCreate: () => void;
+  onBrowsePresets: () => void;
 };
 
 /** What sits under the "Saved" label when there is no drill to list. */
-const DrillsStatus = ({ status, onRetry, onCreate }: DrillsStatusProps) => {
+const DrillsStatus = ({
+  status,
+  onRetry,
+  onCreate,
+  onBrowsePresets,
+}: DrillsStatusProps) => {
   const styles = useThemedStyles(createStyles);
 
   if (status === 'loading') {
@@ -252,10 +258,13 @@ const DrillsStatus = ({ status, onRetry, onCreate }: DrillsStatusProps) => {
       <EmptyState
         mark="new"
         title="No drills yet"
-        message="Create a drill and it will show up here, ready to time."
+        message="Start from a preset or create your own."
         actionLabel="New drill"
         actionVariant="primary"
         onActionPress={onCreate}
+        secondaryActionLabel="Browse presets"
+        onSecondaryActionPress={onBrowsePresets}
+        secondaryActionTestID="btn-browse-presets-empty"
         testID="state-drills-empty"
       />
     </Card>
@@ -270,8 +279,9 @@ const keyOfDrill = (drill: Drill): string => drill.id;
  * Library of saved drills, read from `DrillStorageService` — the same
  * drills the shot timer runs. Each row opens the drill in the editor, and
  * its Load button switches to the Timer with that drill on it; the New
- * drill button under the list starts a new one. With no drill saved, the
- * empty state's own New drill takes its place.
+ * drill button under the list starts a new one, and Add from presets under
+ * that opens the standard drills to add a copy of. With no drill saved, the
+ * empty state's own New drill and Browse presets take their place.
  *
  * A drill is deleted by swiping its row left for the Delete action, then
  * confirming in a sheet. The runs recorded with it are deleted too, and the
@@ -299,6 +309,11 @@ export const DrillsScreen = () => {
 
   const createDrill = useCallback(
     () => navigation.navigate('SequenceEditor', {}),
+    [navigation],
+  );
+
+  const browsePresets = useCallback(
+    () => navigation.navigate('PresetLibrary'),
     [navigation],
   );
 
@@ -418,10 +433,11 @@ export const DrillsScreen = () => {
             status={listStatus}
             onRetry={reload}
             onCreate={createDrill}
+            onBrowsePresets={browsePresets}
           />
         }
         ListFooterComponent={
-          // The empty state has a New drill of its own: one is enough.
+          // The empty state has a New drill and Browse presets of its own.
           state.status === 'ready' && drills.length === 0 ? null : (
             <View style={styles.listFooter}>
               <Button
@@ -433,6 +449,15 @@ export const DrillsScreen = () => {
                 }
                 onPress={createDrill}
                 testID="btn-create-drill"
+              />
+              <Button
+                label="Add from presets"
+                variant="secondary"
+                leading={
+                  <Icon name="list" size={sizes.iconMd} color="textPrimary" />
+                }
+                onPress={browsePresets}
+                testID="btn-browse-presets"
               />
             </View>
           )

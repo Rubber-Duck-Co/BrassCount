@@ -153,4 +153,72 @@ describe('EmptyState', () => {
 
     expect(labelOnly.root.findAllByType(Button)).toHaveLength(0);
   });
+
+  describe('a second action', () => {
+    it('is offered as a secondary button under the main one', () => {
+      const onSecondaryActionPress = jest.fn();
+      const tree = render(
+        <EmptyState
+          mark="new"
+          title="No drills yet"
+          message="Start from a preset or create your own."
+          actionLabel="New drill"
+          actionVariant="primary"
+          onActionPress={jest.fn()}
+          secondaryActionLabel="Browse presets"
+          onSecondaryActionPress={onSecondaryActionPress}
+          secondaryActionTestID="btn-browse"
+        />,
+      );
+      const buttons = tree.root.findAllByType(Button);
+
+      expect(buttons.map(button => button.props.label)).toEqual([
+        'New drill',
+        'Browse presets',
+      ]);
+      expect(buttons[1].props).toMatchObject({
+        variant: 'secondary',
+        testID: 'btn-browse',
+      });
+      act(() => {
+        buttons[1].props.onPress();
+      });
+      expect(onSecondaryActionPress).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays secondary when the main action is too', () => {
+      const tree = render(
+        <EmptyState
+          mark="error"
+          title="Could not load"
+          message="Something went wrong."
+          actionLabel="Try again"
+          onActionPress={jest.fn()}
+          secondaryActionLabel="Browse presets"
+          onSecondaryActionPress={jest.fn()}
+        />,
+      );
+
+      expect(
+        tree.root.findAllByType(Button).map(button => button.props.variant),
+      ).toEqual(['secondary', 'secondary']);
+    });
+
+    it('is left out without both a label and a handler', () => {
+      const tree = render(
+        <EmptyState
+          mark="new"
+          title="No drills yet"
+          message="Create one."
+          actionLabel="New drill"
+          onActionPress={jest.fn()}
+          secondaryActionLabel="Browse presets"
+        />,
+      );
+
+      expect(
+        tree.root.findAllByType(Button).map(button => button.props.label),
+      ).toEqual(['New drill']);
+    });
+  });
 });
