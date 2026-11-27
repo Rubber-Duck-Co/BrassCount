@@ -27,6 +27,14 @@ type EmptyStateProps = {
   onActionPress?: () => void;
   /** `primary` only when the action is the way forward (Create drill). */
   actionVariant?: 'primary' | 'secondary';
+  actionTestID?: string;
+  /**
+   * Another way forward, under the main action and always secondary (Browse
+   * presets under New drill). Shown only with both a label and a handler.
+   */
+  secondaryActionLabel?: string;
+  onSecondaryActionPress?: () => void;
+  secondaryActionTestID?: string;
   testID?: string;
 };
 
@@ -50,6 +58,8 @@ const createStyles = (theme: Theme) =>
       alignSelf: 'stretch',
       marginTop: theme.spacing.xs,
     },
+    // Under the main action, the container's gap apart.
+    secondaryAction: { alignSelf: 'stretch' },
   });
 
 /**
@@ -64,6 +74,10 @@ export const EmptyState = ({
   actionLabel,
   onActionPress,
   actionVariant = 'secondary',
+  actionTestID,
+  secondaryActionLabel,
+  onSecondaryActionPress,
+  secondaryActionTestID,
   testID,
 }: EmptyStateProps) => {
   const styles = useThemedStyles(createStyles);
@@ -93,6 +107,17 @@ export const EmptyState = ({
           variant={actionVariant}
           onPress={onActionPress}
           style={styles.action}
+          testID={actionTestID}
+        />
+      ) : null}
+
+      {secondaryActionLabel && onSecondaryActionPress ? (
+        <Button
+          label={secondaryActionLabel}
+          variant="secondary"
+          onPress={onSecondaryActionPress}
+          style={styles.secondaryAction}
+          testID={secondaryActionTestID}
         />
       ) : null}
     </View>

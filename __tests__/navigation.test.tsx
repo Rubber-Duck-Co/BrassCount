@@ -11,6 +11,7 @@ import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 
 import { MainTabs } from '../src/navigation/MainTabs';
 import { RootNavigator } from '../src/navigation/RootNavigator';
+import { DrillStorageService } from '../src/services/drillStorage';
 import { CalibrationProvider } from '../src/store/CalibrationContext';
 import { PreferencesProvider } from '../src/store/PreferencesContext';
 import type { MainTabParamList } from '../src/types/navigation';
@@ -230,6 +231,52 @@ describe('navigation', () => {
       expect(currentRoute()).toBe('SequenceEditor');
       expect(stackIn('Drills')).toEqual(['DrillList', 'SequenceEditor']);
       expect(nameField(tree)?.props.value).toBe('ZZ Draft');
+    });
+  });
+
+  describe('the presets', () => {
+    it('opens over the empty Drills list, with Drills selected, and Back returns', async () => {
+      const { tree, currentRoute, stackIn } = await renderTabs();
+      await press(tree, 'tab-Drills');
+
+      await press(tree, 'btn-browse-presets-empty');
+
+      expect(currentRoute()).toBe('PresetLibrary');
+      expect(stackIn('Drills')).toEqual(['DrillList', 'PresetLibrary']);
+      expect(isSelected(tree, 'Drills')).toBe(true);
+      expect(byTestId(tree, 'screen-presets')).not.toHaveLength(0);
+
+      await press(tree, 'btn-back');
+
+      expect(currentRoute()).toBe('DrillList');
+      expect(stackIn('Drills')).toEqual(['DrillList']);
+    });
+
+    it('returns to the Drills list when the Drills tab is pressed there', async () => {
+      // Only the editor holds a draft to keep; the presets have none.
+      const { tree, currentRoute, stackIn } = await renderTabs();
+      await press(tree, 'tab-Drills');
+      await press(tree, 'btn-browse-presets-empty');
+
+      await press(tree, 'tab-Drills');
+
+      expect(currentRoute()).toBe('DrillList');
+      expect(stackIn('Drills')).toEqual(['DrillList']);
+    });
+
+    it('opens from Add from presets under a saved drill', async () => {
+      await DrillStorageService.save({
+        name: 'ZZ Drill',
+        steps: [{ type: 'shot', par: 1 }],
+      });
+      const { tree, currentRoute, stackIn } = await renderTabs();
+      await press(tree, 'tab-Drills');
+
+      await press(tree, 'btn-browse-presets');
+
+      expect(currentRoute()).toBe('PresetLibrary');
+      expect(stackIn('Drills')).toEqual(['DrillList', 'PresetLibrary']);
+      expect(isSelected(tree, 'Drills')).toBe(true);
     });
   });
 

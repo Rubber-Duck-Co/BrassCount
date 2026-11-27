@@ -23,11 +23,16 @@ export type MainTabParamList = {
   Setup: NavigatorScreenParams<SetupStackParamList> | undefined;
 };
 
-/** The Drills tab: the library, and the editor pushed over it. */
+/**
+ * The Drills tab: the library, with the editor and the presets pushed over
+ * it.
+ */
 export type DrillsStackParamList = {
   DrillList: undefined;
   /** Omit `id` to build a new sequence. */
   SequenceEditor: { id?: string };
+  /** Standard drills the shooter can add a copy of. */
+  PresetLibrary: undefined;
 };
 
 /**

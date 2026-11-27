@@ -30,7 +30,7 @@ PR gate: `lint`, `format:check`, `typecheck`, `test:ci`, Kotlin `testDebugUnitTe
 
 ## Architecture
 
-Every screen reads real data through a service. There are no display fixtures (`src/constants/` is empty, though the alias stays) and no `src/api/` (alias only).
+Every screen reads real data through a service. There are no display fixtures and no `src/api/` (alias only). `src/constants/` holds only seed data the shooter opts into (`presetDrills.ts`, saved as a copy from the Presets screen).
 
 - `src/services/` — storage (`storage.ts`, `drillStorage.ts`, `sessionStorage.ts`, `profileStorage.ts`) and audio/timing (`audioCapture.ts`, `beepPlayer.ts`, `startSequence.ts`, `calibrationCapture.ts`, `drillRunEngine.ts`). Conventions: [patterns.md](rules/common/patterns.md).
 - `src/utils/` — pure rules, tested directly. Detection rules are in `runDetection.ts`, calibration maths in `calibration.ts`, history figures in `history.ts`, drill editing in `drillDraft.ts`. Read the file's header before changing a rule.
@@ -38,7 +38,7 @@ Every screen reads real data through a service. There are no display fixtures (`
 - `src/types/` — stored models (`Drill`, `Session`, `Profile`), run types, and all navigation param lists (`navigation.ts`).
 - `src/screens/`, `src/components/` — screens compose the primitives in `components/`.
 
-Navigation: root native stack → `Tabs` only: **Timer** (first, initial), then Drills, Log and Setup, each a nested stack so the tab bar stays at every depth (`DrillList` → `SequenceEditor`; `HistoryList` → `HistoryDetail` → `RunComparison`; `SetupHome` (Setup: profile and settings) → `Calibration`). Pressing the active Drills tab with the editor open does nothing, so a draft is kept. Navigator headers are off: each screen renders its own through `Screen` (wordmark or back link, one text `action`, title, subtitle; `wordmark={false}` (Timer, Drills, Log, Setup) moves the title into the top row), and the bottom chrome is the custom text-only `TabBar`.
+Navigation: root native stack → `Tabs` only: **Timer** (first, initial), then Drills, Log and Setup, each a nested stack so the tab bar stays at every depth (`DrillList` → `SequenceEditor` or `PresetLibrary`; `HistoryList` → `HistoryDetail` → `RunComparison`; `SetupHome` (Setup: profile and settings) → `Calibration`). Pressing the active Drills tab with the editor open does nothing, so a draft is kept; from Presets it returns to the list. Navigator headers are off: each screen renders its own through `Screen` (wordmark or back link, one text `action`, title, subtitle; `wordmark={false}` (Timer, Drills, Log, Setup) moves the title into the top row), and the bottom chrome is the custom text-only `TabBar`.
 
 ### Invariants
 

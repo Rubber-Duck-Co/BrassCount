@@ -34,3 +34,5 @@ Persistence goes through `createStorageNamespace<T>({ name, version })` in `src/
 ## No Display Fixtures
 
 Every screen reads real data through a service; the old `src/constants/previewData.ts` fixtures were deleted once the Timer read stored drills. Do not add fixtures back to stand in for data: domain types live in `src/types/`, and test data is seeded through the services in `__tests__/`.
+
+Seed data is different and may live in `src/constants/`: content the shooter chooses to save as their own, such as the standard drills in `presetDrills.ts`. It is never shown in place of stored data and never written without the shooter asking; once added it is an ordinary stored drill.
